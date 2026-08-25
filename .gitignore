@@ -1,0 +1,67 @@
+# ========================
+# Python / Django
+# ========================
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Виртуальное окружение
+venv/
+.venv/
+env/
+.env/
+
+# ========================
+# Django специфика
+# ========================
+# Секреты и конфиги
+*.secret
+.env
+.env.*
+!.env.example
+
+# База данных
+*.sqlite3
+db.sqlite3-journal
+
+# Медиа и статика (генерируемое)
+media/
+staticfiles/
+static_collected/
+
+# Кэш и логи
+*.log
+logs/
+cache/
+*.cache
+
+# Миграции (ОПЦИОНАЛЬНО — раскомментируй если НЕ хочешь коммитить миграции)
+# **/migrations/*.py
+# !**/migrations/__init__.py
+
+# ========================
+# IDE / Редакторы
+# ========================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ========================
+# OS / Прочее
+# ========================
+*.bak
+*.tmp
+*.temp
+_coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
