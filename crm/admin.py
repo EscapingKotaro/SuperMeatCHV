@@ -57,7 +57,8 @@ class LogEntryAdmin(RoleGate, admin.ModelAdmin):
     list_filter = ("user", "content_type")
     search_fields = ("object_repr",)
 
-admin.site.unregister(LogEntry)
+if admin.site.is_registered(LogEntry):
+    admin.site.unregister(LogEntry)
 admin.site.register(LogEntry, LogEntryAdmin)
 
 
