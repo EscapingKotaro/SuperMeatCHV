@@ -184,17 +184,25 @@ def update_attendance(request):
     except (Child.DoesNotExist, ValueError):
         return JsonResponse({'success': False, 'error': 'Invalid child or date'}, status=400)
 
+    # Если пришёл пустой статус — удаляем все отметки на эту дату
+    if status == '':
+        deleted_count, _ = Attendance.objects.filter(child=child, date=date).delete()
+        return JsonResponse({'success': True, 'status': '', 'deleted': deleted_count > 0})
+
     valid_statuses = [s[0] for s in Attendance.Status.choices]
     if status not in valid_statuses:
         return JsonResponse({'success': False, 'error': 'Invalid status'}, status=400)
 
-    attendance, created = Attendance.objects.get_or_create(
-        child=child,
-        date=date,
-        defaults={'status': status}
-    )
-    if not created:
+    # Ищем существующую отметку (по ребёнку и дате)
+    attendance = Attendance.objects.filter(child=child, date=date).first()
+    if attendance:
         attendance.status = status
         attendance.save()
+    else:
+        attendance = Attendance.objects.create(
+            child=child,
+            date=date,
+            status=status
+        )
 
     return JsonResponse({'success': True, 'status': attendance.status})
