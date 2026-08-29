@@ -13,9 +13,7 @@ PAGES = {
 }
 
 
-def app_page(request, page="attendance"):
-    if page not in PAGES:
-        page = "attendance"
+def app_page(request):
     title, subtitle = PAGES[page]
     return render(request, f"crm/{page}.html", {
         "page": page, "title": title, "subtitle": subtitle,
