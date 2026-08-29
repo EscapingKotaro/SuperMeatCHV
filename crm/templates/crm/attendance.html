@@ -72,7 +72,8 @@
                             {% endif %}
                         </td>
                         {% for entry in item.attendance_entries %}
-                            <td class="text-center {% if entry.date == today %}bg-orange-50/40{% endif %} {% if entry.week_number == 2 %}bg-slate-50/50{% endif %}">
+                            
+    <td class="text-center {% if entry.date == today %}bg-orange-50/40{% endif %} {% if entry.week_number == 2 %}bg-slate-50/50{% endif %} {% if forloop.counter0 == item.subscription_end_index %}border-r-2 border-red-500{% endif %}">
                                 <button data-attendance
                                         data-child-id="{{ item.child.id }}"
                                         data-date="{{ entry.date|date:'Y-m-d' }}"
