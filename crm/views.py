@@ -39,24 +39,25 @@ from .models import Child, Group, ScheduleSlot, Attendance
 def attendance_view(request):
     # Получаем параметры
     group_id = request.GET.get('group_id')
-    week_start_str = request.GET.get('week_start')  # формат YYYY-MM-DD (понедельник)
+    week_start_str = request.GET.get('week_start')  # формат YYYY-MM-DD (понедельник первой недели)
 
     # Определяем группу
     if group_id:
-        group = get_object_or_404(Group, id=group_id, is_active=True)
+        group = get_object_or_404(Group, id=group_id)
     else:
-        group = Group.objects.filter(is_active=True).first()
+        group = Group.objects.filter(is_active=True).first() or Group.objects.first()
         if not group:
-            # Если нет групп — пустая таблица
+            # Если групп вообще нет
             return render(request, 'crm/attendance.html', {
-                'groups': Group.objects.all(),
+                'groups': Group.objects.none(),
                 'selected_group': None,
                 'days': [],
+                'week_data': [],
                 'children_data': [],
                 'week_start': None,
             })
 
-    # Определяем начало недели
+    # Определяем начало первой недели (по умолчанию – понедельник текущей недели)
     if week_start_str:
         try:
             week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
@@ -65,15 +66,36 @@ def attendance_view(request):
     else:
         week_start = timezone.localdate() - timedelta(days=timezone.localdate().weekday())
 
-    # Получаем дни недели, по которым есть занятия у группы
+    # Получаем все слоты расписания группы (дни недели и время)
     slots = ScheduleSlot.objects.filter(group=group).order_by('weekday', 'start_time')
-    # Уникальные дни недели (0-6)
-    weekdays = sorted(set(slot.weekday for slot in slots))
-
-    # Строим список дат для этих дней недели (от week_start)
-    days = []
-    for wd in weekdays:
-        days.append(week_start + timedelta(days=wd))
+    if not slots.exists():
+        # Если расписания нет, дни будут пустыми
+        days = []
+        week_data = []
+    else:
+        # Строим список дат на две недели (текущая + следующая)
+        days = []
+        week_data = []  # Список словарей: {date, week_number, weekday, start_time}
+        for week_offset in (0, 7):  # 0 – текущая неделя, 7 – следующая
+            for slot in slots:
+                day_date = week_start + timedelta(days=slot.weekday + week_offset)
+                # Защита от дублей, если несколько слотов в один день
+                if day_date not in [d['date'] for d in week_data]:
+                    week_data.append({
+                        'date': day_date,
+                        'week_number': 1 if week_offset == 0 else 2,
+                        'weekday': slot.weekday,
+                        'start_time': slot.start_time,
+                    })
+                else:
+                    # Обновляем время, если уже есть дата (возьмём самое раннее)
+                    for d in week_data:
+                        if d['date'] == day_date:
+                            d['start_time'] = min(d['start_time'], slot.start_time)
+                            break
+        # Сортируем по дате и времени
+        week_data.sort(key=lambda x: (x['date'], x['start_time']))
+        days = [d['date'] for d in week_data]
 
     # Выбираем детей группы
     children = Child.objects.filter(group=group).select_related('group__trainer').prefetch_related(
@@ -84,13 +106,9 @@ def attendance_view(request):
     children_data = []
     today = timezone.localdate()
     for child in children:
-        # Остаток занятий (используем метод модели)
         sessions_left = child.sessions_left()
         sessions_total = 0
         active_sub = child.active_subscription()
-        subscription_end_soon = False
-        if active_sub:
-            subscription_end_soon = (active_sub.end_date <= today + timedelta(days=3)) and (active_sub.end_date >= today)
         if active_sub:
             sessions_total = active_sub.sessions_total
 
@@ -110,11 +128,18 @@ def attendance_view(request):
 
         # Формируем список записей для шаблона
         attendance_entries = []
-        for day in days:
+        for entry in week_data:
+            day = entry['date']
             attendance_entries.append({
                 'date': day,
+                'week_number': entry['week_number'],
                 'status': attendance_map.get(day, '')
             })
+
+        # Проверка, скоро ли окончание абонемента
+        subscription_end_soon = False
+        if active_sub:
+            subscription_end_soon = (active_sub.end_date <= today + timedelta(days=3)) and (active_sub.end_date >= today)
 
         children_data.append({
             'child': child,
@@ -125,18 +150,19 @@ def attendance_view(request):
             'sessions_total': sessions_total,
             'debt': debt,
             'subscription_end': active_sub.end_date if active_sub else None,
+            'subscription_end_soon': subscription_end_soon,
             'status': child.status,
             'attendance_entries': attendance_entries,
-            'subscription_end_soon': subscription_end_soon,
         })
 
     context = {
         'groups': Group.objects.filter(is_active=True),
         'selected_group': group,
         'days': days,
+        'week_data': week_data,  # для отображения подписей недель в шапке
         'week_start': week_start,
-        'week_start_prev': (week_start - timedelta(days=7)).strftime('%Y-%m-%d'),
-        'week_start_next': (week_start + timedelta(days=7)).strftime('%Y-%m-%d'),
+        'week_start_prev': (week_start - timedelta(days=14)).strftime('%Y-%m-%d'),
+        'week_start_next': (week_start + timedelta(days=14)).strftime('%Y-%m-%d'),
         'children_data': children_data,
         'today': today,
     }
@@ -159,12 +185,10 @@ def update_attendance(request):
     except (Child.DoesNotExist, ValueError):
         return JsonResponse({'success': False, 'error': 'Invalid child or date'}, status=400)
 
-    # Валидные статусы (можно сверить с моделью)
     valid_statuses = [s[0] for s in Attendance.Status.choices]
     if status not in valid_statuses:
         return JsonResponse({'success': False, 'error': 'Invalid status'}, status=400)
 
-    # Ищем существующую отметку
     attendance, created = Attendance.objects.get_or_create(
         child=child,
         date=date,
