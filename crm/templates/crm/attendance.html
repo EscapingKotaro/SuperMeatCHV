@@ -17,7 +17,7 @@
                 {% endfor %}
             </select>
             <a href="?group_id={{ selected_group.id }}&week_start={{ week_start_prev }}" class="btn btn-dark"><i data-lucide="chevron-left"></i></a>
-            <button class="btn btn-soft">{{ week_start|date:"d" }}–{{ week_start|date:"d" }} {{ week_start|date:"F"|lower }}</button>
+            <button class="btn btn-soft">{{ week_start|date:"d.m" }} – {{ period_end|date:"d.m" }} {{ week_start|date:"F"|lower }}</button>
             <a href="?group_id={{ selected_group.id }}&week_start={{ week_start_next }}" class="btn btn-dark"><i data-lucide="chevron-right"></i></a>
         {% else %}
             <span class="text-slate-500">Нет групп</span>
