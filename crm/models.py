@@ -25,7 +25,7 @@ class StaffProfile(models.Model):
     """Роль пользователя (менеджер / старший / начальник)."""
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                                 related_name="profile", verbose_name="пользователь")
-    role = models.CharField(max_length=10, choices=Role.choices, default=Role.MANAGER)
+    role = models.CharField(max_length=20, choices=Role.choices, default=Role.MANAGER)
 
     def __str__(self):
         return f"{self.user} — {self.get_role_display()}"
