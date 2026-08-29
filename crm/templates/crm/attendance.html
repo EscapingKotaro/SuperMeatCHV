@@ -35,29 +35,18 @@
     <div class="table-wrap">
         <table class="data-table min-w-[1400px]"> <!-- Увеличили ширину, чтобы влезло 14 дней -->
             <thead>
-                <tr>
-                    <th class="sticky left-0 z-10 bg-[#FAFBFC]" rowspan="2">Спортсмен</th>
-                    <th rowspan="2">Абонемент</th>
-                    {% if week_data %}
-                        {% for entry in week_data %}
-                            {% ifchanged entry.week_number %}
-                                <th colspan="{{ week_data|length|divisibleby:2|yesno:'0,' }}{{ week_data|filter_week:forloop.counter0 }}" class="text-center bg-slate-200 text-xs">
-                                    Неделя {{ entry.week_number }}
-                                </th>
-                            {% endifchanged %}
-                        {% endfor %}
-                    {% endif %}
-                </tr>
-                <tr>
-                    {% for entry in week_data %}
-                        <th class="text-center {% if entry.date == today %}bg-orange-50 text-[#FF5C35]{% endif %} {% if entry.week_number == 2 %}bg-slate-50{% endif %}">
-                            {{ entry.date|date:"D" }}<br><b class="{% if entry.date == today %}text-[#FF5C35]{% else %}text-slate-900{% endif %}">{{ entry.date|date:"d" }}</b>
-                        </th>
-                    {% endfor %}
-                    <th>Окончание</th>
-                    <th></th>
-                </tr>
-            </thead>
+    <tr>
+        <th class="sticky left-0 z-10 bg-[#FAFBFC]" rowspan="2">Спортсмен</th>
+        <th rowspan="2">Абонемент</th>
+        {% for entry in week_data %}
+            <th class="text-center {% if entry.date == today %}bg-orange-50 text-[#FF5C35]{% endif %} {% if entry.week_number == 2 %}bg-slate-50{% endif %}">
+                {{ entry.date|date:"D" }}<br><b class="{% if entry.date == today %}text-[#FF5C35]{% else %}text-slate-900{% endif %}">{{ entry.date|date:"d" }}</b>
+            </th>
+        {% endfor %}
+        <th>Окончание</th>
+        <th></th>
+    </tr>
+</thead>
             <tbody>
                 {% for item in children_data %}
                     <tr>
