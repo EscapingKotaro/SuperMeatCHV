@@ -82,7 +82,7 @@
                             {% if item.subscription_end %}
                                 {% if item.subscription_end < today %}
                                     <span class="badge bg-red-50 text-red-700">просрочен</span>
-                                {% elif item.subscription_end <= today|add_days:3 %}
+                                {% elif item.subscription_end_soon %}
                                     <span class="badge bg-red-50 text-red-700">через {{ item.subscription_end|timeuntil }}</span>
                                 {% else %}
                                     {{ item.subscription_end|date:"d E" }}
