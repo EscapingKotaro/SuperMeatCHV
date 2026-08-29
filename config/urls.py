@@ -23,4 +23,8 @@ urlpatterns = [
     path('', views.app_page, name='home'),
     path('login/', views.login_page, name='login'),
     path('<str:page>/', views.app_page, name='app_page'),
+
+    
+    path('attendance/', views.attendance_view, name='attendance'),
+    path('attendance/update/', views.update_attendance, name='attendance_update'),
 ]

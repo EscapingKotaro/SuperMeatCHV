@@ -1,11 +1,113 @@
-{% extends 'crm/base.html' %}{% block actions %}<div class="flex gap-2"><button class="btn btn-soft"><i data-lucide="archive"></i>Архив</button><button data-modal="child-modal" class="btn btn-primary"><i data-lucide="user-plus"></i>Добавить ребёнка</button></div>{% endblock %}
-{% block content %}<section class="card mb-4 p-3"><div class="flex flex-wrap items-center gap-2"><select class="field max-w-64 font-bold"><option>Старшая группа · 18:00</option><option>Средняя группа · 17:00</option></select><button class="btn btn-dark"><i data-lucide="chevron-left"></i></button><button class="btn btn-soft">24–30 августа</button><button class="btn btn-dark"><i data-lucide="chevron-right"></i></button><div class="ml-auto flex flex-wrap gap-2 text-[10px] font-bold text-slate-600"><span class="badge bg-emerald-100 text-emerald-700">+ Пришёл</span><span class="badge bg-red-100 text-red-700">× Пропуск</span><span class="badge bg-blue-100 text-blue-700">❄ Заморозка</span><span class="badge bg-amber-100 text-amber-700">О Отпуск</span></div></div></section>
-<section class="card overflow-hidden"><div class="table-wrap"><table class="data-table min-w-[1080px]"><thead><tr><th class="sticky left-0 z-10 bg-[#FAFBFC]">Спортсмен</th><th>Абонемент</th><th class="text-center">Пн<br><b class="text-slate-900">24</b></th><th class="text-center">Вт<br><b class="text-slate-900">25</b></th><th class="bg-orange-50 text-center text-[#FF5C35]">Сегодня<br><b>27</b></th><th class="text-center">Сб<br><b class="text-slate-900">29</b></th><th>Окончание</th><th></th></tr></thead><tbody>
-{% for name,initials,left,status in rows|default:"" %}{% endfor %}
-<tr><td class="sticky left-0 bg-white"><button data-modal="child-card" class="flex items-center gap-3 text-left"><span class="grid h-9 w-9 place-items-center rounded-xl bg-violet-100 font-extrabold text-violet-700">АС</span><span><b class="block">Соколова Алиса</b><small class="text-slate-500">2015 · I юн.</small></span></button></td><td><b>3 из 8</b><small class="block text-red-600">Долг 2 800 ₽</small></td><td class="text-center"><button data-attendance data-state="1" class="attendance-cell bg-emerald-100 text-emerald-700">+</button></td><td class="text-center"><button data-attendance data-state="2" class="attendance-cell bg-red-100 text-red-700">×</button></td><td class="bg-orange-50/40 text-center"><button data-attendance data-state="0" class="attendance-cell bg-slate-100 text-slate-400"></button></td><td class="text-center"><button data-attendance data-state="0" class="attendance-cell bg-slate-100 text-slate-400"></button></td><td><span class="badge bg-red-50 text-red-700">через 3 дня</span></td><td><button data-modal="child-card"><i data-lucide="more-horizontal" class="h-4 w-4"></i></button></td></tr>
-<tr><td class="sticky left-0 bg-white"><button data-modal="child-card" class="flex items-center gap-3 text-left"><span class="grid h-9 w-9 place-items-center rounded-xl bg-cyan-100 font-extrabold text-cyan-700">КМ</span><span><b class="block">Кузнецова Мария</b><small class="text-slate-500">2014 · II юн.</small></span></button></td><td><b>6 из 12</b><small class="block text-slate-400">Оплачено</small></td><td class="text-center"><button data-attendance data-state="1" class="attendance-cell bg-emerald-100 text-emerald-700">+</button></td><td class="text-center"><button data-attendance data-state="3" class="attendance-cell bg-blue-100 text-blue-700">❄</button></td><td class="bg-orange-50/40 text-center"><button data-attendance data-state="0" class="attendance-cell bg-slate-100 text-slate-400"></button></td><td class="text-center"><button data-attendance data-state="0" class="attendance-cell bg-slate-100 text-slate-400"></button></td><td>14 сентября</td><td><i data-lucide="file-check-2" class="h-4 w-4 text-emerald-600"></i></td></tr>
-<tr><td class="sticky left-0 bg-white"><button data-modal="child-card" class="flex items-center gap-3 text-left"><span class="grid h-9 w-9 place-items-center rounded-xl bg-amber-100 font-extrabold text-amber-700">ЕВ</span><span><b class="block">Егорова Варвара</b><span class="badge mt-1 bg-fuchsia-100 text-fuchsia-700">Пробное</span></span></button></td><td><span class="text-slate-500">Без абонемента</span></td><td class="text-center"><button data-attendance data-state="0" class="attendance-cell bg-slate-100 text-slate-400"></button></td><td class="text-center"><button data-attendance data-state="1" class="attendance-cell bg-emerald-100 text-emerald-700">+</button></td><td class="bg-orange-50/40 text-center"><button data-attendance data-state="0" class="attendance-cell bg-slate-100 text-slate-400"></button></td><td class="text-center"><button data-attendance data-state="0" class="attendance-cell bg-slate-100 text-slate-400"></button></td><td><span class="badge bg-fuchsia-50 text-fuchsia-700">решение до 31.08</span></td><td></td></tr>
-<tr><td class="sticky left-0 bg-white"><button data-modal="child-card" class="flex items-center gap-3 text-left"><span class="grid h-9 w-9 place-items-center rounded-xl bg-rose-100 font-extrabold text-rose-700">ПА</span><span><b class="block">Петрова Анна</b><small class="text-slate-500">2016 · б/р · скидка 10%</small></span></button></td><td><b>8 из 8</b><small class="block text-slate-400">Оплачено</small></td><td class="text-center"><button data-attendance data-state="1" class="attendance-cell bg-emerald-100 text-emerald-700">+</button></td><td class="text-center"><button data-attendance data-state="1" class="attendance-cell bg-emerald-100 text-emerald-700">+</button></td><td class="bg-orange-50/40 text-center"><button data-attendance data-state="0" class="attendance-cell bg-slate-100 text-slate-400"></button></td><td class="text-center"><button data-attendance data-state="4" class="attendance-cell bg-amber-100 text-amber-700">О</button></td><td>22 сентября</td><td><i data-lucide="percent" class="h-4 w-4 text-orange-500"></i></td></tr>
-</tbody></table></div><div class="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500"><span>4 из 12 спортсменов</span><span>Кликните по ячейке, чтобы сменить отметку</span></div></section>{% endblock %}
-{% block modals %}<section id="child-modal" class="modal"><div class="modal-head"><div><b>Новый спортсмен</b><p class="text-xs text-slate-500">Добавление сразу в выбранную группу</p></div><button data-close><i data-lucide="x"></i></button></div><div class="modal-body grid gap-4 sm:grid-cols-2"><label><span class="label">ФИО</span><input class="field" placeholder="Иванова Алиса Сергеевна"></label><label><span class="label">Год рождения</span><input class="field" value="2016"></label><label><span class="label">Телефон родителя</span><input class="field" placeholder="+7 900 000-00-00"></label><label><span class="label">Группа</span><select class="field"><option>Старшая группа</option></select></label><label class="sm:col-span-2 flex items-center gap-2 rounded-xl bg-fuchsia-50 p-3 text-xs"><input type="checkbox" checked> Пробное занятие — напомнить о решении через 14 дней</label></div><div class="modal-foot"><button data-close class="btn btn-soft">Отмена</button><button data-save class="btn btn-primary">Добавить</button></div></section>
-<section id="child-card" class="modal"><div class="modal-head"><div class="flex items-center gap-3"><span class="grid h-11 w-11 place-items-center rounded-xl bg-violet-100 font-extrabold text-violet-700">АС</span><div><b class="text-lg">Соколова Алиса</b><p class="text-xs text-slate-500">2015 · Старшая группа</p></div></div><button data-close><i data-lucide="x"></i></button></div><div class="modal-body"><div class="grid grid-cols-3 gap-3"><div class="rounded-xl bg-slate-50 p-3"><small class="text-slate-500">Занятий</small><b class="mt-1 block">3 из 8</b></div><div class="rounded-xl bg-red-50 p-3"><small class="text-red-600">Баланс</small><b class="mt-1 block text-red-700">−2 800 ₽</b></div><div class="rounded-xl bg-orange-50 p-3"><small class="text-orange-600">Пропуски</small><b class="mt-1 block">18%</b></div></div><div class="mt-5 grid gap-4 text-xs sm:grid-cols-2"><div><span class="label">Родитель</span><b>Елена Соколова</b><p class="text-slate-500">+7 912 345-67-89</p></div><div><span class="label">Тренер</span><b>Ольга Воронова</b><p class="text-slate-500">Пн, Ср, Сб · 18:00</p></div><div><span class="label">Справка</span><span class="badge bg-emerald-50 text-emerald-700">Действует до 12.10</span></div><div><span class="label">Абонемент</span><b>До 30 августа</b><p class="text-red-600">Осталось 3 дня</p></div></div><h3 class="mb-2 mt-5 font-extrabold">Последние посещения</h3><div class="rounded-xl border border-slate-200 p-3 text-xs"><div class="flex justify-between"><span>25 августа · пропуск</span><span class="text-red-600">×</span></div><hr class="my-2"><div class="flex justify-between"><span>22 августа · посещение</span><span class="text-emerald-600">+</span></div></div></div><div class="modal-foot"><button class="btn btn-soft"><i data-lucide="archive"></i>В архив</button><button data-save class="btn btn-primary"><i data-lucide="pencil"></i>Редактировать</button></div></section>{% endblock %}
+{% extends 'crm/base.html' %}
+
+{% block actions %}
+<div class="flex gap-2">
+    <button class="btn btn-soft"><i data-lucide="archive"></i>Архив</button>
+    <button data-modal="child-modal" class="btn btn-primary"><i data-lucide="user-plus"></i>Добавить ребёнка</button>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="card mb-4 p-3">
+    <div class="flex flex-wrap items-center gap-2">
+        <select id="group-select" class="field max-w-64 font-bold" onchange="location.href='?group_id='+this.value+'&week_start={{ week_start|date:'Y-m-d' }}'">
+            {% for g in groups %}
+                <option value="{{ g.id }}" {% if g.id == selected_group.id %}selected{% endif %}>{{ g.name }}</option>
+            {% endfor %}
+        </select>
+        <a href="?group_id={{ selected_group.id }}&week_start={{ week_start_prev }}" class="btn btn-dark"><i data-lucide="chevron-left"></i></a>
+        <button class="btn btn-soft">{{ week_start|date:"d" }}–{{ week_start|date:"d"|add:6 }} {{ week_start|date:"F"|lower }}</button>
+        <a href="?group_id={{ selected_group.id }}&week_start={{ week_start_next }}" class="btn btn-dark"><i data-lucide="chevron-right"></i></a>
+        <div class="ml-auto flex flex-wrap gap-2 text-[10px] font-bold text-slate-600">
+            <span class="badge bg-emerald-100 text-emerald-700">+ Пришёл</span>
+            <span class="badge bg-red-100 text-red-700">× Пропуск</span>
+            <span class="badge bg-blue-100 text-blue-700">❄ Заморозка</span>
+            <span class="badge bg-amber-100 text-amber-700">О Отпуск</span>
+        </div>
+    </div>
+</section>
+
+<section class="card overflow-hidden">
+    <div class="table-wrap">
+        <table class="data-table min-w-[1080px]">
+            <thead>
+                <tr>
+                    <th class="sticky left-0 z-10 bg-[#FAFBFC]">Спортсмен</th>
+                    <th>Абонемент</th>
+                    {% for day in days %}
+                        <th class="text-center {% if day == today %}bg-orange-50 text-[#FF5C35]{% endif %}">
+                            {{ day|date:"D" }}<br><b class="{% if day == today %}text-[#FF5C35]{% else %}text-slate-900{% endif %}">{{ day|date:"d" }}</b>
+                        </th>
+                    {% endfor %}
+                    <th>Окончание</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in children_data %}
+                    <tr>
+                        <td class="sticky left-0 bg-white">
+                            <button data-modal="child-card" class="flex items-center gap-3 text-left">
+                                <span class="grid h-9 w-9 place-items-center rounded-xl bg-violet-100 font-extrabold text-violet-700">{{ item.initials }}</span>
+                                <span>
+                                    <b class="block">{{ item.child.last_name }} {{ item.child.first_name }}</b>
+                                    <small class="text-slate-500">{{ item.birth_year }} · {{ item.rank }}</small>
+                                </span>
+                            </button>
+                        </td>
+                        <td>
+                            {% if item.sessions_left is not None %}
+                                <b>{{ item.sessions_left }} из {{ item.sessions_total }}</b>
+                                {% if item.debt > 0 %}
+                                    <small class="block text-red-600">Долг {{ item.debt }} ₽</small>
+                                {% else %}
+                                    <small class="block text-slate-400">Оплачено</small>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-slate-500">Без абонемента</span>
+                            {% endif %}
+                        </td>
+                        {% for entry in item.attendance_entries %}
+                            <td class="text-center {% if entry.date == today %}bg-orange-50/40{% endif %}">
+                                <button data-attendance
+                                        data-child-id="{{ item.child.id }}"
+                                        data-date="{{ entry.date|date:'Y-m-d' }}"
+                                        data-state="{% if entry.status == 'present' %}1{% elif entry.status == 'absent' %}2{% elif entry.status == 'frozen' %}3{% elif entry.status == 'vacation' %}4{% elif entry.status == 'excused' %}5{% else %}0{% endif %}"
+                                        class="attendance-cell {% if entry.status == 'present' %}bg-emerald-100 text-emerald-700{% elif entry.status == 'absent' %}bg-red-100 text-red-700{% elif entry.status == 'frozen' %}bg-blue-100 text-blue-700{% elif entry.status == 'vacation' %}bg-amber-100 text-amber-700{% elif entry.status == 'excused' %}bg-yellow-100 text-yellow-700{% else %}bg-slate-100 text-slate-400{% endif %}">
+                                    {% if entry.status == 'present' %}+{% elif entry.status == 'absent' %}×{% elif entry.status == 'frozen' %}❄{% elif entry.status == 'vacation' %}О{% elif entry.status == 'excused' %}У{% endif %}
+                                </button>
+                            </td>
+                        {% endfor %}
+                        <td>
+                            {% if item.subscription_end %}
+                                {% if item.subscription_end < today %}
+                                    <span class="badge bg-red-50 text-red-700">просрочен</span>
+                                {% elif item.subscription_end <= today|add_days:3 %}
+                                    <span class="badge bg-red-50 text-red-700">через {{ item.subscription_end|timeuntil }}</span>
+                                {% else %}
+                                    {{ item.subscription_end|date:"d E" }}
+                                {% endif %}
+                            {% else %}
+                                —
+                            {% endif %}
+                        </td>
+                        <td><button data-modal="child-card"><i data-lucide="more-horizontal" class="h-4 w-4"></i></button></td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="8" class="text-center py-8 text-slate-500">Нет детей в этой группе</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+        <span>{{ children_data|length }} из {{ children_data|length }} спортсменов</span>
+        <span>Кликните по ячейке, чтобы сменить отметку</span>
+    </div>
+</section>
+{% endblock %}
+
+{% block modals %}
+<!-- Модалки остаются без изменений, при необходимости их можно наполнить динамикой -->
+<section id="child-modal" class="modal">...</section>
+<section id="child-card" class="modal">...</section>
+{% endblock %}
