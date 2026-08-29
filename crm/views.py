@@ -138,7 +138,13 @@ def attendance_view(request):
         subscription_end_soon = False
         if active_sub:
             subscription_end_soon = (active_sub.end_date <= today + timedelta(days=3)) and (active_sub.end_date >= today)
-
+        subscription_end_index = None
+        if active_sub and attendance_entries:
+            # Если абонемент заканчивается внутри окна
+            if active_sub.end_date <= attendance_entries[-1]['date']:
+                for idx, entry in enumerate(attendance_entries):
+                    if entry['date'] <= active_sub.end_date:
+                        subscription_end_index = idx
         children_data.append({
             'child': child,
             'initials': initials,
@@ -151,6 +157,7 @@ def attendance_view(request):
             'subscription_end_soon': subscription_end_soon,
             'status': child.status,
             'attendance_entries': attendance_entries,
+            'subscription_end_index': subscription_end_index,
         })
 
     context = {
