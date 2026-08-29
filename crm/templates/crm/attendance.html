@@ -10,14 +10,18 @@
 {% block content %}
 <section class="card mb-4 p-3">
     <div class="flex flex-wrap items-center gap-2">
-        <select id="group-select" class="field max-w-64 font-bold" onchange="location.href='?group_id='+this.value+'&week_start={{ week_start|date:'Y-m-d' }}'">
-            {% for g in groups %}
-                <option value="{{ g.id }}" {% if g.id == selected_group.id %}selected{% endif %}>{{ g.name }}</option>
-            {% endfor %}
-        </select>
-        <a href="?group_id={{ selected_group.id }}&week_start={{ week_start_prev }}" class="btn btn-dark"><i data-lucide="chevron-left"></i></a>
-        <button class="btn btn-soft">{{ week_start|date:"d" }}–{{ week_start|date:"d"|add:6 }} {{ week_start|date:"F"|lower }}</button>
-        <a href="?group_id={{ selected_group.id }}&week_start={{ week_start_next }}" class="btn btn-dark"><i data-lucide="chevron-right"></i></a>
+        {% if selected_group %}
+            <select id="group-select" class="field max-w-64 font-bold" onchange="location.href='?group_id='+this.value+'&week_start={{ week_start|date:'Y-m-d' }}'">
+                {% for g in groups %}
+                    <option value="{{ g.id }}" {% if g.id == selected_group.id %}selected{% endif %}>{{ g.name }}</option>
+                {% endfor %}
+            </select>
+            <a href="?group_id={{ selected_group.id }}&week_start={{ week_start_prev }}" class="btn btn-dark"><i data-lucide="chevron-left"></i></a>
+            <button class="btn btn-soft">{{ week_start|date:"d" }}–{{ week_start|add_days:13|date:"d" }} {{ week_start|date:"F"|lower }}</button>
+            <a href="?group_id={{ selected_group.id }}&week_start={{ week_start_next }}" class="btn btn-dark"><i data-lucide="chevron-right"></i></a>
+        {% else %}
+            <span class="text-slate-500">Нет групп</span>
+        {% endif %}
         <div class="ml-auto flex flex-wrap gap-2 text-[10px] font-bold text-slate-600">
             <span class="badge bg-emerald-100 text-emerald-700">+ Пришёл</span>
             <span class="badge bg-red-100 text-red-700">× Пропуск</span>
@@ -29,14 +33,25 @@
 
 <section class="card overflow-hidden">
     <div class="table-wrap">
-        <table class="data-table min-w-[1080px]">
+        <table class="data-table min-w-[1400px]"> <!-- Увеличили ширину, чтобы влезло 14 дней -->
             <thead>
                 <tr>
-                    <th class="sticky left-0 z-10 bg-[#FAFBFC]">Спортсмен</th>
-                    <th>Абонемент</th>
-                    {% for day in days %}
-                        <th class="text-center {% if day == today %}bg-orange-50 text-[#FF5C35]{% endif %}">
-                            {{ day|date:"D" }}<br><b class="{% if day == today %}text-[#FF5C35]{% else %}text-slate-900{% endif %}">{{ day|date:"d" }}</b>
+                    <th class="sticky left-0 z-10 bg-[#FAFBFC]" rowspan="2">Спортсмен</th>
+                    <th rowspan="2">Абонемент</th>
+                    {% if week_data %}
+                        {% for entry in week_data %}
+                            {% ifchanged entry.week_number %}
+                                <th colspan="{{ week_data|length|divisibleby:2|yesno:'0,' }}{{ week_data|filter_week:forloop.counter0 }}" class="text-center bg-slate-200 text-xs">
+                                    Неделя {{ entry.week_number }}
+                                </th>
+                            {% endifchanged %}
+                        {% endfor %}
+                    {% endif %}
+                </tr>
+                <tr>
+                    {% for entry in week_data %}
+                        <th class="text-center {% if entry.date == today %}bg-orange-50 text-[#FF5C35]{% endif %} {% if entry.week_number == 2 %}bg-slate-50{% endif %}">
+                            {{ entry.date|date:"D" }}<br><b class="{% if entry.date == today %}text-[#FF5C35]{% else %}text-slate-900{% endif %}">{{ entry.date|date:"d" }}</b>
                         </th>
                     {% endfor %}
                     <th>Окончание</th>
@@ -68,7 +83,7 @@
                             {% endif %}
                         </td>
                         {% for entry in item.attendance_entries %}
-                            <td class="text-center {% if entry.date == today %}bg-orange-50/40{% endif %}">
+                            <td class="text-center {% if entry.date == today %}bg-orange-50/40{% endif %} {% if entry.week_number == 2 %}bg-slate-50/50{% endif %}">
                                 <button data-attendance
                                         data-child-id="{{ item.child.id }}"
                                         data-date="{{ entry.date|date:'Y-m-d' }}"
@@ -107,7 +122,7 @@
 {% endblock %}
 
 {% block modals %}
-<!-- Модалки остаются без изменений, при необходимости их можно наполнить динамикой -->
+<!-- Модалки можно оставить как были, при необходимости заполнить динамикой -->
 <section id="child-modal" class="modal">...</section>
 <section id="child-card" class="modal">...</section>
 {% endblock %}
