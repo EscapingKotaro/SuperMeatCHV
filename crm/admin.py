@@ -1,4 +1,3 @@
-@ -1,3 +1,275 @@
 from django.contrib import admin
 from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model, admin as auth_admin
