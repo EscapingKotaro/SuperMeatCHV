@@ -121,3 +121,5 @@ STATIC_ROOT="/opt/crm/staticfiles"
 STATICFILES_DIRS = [
     BASE_DIR / "static",
     ]
+
+AUTH_USER_MODEL = 'crm.User'
