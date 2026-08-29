@@ -15,9 +15,24 @@ from crm.models import (
 
 User = get_user_model()
 
+# Списки для генерации разнообразных Игорей
+LAST_NAMES = [
+    "Иванов", "Петров", "Сидоров", "Кузнецов", "Смирнов",
+    "Попов", "Васильев", "Соколов", "Михайлов", "Новиков",
+    "Федоров", "Морозов", "Волков", "Алексеев", "Лебедев",
+    "Семенов", "Егоров", "Павлов", "Козлов", "Степанов",
+]
+MIDDLE_NAMES = [
+    "Иванович", "Петрович", "Сидорович", "Александрович",
+    "Дмитриевич", "Сергеевич", "Андреевич", "Алексеевич",
+    "Николаевич", "Михайлович", "Владимирович", "Павлович",
+    "Егорович", "Федорович", "Игнатьевич", "Артемович",
+    "Борисович", "Викторович", "Григорьевич", "Денисович",
+]
+
 
 class Command(BaseCommand):
-    help = "Заполняет базу тестовыми данными (все — Игори)"
+    help = "Заполняет базу тестовыми данными (все — Игори, но с разными фамилиями и отчествами)"
 
     def handle(self, *args, **kwargs):
         self.stdout.write("Создаю Игорей...")
@@ -28,12 +43,13 @@ class Command(BaseCommand):
         for i, role in enumerate(roles, start=1):
             username = f"igor{i}"
             email = f"igor{i}@example.com"
+            last_name = random.choice(LAST_NAMES)
             user, created = User.objects.get_or_create(
                 username=username,
                 defaults={
                     'email': email,
                     'first_name': 'Игорь',
-                    'last_name': 'Игорев',
+                    'last_name': last_name,
                     'is_staff': True,
                     'role': role,
                 }
@@ -44,11 +60,13 @@ class Command(BaseCommand):
             StaffProfile.objects.get_or_create(user=user, defaults={'role': role})
             users.append(user)
 
-        # --- Тренеры (тоже Игори) ---
+        # --- Тренеры (тоже Игори с разными фамилиями) ---
         trainers = []
         for i in range(1, 4):
+            last_name = random.choice(LAST_NAMES)
+            middle_name = random.choice(MIDDLE_NAMES)
             trainer = Trainer.objects.create(
-                full_name=f"Игорь Игоревич Игорев {i}",
+                full_name=f"Игорь {last_name} {middle_name}",
                 phone=f"+7-900-000-00-0{i}",
                 is_active=True,
                 note="Тренер-Игорь",
@@ -73,16 +91,18 @@ class Command(BaseCommand):
                     duration_minutes=60,
                 )
 
-        # --- Дети (все — Игори) ---
+        # --- Дети (все — Игори, но разные фамилии и отчества) ---
         children = []
         for i in range(1, 21):  # 20 детей
+            last_name = random.choice(LAST_NAMES)
+            middle_name = random.choice(MIDDLE_NAMES)
             child = Child.objects.create(
-                last_name="Игорев",
+                last_name=last_name,
                 first_name="Игорь",
-                patronymic="Игоревич",
+                patronymic=middle_name,
                 birth_year=2015 + (i % 5),
                 address="г. Игоревск, ул. Игоревская, д. 1",
-                parent_name="Игорь Игоревич (папа)",
+                parent_name=f"Игорь {last_name} (папа)",
                 parent_phone=f"+7-911-111-22-{i:02d}",
                 status=random.choice(['active', 'trial', 'archived']),
                 trial_from=date.today() - timedelta(days=random.randint(0, 60)),
@@ -201,4 +221,4 @@ class Command(BaseCommand):
             is_done=False,
         )
 
-        self.stdout.write(self.style.SUCCESS("✅ База заполнена! Все — Игори."))
+        self.stdout.write(self.style.SUCCESS("✅ База заполнена! Все — Игори, но с разнообразием."))
