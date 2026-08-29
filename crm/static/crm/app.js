@@ -63,7 +63,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const newStatus = statusMap[newState];
 
             // Отправляем AJAX
-            fetch('/attendance/update/', {
+            fetch('/crm/attendance/update/', {
                 method: 'POST',
                 headers: {
                     'X-CSRFToken': getCookie('csrftoken'),
