@@ -59,11 +59,12 @@ def attendance_view(request):
         try:
             week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
         except ValueError:
-            week_start = timezone.localdate() - timedelta(days=timezone.localdate().weekday())
+            week_start = timezone.localdate() - timedelta(days=5)
     else:
-        week_start = timezone.localdate() - timedelta(days=timezone.localdate().weekday())
-
+        # Начало окна = сегодня - 5 дней
+        week_start = timezone.localdate() - timedelta(days=5)
     # Получаем все слоты расписания группы (дни недели и время)
+    period_end = week_start + timedelta(days=13)
     slots = ScheduleSlot.objects.filter(group=group).order_by('weekday', 'start_time')
     if not slots.exists():
         # Если расписания нет, дни будут пустыми
@@ -162,6 +163,7 @@ def attendance_view(request):
         'week_start_next': (week_start + timedelta(days=14)).strftime('%Y-%m-%d'),
         'children_data': children_data,
         'today': today,
+        'period_end': period_end,
     }
     return render(request, 'crm/attendance.html', context)
 
