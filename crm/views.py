@@ -88,6 +88,9 @@ def attendance_view(request):
         sessions_left = child.sessions_left()
         sessions_total = 0
         active_sub = child.active_subscription()
+        subscription_end_soon = False
+        if active_sub:
+            subscription_end_soon = (active_sub.end_date <= today + timedelta(days=3)) and (active_sub.end_date >= today)
         if active_sub:
             sessions_total = active_sub.sessions_total
 
@@ -124,6 +127,7 @@ def attendance_view(request):
             'subscription_end': active_sub.end_date if active_sub else None,
             'status': child.status,
             'attendance_entries': attendance_entries,
+            'subscription_end_soon': subscription_end_soon,
         })
 
     context = {
