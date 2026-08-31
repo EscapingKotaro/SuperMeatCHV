@@ -13,7 +13,7 @@ PAGES = {
 }
 
 
-def app_page(request):
+def app_page(request, page="statistics"):
     title, subtitle = PAGES[page]
     return render(request, f"crm/{page}.html", {
         "page": page, "title": title, "subtitle": subtitle,
