@@ -20,8 +20,45 @@ def app_page(request, page="statistics"):
     })
 
 
+from django.contrib.auth import authenticate, login
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from django.urls import reverse
+
+
 def login_page(request):
-    return render(request, "crm/login.html")
+    # Если пользователь уже авторизован — сразу отправляем на главную
+    if request.user.is_authenticated:
+        return redirect('attendance')  # замени на имя своего URL
+
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        remember_me = request.POST.get('remember_me') == 'on'
+
+        # Проверяем, что поля не пустые
+        if not username or not password:
+            messages.error(request, 'Введите логин и пароль')
+            return render(request, 'crm/login.html')
+
+        # Аутентификация
+        user = authenticate(request, username=username, password=password)
+
+        if user is not None:
+            login(request, user)
+
+            # Если "Запомнить меня" — сессия живёт 2 недели, иначе до закрытия браузера
+            if remember_me:
+                request.session.set_expiry(1209600)  # 2 недели в секундах
+            else:
+                request.session.set_expiry(0)  # при закрытии браузера
+
+            # Редирект на нужную страницу (например, attendance)
+            return redirect('attendance')  # замени на имя URL
+        else:
+            messages.error(request, 'Неверный логин или пароль')
+
+    return render(request, 'crm/login.html')
 
 
 from datetime import datetime, timedelta
