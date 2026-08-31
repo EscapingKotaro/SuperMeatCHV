@@ -1,11 +1,115 @@
 {% load static %}
-<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{{ title }} · ВЫСОТА CRM</title>
-<script src="https://cdn.tailwindcss.com"></script><script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="{% static 'crm/app.css' %}"></head>
-<body class="bg-[#F6F7F9] text-[#17202A] antialiased"><header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur"><div class="mx-auto flex max-w-[1500px] items-center gap-4 px-4 py-3 lg:px-7">
-<a href="/" class="mr-2 flex shrink-0 items-center gap-2.5"><span class="grid h-9 w-9 place-items-center rounded-xl bg-[#FF5C35] text-white shadow-sm"><i data-lucide="sparkles" class="h-5 w-5"></i></span><span class="hidden font-extrabold tracking-tight sm:block">ВЫСОТА <span class="text-[#FF5C35]">CRM</span></span></a>
-<nav class="scrollbar-none flex min-w-0 flex-1 gap-1 overflow-x-auto"><a class="nav-pill {% if page == 'attendance' %}active{% endif %}" href="/crm/attendance/"><i data-lucide="calendar-check"></i>Табель</a><a class="nav-pill {% if page == 'statistics' %}active{% endif %}" href="/statistics/"><i data-lucide="chart-no-axes-combined"></i>Статистика</a><a class="nav-pill {% if page == 'payments' %}active{% endif %}" href="/payments/"><i data-lucide="wallet-cards"></i>Продления</a><a class="nav-pill {% if page == 'expenses' %}active{% endif %}" href="/expenses/"><i data-lucide="receipt-text"></i>Расходы</a><a class="nav-pill {% if page == 'competitions' %}active{% endif %}" href="/competitions/"><i data-lucide="trophy"></i>Соревнования</a><a class="nav-pill {% if page == 'boss' %}active{% endif %}" href="/boss/"><i data-lucide="briefcase-business"></i>Руководителю</a></nav>
-<div class="flex shrink-0 items-center gap-2 border-l border-slate-200 pl-3"><a href="/notifications/" class="relative grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100" aria-label="Уведомления"><i data-lucide="bell" class="h-5 w-5"></i><b class="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#FF5C35] ring-2 ring-white"></b></a><button data-menu-toggle class="flex items-center gap-2 rounded-xl p-1.5 hover:bg-slate-100"><span class="grid h-8 w-8 place-items-center rounded-lg bg-[#E8F0FF] text-xs font-extrabold text-[#315EBC]">МК</span><span class="hidden text-left lg:block"><b class="block text-xs">Мария К.</b><small class="block text-[10px] text-slate-500">Главный администратор</small></span><i data-lucide="chevron-down" class="h-4 w-4 text-slate-400"></i></button></div></div>
-<div data-user-menu class="absolute right-6 top-16 hidden w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl"><a href="/profile/" class="menu-item"><i data-lucide="user-round"></i>Мой профиль</a><a href="/users/" class="menu-item"><i data-lucide="users-round"></i>Пользователи</a><hr class="my-2"><a href="/login/" class="menu-item text-red-600"><i data-lucide="log-out"></i>Выйти</a></div></header>
-<main class="mx-auto max-w-[1500px] px-4 py-7 lg:px-7"><div class="mb-6 flex flex-wrap items-end justify-between gap-4"><div><p class="eyebrow">27 августа 2026 · четверг</p><h1 class="text-2xl font-extrabold tracking-tight md:text-3xl">{{ title }}</h1><p class="mt-1 text-sm text-slate-500">{{ subtitle }}</p></div>{% block actions %}{% endblock %}</div>{% block content %}{% endblock %}</main>
-<div data-modal-backdrop class="fixed inset-0 z-40 hidden bg-slate-950/35 backdrop-blur-sm"></div>{% block modals %}{% endblock %}<div id="toast" class="fixed bottom-5 right-5 z-[60] hidden items-center gap-3 rounded-2xl bg-[#17202A] px-4 py-3 text-sm font-semibold text-white shadow-2xl"><i data-lucide="circle-check" class="h-5 w-5 text-emerald-400"></i><span>Изменения сохранены</span></div><script src="{% static 'crm/app.js' %}"></script></body></html>
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ title }} · ВЫСОТА CRM</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'crm/app.css' %}">
+</head>
+<body class="bg-[#F6F7F9] text-[#17202A] antialiased">
+
+    <!-- Шапка -->
+    <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+        <div class="mx-auto flex max-w-[1500px] items-center gap-4 px-4 py-3 lg:px-7">
+            <!-- Логотип -->
+            <a href="/" class="mr-2 flex shrink-0 items-center gap-2.5">
+                <span class="grid h-9 w-9 place-items-center rounded-xl bg-[#FF5C35] text-white shadow-sm">
+                    <i data-lucide="sparkles" class="h-5 w-5"></i>
+                </span>
+                <span class="hidden font-extrabold tracking-tight sm:block">
+                    ВЫСОТА <span class="text-[#FF5C35]">CRM</span>
+                </span>
+            </a>
+
+            <!-- Навигация -->
+            <nav class="scrollbar-none flex min-w-0 flex-1 gap-1 overflow-x-auto">
+                <a class="nav-pill {% if page == 'attendance' %}active{% endif %}" href="/crm/attendance/">
+                    <i data-lucide="calendar-check"></i>Табель
+                </a>
+                <a class="nav-pill {% if page == 'statistics' %}active{% endif %}" href="/statistics/">
+                    <i data-lucide="chart-no-axes-combined"></i>Статистика
+                </a>
+                <a class="nav-pill {% if page == 'payments' %}active{% endif %}" href="/payments/">
+                    <i data-lucide="wallet-cards"></i>Продления
+                </a>
+                <a class="nav-pill {% if page == 'expenses' %}active{% endif %}" href="/expenses/">
+                    <i data-lucide="receipt-text"></i>Расходы
+                </a>
+                <a class="nav-pill {% if page == 'competitions' %}active{% endif %}" href="/competitions/">
+                    <i data-lucide="trophy"></i>Соревнования
+                </a>
+                <a class="nav-pill {% if page == 'boss' %}active{% endif %}" href="/boss/">
+                    <i data-lucide="briefcase-business"></i>Руководителю
+                </a>
+            </nav>
+
+            <!-- Правая часть: уведомления + профиль -->
+            <div class="flex shrink-0 items-center gap-2 border-l border-slate-200 pl-3">
+                <a href="/notifications/" class="relative grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100" aria-label="Уведомления">
+                    <i data-lucide="bell" class="h-5 w-5"></i>
+                    <b class="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-[#FF5C35] ring-2 ring-white"></b>
+                </a>
+
+                <!-- Кнопка пользователя -->
+                <button data-menu-toggle class="flex items-center gap-2 rounded-xl p-1.5 hover:bg-slate-100">
+                    <span class="grid h-8 w-8 place-items-center rounded-lg bg-[#E8F0FF] text-xs font-extrabold text-[#315EBC]">
+                        МК
+                    </span>
+                    <span class="hidden text-left lg:block">
+                        <b class="block text-xs">Мария К.</b>
+                        <small class="block text-[10px] text-slate-500">Главный администратор</small>
+                    </span>
+                    <i data-lucide="chevron-down" class="h-4 w-4 text-slate-400"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Выпадающее меню пользователя -->
+        <div data-user-menu class="absolute right-6 top-16 hidden w-56 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+            <a href="/profile/" class="menu-item">
+                <i data-lucide="user-round"></i>Мой профиль
+            </a>
+            <a href="/users/" class="menu-item">
+                <i data-lucide="users-round"></i>Пользователи
+            </a>
+            <hr class="my-2">
+            <a href="{% url 'logout' %}" class="menu-item text-red-600">
+                <i data-lucide="log-out"></i>Выйти
+            </a>
+        </div>
+    </header>
+
+    <!-- Основной контент -->
+    <main class="mx-auto max-w-[1500px] px-4 py-7 lg:px-7">
+        <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
+            <div>
+                <p class="eyebrow">27 августа 2026 · четверг</p>
+                <h1 class="text-2xl font-extrabold tracking-tight md:text-3xl">{{ title }}</h1>
+                <p class="mt-1 text-sm text-slate-500">{{ subtitle }}</p>
+            </div>
+            {% block actions %}{% endblock %}
+        </div>
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Модальные окна (фон) -->
+    <div data-modal-backdrop class="fixed inset-0 z-40 hidden bg-slate-950/35 backdrop-blur-sm"></div>
+    {% block modals %}{% endblock %}
+
+    <!-- Тост уведомление -->
+    <div id="toast" class="fixed bottom-5 right-5 z-[60] hidden items-center gap-3 rounded-2xl bg-[#17202A] px-4 py-3 text-sm font-semibold text-white shadow-2xl">
+        <i data-lucide="circle-check" class="h-5 w-5 text-emerald-400"></i>
+        <span>Изменения сохранены</span>
+    </div>
+
+    <script src="{% static 'crm/app.js' %}"></script>
+</body>
+</html>

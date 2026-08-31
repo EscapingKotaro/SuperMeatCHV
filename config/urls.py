@@ -21,7 +21,10 @@ from crm import views
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', views.app_page, name='home'),
+    
     path('login/', views.login_page, name='login'),
+    path('logout/', views.logout_view, name='logout'),
+
     path('<str:page>/', views.app_page, name='app_page'),
 
     

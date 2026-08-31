@@ -19,6 +19,13 @@ def app_page(request, page="statistics"):
         "page": page, "title": title, "subtitle": subtitle,
     })
 
+from django.contrib.auth import logout
+from django.shortcuts import redirect
+
+def logout_view(request):
+    logout(request)
+    return redirect('login')
+
 
 from django.contrib.auth import authenticate, login
 from django.shortcuts import render, redirect
