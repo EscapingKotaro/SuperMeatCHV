@@ -270,7 +270,7 @@ import string
 
 # --- Декораторы для проверки ролей ---
 def is_senior_or_boss(user):
-    return user.is_authenticated and user.role in [User.Role.SENIOR_MANAGER, User.Role.CHIEF]
+    return user.is_authenticated and user.role in [User.Role.SENIOR_MANAGER, User.Role.CHIEF, User.Role.ADMIN]
 
 def senior_manager_required(view_func):
     return user_passes_test(is_senior_or_boss, login_url='/')(view_func)
