@@ -8,7 +8,6 @@ PAGES = {
     "competitions": ("Соревнования", "Баллы, места и история выступлений"),
     "notifications": ("Уведомления", "Задачи и события, требующие внимания"),
     "boss": ("Для руководителя", "Выручка, KPI и работа команды"),
-    "users": ("Пользователи", "Доступы сотрудников и роли"),
     "profile": ("Мой профиль", "Личные данные и безопасность"),
 }
 
@@ -276,8 +275,9 @@ def senior_manager_required(view_func):
     return user_passes_test(is_senior_or_boss, login_url='/')(view_func)
 
 # --- 1. Список пользователей ---
+
+#@senior_manager_required
 @login_required
-@senior_manager_required
 def user_list(request):
     users = User.objects.all().order_by('-date_joined')
     return render(request, 'crm/users/user_list.html', {'users': users})
