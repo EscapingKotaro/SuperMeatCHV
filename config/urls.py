@@ -30,4 +30,13 @@ urlpatterns = [
     
     path('crm/attendance/', views.attendance_view, name='attendance'),
     path('crm/attendance/update/', views.update_attendance, name='attendance_update'),
+
+    path('users/', views.user_list, name='user_list'),
+    path('users/create/', views.user_create, name='user_create'),
+    path('users/<int:pk>/delete/', views.user_delete, name='user_delete'),
+    path('users/<int:pk>/reset-password/', views.user_reset_password, name='user_reset_password'),
+
+    # Смена пароля для любого авторизованного пользователя
+    path('profile/change-password/', views.change_password, name='change_password'),
+]
 ]

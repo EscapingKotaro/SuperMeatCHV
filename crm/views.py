@@ -257,3 +257,94 @@ def update_attendance(request):
         )
 
     return JsonResponse({'success': True, 'status': attendance.status})
+
+
+
+from django.shortcuts import render, redirect, get_object_or_404
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.contrib import messages
+from django.contrib.auth.hashers import make_password
+from .models import User
+import random
+import string
+
+# --- Декораторы для проверки ролей ---
+def is_senior_or_boss(user):
+    return user.is_authenticated and user.role in [User.Role.SENIOR_MANAGER, User.Role.CHIEF]
+
+def senior_manager_required(view_func):
+    return user_passes_test(is_senior_or_boss, login_url='/')(view_func)
+
+# --- 1. Список пользователей ---
+@login_required
+@senior_manager_required
+def user_list(request):
+    users = User.objects.all().order_by('-date_joined')
+    return render(request, 'crm/users/user_list.html', {'users': users})
+
+# --- 2. Создание пользователя ---
+@login_required
+@senior_manager_required
+def user_create(request):
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        password = request.POST.get('password')
+        role = request.POST.get('role')
+
+        if User.objects.filter(username=username).exists():
+            messages.error(request, 'Пользователь с таким именем уже существует.')
+            return redirect('user_list')
+
+        user = User.objects.create_user(
+            username=username,
+            password=password,
+            role=role
+        )
+        messages.success(request, f'Пользователь {username} успешно создан.')
+        return redirect('user_list')
+
+    return render(request, 'crm/users/user_form.html', {'action': 'create'})
+
+# --- 3. Удаление пользователя ---
+@login_required
+@senior_manager_required
+def user_delete(request, pk):
+    user = get_object_or_404(User, pk=pk)
+    if user == request.user:
+        messages.error(request, 'Нельзя удалить самого себя.')
+    else:
+        user.delete()
+        messages.success(request, 'Пользователь удален.')
+    return redirect('user_list')
+
+# --- 4. Сброс пароля администратором ---
+@login_required
+@senior_manager_required
+def user_reset_password(request, pk):
+    user = get_object_or_404(User, pk=pk)
+    new_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
+    user.set_password(new_password)
+    user.save()
+
+    messages.success(request, f'Пароль для {user.username} сброшен. Новый пароль: {new_password}')
+    return redirect('user_list')
+
+# --- 5. Смена пароля самим пользователем ---
+@login_required
+def change_password(request):
+    if request.method == 'POST':
+        old_password = request.POST.get('old_password')
+        new_password = request.POST.get('new_password')
+
+        if not request.user.check_password(old_password):
+            messages.error(request, 'Неверный текущий пароль.')
+        else:
+            request.user.set_password(new_password)
+            request.user.save()
+            # Обновляем сессию, чтобы не выкинуло из системы
+            from django.contrib.auth import update_session_auth_hash
+            update_session_auth_hash(request, request.user)
+            messages.success(request, 'Пароль успешно изменен.')
+            return redirect('profile') # или куда ведет ссылка "Мой профиль"
+
+    return render(request, 'crm/users/change_password.html')
