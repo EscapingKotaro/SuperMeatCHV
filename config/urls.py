@@ -39,4 +39,4 @@ urlpatterns = [
     # Смена пароля для любого авторизованного пользователя
     path('profile/change-password/', views.change_password, name='change_password'),
 ]
-]
+
