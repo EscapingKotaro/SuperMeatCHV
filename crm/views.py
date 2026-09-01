@@ -388,13 +388,13 @@ from .models import Child, Group, calculate_projected_end_date # Не забуд
 def revenue_forecast_view(request):
     today = timezone.localdate()
     days = []
-    processed_child_ids = set() # Множество для отслеживания уникальности
+    processed_child_ids = set()
 
     for i in range(7):
         current_date = today + timedelta(days=i)
-
+        
         children = Child.objects.filter(status=Child.Status.ACTIVE).select_related('group')
-
+        
         urgent_list = []
         one_left_list = []
         forecast_list = []
@@ -407,7 +407,7 @@ def revenue_forecast_view(request):
             if not active_sub:
                 continue
 
-            # Сколько занятий останется ИМЕННО на current_date
+            # Сколько занятий осталось ИМЕННО на current_date
             left_on_date = child.sessions_left_on_date(current_date)
 
             # Блок 1: Срочно (0 занятий)
@@ -417,25 +417,25 @@ def revenue_forecast_view(request):
                     'amount': active_sub.price
                 })
                 processed_child_ids.add(child.id)
+                continue  # ВАЖНО: пропускаем дальнейшие проверки
 
             # Блок 2: Осталось 1 занятие
-            elif left_on_date == 1:
+            if left_on_date == 1:
                 one_left_list.append({
                     'name': f"{child.last_name} {child.first_name}",
                     'amount': active_sub.price
                 })
                 processed_child_ids.add(child.id)
+                continue  # ВАЖНО: пропускаем дальнейшие проверки
 
             # Блок 3: Прогноз (до окончания менее 5 календарных дней)
-            else:
-                # Считаем, когда закончится этот остаток, если идти от current_date
-                proj_end = calculate_projected_end_date(child.group, current_date, left_on_date)
-                if proj_end and (proj_end - current_date).days < 5:
-                    forecast_list.append({
-                        'name': f"{child.last_name} {child.first_name}",
-                        'amount': active_sub.price
-                    })
-                    processed_child_ids.add(child.id)
+            proj_end = calculate_projected_end_date(child.group, current_date, left_on_date)
+            if proj_end and (proj_end - current_date).days < 5:
+                forecast_list.append({
+                    'name': f"{child.last_name} {child.first_name}",
+                    'amount': active_sub.price
+                })
+                processed_child_ids.add(child.id)
 
         total_day = sum(item['amount'] for item in urgent_list + one_left_list + forecast_list)
 
