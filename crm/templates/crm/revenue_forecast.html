@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    {% for day in days %}
+    <div class="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+        <!-- Шапка дня -->
+        <div class="border-b border-slate-100 bg-slate-50/50 p-4 text-center">
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400">{{ day.weekday }}</p>
+            <h3 class="text-xl font-extrabold text-slate-900">{{ day.date|date:"d.m" }}</h3>
+            <div class="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
+                <i data-lucide="banknote" class="h-3 w-3"></i>
+                {{ day.total|floatformat:0 }} ₽
+            </div>
+        </div>
+
+        <!-- Блоки с детьми -->
+        <div class="flex-1 space-y-4 p-4">
+
+            <!-- Срочно -->
+            {% if day.urgent %}
+            <div>
+                <h4 class="mb-2 flex items-center gap-2 text-xs font-bold text-red-600">
+                    <span class="h-2 w-2 rounded-full bg-red-500"></span>
+                    СРОЧНО (0 занятий)
+                </h4>
+                <ul class="space-y-2">
+                    {% for item in day.urgent %}
+                    <li class="flex items-center justify-between rounded-lg bg-red-50 p-2 text-sm">
+                        <span class="font-medium text-slate-700 truncate pr-2">{{ item.name }}</span>
+                        <span class="font-bold text-red-700">{{ item.amount|floatformat:0 }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <!-- Осталось 1 -->
+            {% if day.one_left %}
+            <div>
+                <h4 class="mb-2 flex items-center gap-2 text-xs font-bold text-amber-600">
+                    <span class="h-2 w-2 rounded-full bg-amber-500"></span>
+                    ОСТАЛОСЬ 1 ЗАНЯТИЕ
+                </h4>
+                <ul class="space-y-2">
+                    {% for item in day.one_left %}
+                    <li class="flex items-center justify-between rounded-lg bg-amber-50 p-2 text-sm">
+                        <span class="font-medium text-slate-700 truncate pr-2">{{ item.name }}</span>
+                        <span class="font-bold text-amber-700">{{ item.amount|floatformat:0 }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            <!-- Прогноз -->
+            {% if day.forecast %}
+            <div>
+                <h4 class="mb-2 flex items-center gap-2 text-xs font-bold text-blue-600">
+                    <span class="h-2 w-2 rounded-full bg-blue-500"></span>
+                    ПРОГНОЗ (< 5 дней)
+                </h4>
+                <ul class="space-y-2">
+                    {% for item in day.forecast %}
+                    <li class="flex items-center justify-between rounded-lg bg-blue-50 p-2 text-sm">
+                        <span class="font-medium text-slate-700 truncate pr-2">{{ item.name }}</span>
+                        <span class="font-bold text-blue-700">{{ item.amount|floatformat:0 }}</span>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+            {% endif %}
+
+            {% if not day.urgent and not day.one_left and not day.forecast %}
+            <p class="text-center text-xs text-slate-400 italic py-4">Нет ожидаемых оплат</p>
+            {% endif %}
+
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

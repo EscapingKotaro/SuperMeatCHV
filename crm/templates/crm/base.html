@@ -33,6 +33,9 @@
                 <a class="nav-pill {% if page == 'attendance' %}active{% endif %}" href="/crm/attendance/">
                     <i data-lucide="calendar-check"></i>Табель
                 </a>
+                <a class="nav-pill {% if page == 'revenue_forecast' %}active{% endif %}" href="{% url 'revenue_forecast' %}">
+    <i data-lucide="trending-up"></i>Прогноз
+</a>
                 <a class="nav-pill {% if page == 'statistics' %}active{% endif %}" href="/test/statistics/">
                     <i data-lucide="chart-no-axes-combined"></i>Статистика
                 </a>
@@ -58,16 +61,16 @@
                 </a>
 
                 <!-- Кнопка пользователя -->
-                <button data-menu-toggle class="flex items-center gap-2 rounded-xl p-1.5 hover:bg-slate-100">
-                    <span class="grid h-8 w-8 place-items-center rounded-lg bg-[#E8F0FF] text-xs font-extrabold text-[#315EBC]">
-                        МК
-                    </span>
-                    <span class="hidden text-left lg:block">
-                        <b class="block text-xs">Мария К.</b>
-                        <small class="block text-[10px] text-slate-500">Главный администратор</small>
-                    </span>
-                    <i data-lucide="chevron-down" class="h-4 w-4 text-slate-400"></i>
-                </button>
+               <button data-menu-toggle class="flex items-center gap-2 rounded-xl p-1.5 hover:bg-slate-100">
+    <span class="grid h-8 w-8 place-items-center rounded-lg bg-[#E8F0FF] text-xs font-extrabold text-[#315EBC]">
+        {{ user.first_name|default:user.username|slice:":1"|upper }}{{ user.last_name|default:""|slice:":1"|upper }}
+    </span>
+    <span class="hidden text-left lg:block">
+        <b class="block text-xs">{{ user.get_full_name|default:user.username }}</b>
+        <small class="block text-[10px] text-slate-500">{{ user.get_role_display }}</small>
+    </span>
+    <i data-lucide="chevron-down" class="h-4 w-4 text-slate-400"></i>
+</button>
             </div>
         </div>
 

@@ -369,3 +369,88 @@ def change_password(request):
             return redirect('profile') # или куда ведет ссылка "Мой профиль"
 
     return render(request, 'crm/users/change_password.html')
+
+
+
+from datetime import timedelta
+from django.utils import timezone
+from django.contrib.auth.decorators import login_required
+from .models import Child, Group
+
+@login_required
+def revenue_forecast_view(request):
+    today = timezone.localdate()
+    days = []
+    processed_child_ids = set() # Чтобы дети не повторялись
+
+    for i in range(7):
+        current_date = today + timedelta(days=i)
+
+        # Получаем всех активных детей
+        children = Child.objects.filter(status=Child.Status.ACTIVE).select_related('group')
+
+        urgent_list = []      # 0 занятий
+        one_left_list = []    # 1 занятие
+        forecast_list = []    # Окончание < 5 дней
+
+        for child in children:
+            if child.id in processed_child_ids:
+                continue
+
+            active_sub = child.active_subscription()
+            if not active_sub:
+                continue
+
+            # Считаем остаток на конкретную дату (упрощенно: берем текущий остаток
+            # и вычитаем посещения до этой даты, но для MVP можно взять текущий sessions_left,
+            # если ты хочешь точный прогноз, нужно смотреть attendance между today и current_date)
+
+            # Для точности: сколько занятий осталось ИМЕННО на эту дату?
+            # Это требует сложного подсчета. Для начала возьмем текущий sessions_left,
+            # но проверим дату окончания.
+
+            sessions_left = child.sessions_left() # Это метод из твоей модели
+
+            # Блок 1: Срочно (0 занятий)
+            if sessions_left == 0:
+                urgent_list.append({
+                    'name': f"{child.last_name} {child.first_name}",
+                    'amount': active_sub.price
+                })
+                processed_child_ids.add(child.id)
+
+            # Блок 2: Осталось 1 занятие
+            elif sessions_left == 1:
+                one_left_list.append({
+                    'name': f"{child.last_name} {child.first_name}",
+                    'amount': active_sub.price
+                })
+                processed_child_ids.add(child.id)
+
+            # Блок 3: Прогноз (до конца абонемента меньше 5 дней)
+            else:
+                days_until_end = (active_sub.end_date - current_date).days
+                if 0 <= days_until_end < 5:
+                    forecast_list.append({
+                        'name': f"{child.last_name} {child.first_name}",
+                        'amount': active_sub.price
+                    })
+                    processed_child_ids.add(child.id)
+
+        total_day = sum(item['amount'] for item in urgent_list + one_left_list + forecast_list)
+
+        days.append({
+            'date': current_date,
+            'weekday': current_date.strftime("%A"), # Или "%a" для сокращенного
+            'total': total_day,
+            'urgent': urgent_list,
+            'one_left': one_left_list,
+            'forecast': forecast_list,
+        })
+
+    context = {
+        'days': days,
+        'title': 'Прогноз доходов',
+        'subtitle': 'Ожидаемые продления на ближайшие 7 дней'
+    }
+    return render(request, 'crm/revenue_forecast.html', context)
