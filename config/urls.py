@@ -30,6 +30,7 @@ urlpatterns = [
     
     path('crm/attendance/', views.attendance_view, name='attendance'),
     path('crm/attendance/update/', views.update_attendance, name='attendance_update'),
+    path('revenue-forecast/', views.revenue_forecast_view, name='revenue_forecast'),
 
     path('users/', views.user_list, name='user_list'),
     path('users/create/', views.user_create, name='user_create'),
