@@ -88,6 +88,8 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from .models import Group, ScheduleSlot, Child
 
+
+
 def generate_class_dates(group, start_date, limit=50):
     """
     Генерирует список дат занятий начиная с start_date.
@@ -191,6 +193,7 @@ def attendance_view(request):
     children_data = []
     for child in children:
         active_sub = child.active_subscription()
+        projected_end = child.projected_end_date()
 
         att_map = {}
         # Фильтруем посещения только по датам нашего окна
@@ -202,8 +205,7 @@ def attendance_view(request):
         for idx, wd in enumerate(week_data):
             status = att_map.get(wd['date'], '')
             entries.append({'date': wd['date'], 'status': status})
-
-            if active_sub and wd['date'] == active_sub.end_date:
+            if projected_end and wd['date'] == projected_end:
                 sub_end_index = idx
 
         children_data.append({
@@ -378,21 +380,24 @@ from django.utils import timezone
 from django.contrib.auth.decorators import login_required
 from .models import Child, Group
 
+# views.py
+
+from .models import Child, Group, calculate_projected_end_date # Не забудь импорт функции!
+
 @login_required
 def revenue_forecast_view(request):
     today = timezone.localdate()
     days = []
-    processed_child_ids = set() # Чтобы дети не повторялись
+    processed_child_ids = set() # Множество для отслеживания уникальности
 
     for i in range(7):
         current_date = today + timedelta(days=i)
 
-        # Получаем всех активных детей
         children = Child.objects.filter(status=Child.Status.ACTIVE).select_related('group')
 
-        urgent_list = []      # 0 занятий
-        one_left_list = []    # 1 занятие
-        forecast_list = []    # Окончание < 5 дней
+        urgent_list = []
+        one_left_list = []
+        forecast_list = []
 
         for child in children:
             if child.id in processed_child_ids:
@@ -402,18 +407,11 @@ def revenue_forecast_view(request):
             if not active_sub:
                 continue
 
-            # Считаем остаток на конкретную дату (упрощенно: берем текущий остаток
-            # и вычитаем посещения до этой даты, но для MVP можно взять текущий sessions_left,
-            # если ты хочешь точный прогноз, нужно смотреть attendance между today и current_date)
-
-            # Для точности: сколько занятий осталось ИМЕННО на эту дату?
-            # Это требует сложного подсчета. Для начала возьмем текущий sessions_left,
-            # но проверим дату окончания.
-
-            sessions_left = child.sessions_left() # Это метод из твоей модели
+            # Сколько занятий останется ИМЕННО на current_date
+            left_on_date = child.sessions_left_on_date(current_date)
 
             # Блок 1: Срочно (0 занятий)
-            if sessions_left == 0:
+            if left_on_date <= 0:
                 urgent_list.append({
                     'name': f"{child.last_name} {child.first_name}",
                     'amount': active_sub.price
@@ -421,17 +419,18 @@ def revenue_forecast_view(request):
                 processed_child_ids.add(child.id)
 
             # Блок 2: Осталось 1 занятие
-            elif sessions_left == 1:
+            elif left_on_date == 1:
                 one_left_list.append({
                     'name': f"{child.last_name} {child.first_name}",
                     'amount': active_sub.price
                 })
                 processed_child_ids.add(child.id)
 
-            # Блок 3: Прогноз (до конца абонемента меньше 5 дней)
+            # Блок 3: Прогноз (до окончания менее 5 календарных дней)
             else:
-                days_until_end = (active_sub.end_date - current_date).days
-                if 0 <= days_until_end < 5:
+                # Считаем, когда закончится этот остаток, если идти от current_date
+                proj_end = calculate_projected_end_date(child.group, current_date, left_on_date)
+                if proj_end and (proj_end - current_date).days < 5:
                     forecast_list.append({
                         'name': f"{child.last_name} {child.first_name}",
                         'amount': active_sub.price
@@ -442,7 +441,7 @@ def revenue_forecast_view(request):
 
         days.append({
             'date': current_date,
-            'weekday': current_date.strftime("%A"), # Или "%a" для сокращенного
+            'weekday': current_date.strftime("%A"),
             'total': total_day,
             'urgent': urgent_list,
             'one_left': one_left_list,
@@ -452,6 +451,7 @@ def revenue_forecast_view(request):
     context = {
         'days': days,
         'title': 'Прогноз доходов',
-        'subtitle': 'Ожидаемые продления на ближайшие 7 дней'
+        'subtitle': 'Ожидаемые продления на ближайшие 7 дней',
+        'page': 'revenue_forecast'
     }
     return render(request, 'crm/revenue_forecast.html', context)
