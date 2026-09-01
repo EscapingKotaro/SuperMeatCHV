@@ -1,3 +1,199 @@
-{% extends 'crm/base.html' %}{% block actions %}<div class="flex gap-2"><button class="btn btn-soft"><i data-lucide="download"></i>Excel</button><button data-modal="competition-modal" class="btn btn-primary"><i data-lucide="plus"></i>Соревнование</button></div>{% endblock %}{% block content %}
-<section class="card mb-4 p-4"><div class="flex flex-wrap items-center gap-3"><select class="field max-w-80 font-bold"><option>Кубок «Высота» · 22 августа 2026</option><option>Первенство города · 12 июля 2026</option></select><span class="badge bg-emerald-50 text-emerald-700">Внутриклубное</span><span class="text-xs text-slate-500">Екатеринбург · 24 участника</span><button data-modal="athlete-modal" class="btn btn-dark ml-auto"><i data-lucide="user-plus"></i>Добавить участника</button></div></section><section class="card overflow-hidden"><div class="table-wrap"><table class="data-table min-w-[1050px]"><thead><tr><th>Спортсмен</th><th>Год</th><th>Разряд</th><th>Категория</th><th>Прыжок</th><th>Брусья</th><th>Бревно</th><th>Вольные</th><th>Итого</th><th>Место</th></tr></thead><tbody><tr><td><b>Кузнецова Мария</b></td><td>2014</td><td>II юн.</td><td>2014–2015</td><td><input class="field w-20" value="8.900"></td><td><input class="field w-20" value="9.100"></td><td><input class="field w-20" value="8.750"></td><td><input class="field w-20" value="9.200"></td><td><b>35.950</b></td><td><span class="grid h-8 w-8 place-items-center rounded-full bg-amber-100 font-extrabold text-amber-700">1</span></td></tr><tr><td><b>Соколова Алиса</b></td><td>2015</td><td>I юн.</td><td>2014–2015</td><td><input class="field w-20" value="8.800"></td><td><input class="field w-20" value="8.950"></td><td><input class="field w-20" value="8.600"></td><td><input class="field w-20" value="9.100"></td><td><b>35.450</b></td><td><span class="grid h-8 w-8 place-items-center rounded-full bg-slate-200 font-extrabold text-slate-600">2</span></td></tr><tr><td><b>Петрова Анна</b></td><td>2016</td><td>б/р</td><td>2016–2017</td><td><input class="field w-20" value="8.250"></td><td><input class="field w-20" value="8.700"></td><td><input class="field w-20" value="8.100"></td><td><input class="field w-20" value="8.650"></td><td><b>33.700</b></td><td><span class="grid h-8 w-8 place-items-center rounded-full bg-amber-700/15 font-extrabold text-amber-800">3</span></td></tr></tbody></table></div><div class="flex justify-end border-t border-slate-100 p-4"><button data-save class="btn btn-primary">Сохранить и пересчитать места</button></div></section>{% endblock %}
-{% block modals %}<section id="competition-modal" class="modal"><div class="modal-head"><b>Новое соревнование</b><button data-close><i data-lucide="x"></i></button></div><div class="modal-body grid gap-4 sm:grid-cols-2"><label class="sm:col-span-2"><span class="label">Название</span><input class="field" placeholder="Название соревнования"></label><label><span class="label">Дата</span><input type="date" class="field"></label><label><span class="label">Город</span><input class="field" value="Екатеринбург"></label><label class="sm:col-span-2 flex items-center gap-2 text-xs"><input type="checkbox" checked> Внутриклубное — результаты автоматически попадут в карточки</label></div><div class="modal-foot"><button data-close class="btn btn-soft">Отмена</button><button data-save class="btn btn-primary">Создать</button></div></section><section id="athlete-modal" class="modal"><div class="modal-head"><b>Добавить участника</b><button data-close><i data-lucide="x"></i></button></div><div class="modal-body grid gap-4"><label><span class="label">Спортсмен</span><select class="field"><option>Выберите спортсмена</option></select></label><label><span class="label">Категория</span><input class="field" placeholder="Например, 2014–2015"></label></div><div class="modal-foot"><button data-close class="btn btn-soft">Отмена</button><button data-save class="btn btn-primary">Добавить</button></div></section>{% endblock %}
+{% extends 'crm/base.html' %}
+{% block actions %}
+<div class="flex gap-2">
+{% if selected %}
+<a href="{% url 'competition_export' selected.pk %}" class="btn btn-soft">
+<i data-lucide="download">
+</i>Excel</a>
+{% endif %}
+<button data-modal="competition-modal" class="btn btn-primary">
+<i data-lucide="plus">
+</i>Соревнование</button>
+</div>
+{% endblock %}
+{% block content %}
+<section class="card mb-4 p-4">
+<div class="flex flex-wrap items-center gap-3">
+<form method="get">
+<select name="competition" class="field max-w-96 font-bold" onchange="this.form.submit()">
+{% for competition in competitions %}
+<option value="{{ competition.pk }}" {% if competition == selected %}selected{% endif %}>{{ competition.name }} · {{ competition.date|date:"d.m.Y" }}</option>
+{% empty %}
+<option>Создайте первое соревнование</option>
+{% endfor %}
+</select>
+</form>
+{% if selected %}
+<span class="badge {% if selected.is_internal %}bg-emerald-50 text-emerald-700{% else %}bg-blue-50 text-blue-700{% endif %}">
+{% if selected.is_internal %}Внутриклубное{% else %}Выездное{% endif %}
+</span>
+<a href="?competition={{ selected.pk }}&edit_competition={{ selected.pk }}" class="btn btn-soft">Изменить соревнование</a>
+<button data-modal="apparatus-modal" class="btn btn-soft">Добавить дисциплину</button>
+<button data-modal="athlete-modal" class="btn btn-dark ml-auto">
+<i data-lucide="user-plus">
+</i>Добавить участника</button>
+{% endif %}
+</div>
+{% if selected %}
+<div class="mt-3 flex flex-wrap gap-2">
+{% for item in apparatus %}
+<span class="badge bg-slate-100 text-slate-700">{{ item.name }} <a class="ml-1 text-blue-600" href="?competition={{ selected.pk }}&edit_apparatus={{ item.pk }}">изменить</a>
+<form method="post" class="inline">
+{% csrf_token %}
+<input type="hidden" name="action" value="delete_apparatus">
+<input type="hidden" name="apparatus_id" value="{{ item.pk }}">
+<button class="ml-1 text-red-500" onclick="return confirm('Удалить дисциплину и баллы?')">×</button>
+</form>
+</span>
+{% endfor %}
+</div>
+{% endif %}
+</section>
+{% if selected %}
+<section class="card overflow-hidden">
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="action" value="save_scores">
+<div class="table-wrap">
+<table class="data-table min-w-[980px]">
+<thead>
+<tr>
+<th>Спортсмен</th>
+<th>Год</th>
+<th>Разряд</th>
+<th>Категория</th>
+{% for item in apparatus %}
+<th>{{ item.name }}</th>
+{% endfor %}
+<th>Итого</th>
+<th>Место</th>
+</tr>
+</thead>
+<tbody>
+{% for row in entry_rows %}
+<tr>
+<td>
+<b>{{ row.entry.child }}</b>
+</td>
+<td>{{ row.entry.child.birth_year }}</td>
+<td>{{ row.entry.rank|default:"—" }}</td>
+<td>{{ row.entry.category|default:"Общая" }}</td>
+{% for score in row.scores %}
+<td>
+<input class="field w-24" name="score_{{ row.entry.pk }}_{{ score.apparatus_id }}" value="{{ score.points|stringformat:'.3f' }}" inputmode="decimal">
+</td>
+{% endfor %}
+<td>
+<b>{{ row.total|stringformat:'.3f' }}</b>
+</td>
+<td>
+{% if row.entry.place %}
+<span class="grid h-8 w-8 place-items-center rounded-full {% if row.entry.place == 1 %}bg-amber-100 text-amber-700{% else %}bg-slate-100 text-slate-700{% endif %} font-extrabold">{{ row.entry.place }}</span>
+{% else %}—{% endif %}
+</td>
+</tr>
+{% empty %}
+<tr>
+<td colspan="10" class="py-12 text-center text-slate-500">Добавьте участников, затем внесите баллы</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+<div class="flex justify-end border-t border-slate-100 p-4">
+<button class="btn btn-primary">Сохранить и пересчитать места</button>
+</div>
+</form>
+</section>
+{% endif %}
+{% endblock %}
+{% block modals %}
+<section id="competition-modal" class="modal {% if editing_competition %}open{% endif %}">
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="action" value="create_competition">
+{% if editing_competition %}
+<input type="hidden" name="competition_id" value="{{ editing_competition.pk }}">
+{% endif %}
+<div class="modal-head">
+<b>
+{% if editing_competition %}Изменить соревнование{% else %}Новое соревнование{% endif %}
+</b>
+<button type="button" data-close>
+<i data-lucide="x">
+</i>
+</button>
+</div>
+<div class="modal-body grid gap-4 sm:grid-cols-2">
+{% for field in competition_form %}
+<label class="{% if field.name == 'name' or field.name == 'is_internal' %}sm:col-span-2{% endif %}">
+<span class="label">{{ field.label }}</span>{{ field }}</label>
+{% endfor %}
+</div>
+<div class="modal-foot">
+<button type="button" data-close class="btn btn-soft">Отмена</button>
+<button class="btn btn-primary">Сохранить</button>
+</div>
+</form>
+</section>
+{% if selected %}
+<section id="apparatus-modal" class="modal {% if editing_apparatus %}open{% endif %}">
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="action" value="save_apparatus">
+{% if editing_apparatus %}
+<input type="hidden" name="apparatus_id" value="{{ editing_apparatus.pk }}">
+{% endif %}
+<div class="modal-head">
+<b>
+{% if editing_apparatus %}Изменить дисциплину{% else %}Новая дисциплина{% endif %}
+</b>
+<button type="button" data-close>
+<i data-lucide="x">
+</i>
+</button>
+</div>
+<div class="modal-body grid gap-4">
+{% for field in apparatus_form %}
+<label>
+<span class="label">{{ field.label }}</span>{{ field }}</label>
+{% endfor %}
+</div>
+<div class="modal-foot">
+<button type="button" data-close class="btn btn-soft">Отмена</button>
+<button class="btn btn-primary">Сохранить</button>
+</div>
+</form>
+</section>
+{% endif %}
+{% if selected %}
+<section id="athlete-modal" class="modal">
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="action" value="add_entry">
+<div class="modal-head">
+<b>Добавить участника</b>
+<button type="button" data-close>
+<i data-lucide="x">
+</i>
+</button>
+</div>
+<div class="modal-body grid gap-4">
+{% for field in entry_form %}
+<label>
+<span class="label">{{ field.label }}</span>{{ field }}</label>
+{% endfor %}
+</div>
+<div class="modal-foot">
+<button type="button" data-close class="btn btn-soft">Отмена</button>
+<button class="btn btn-primary">Добавить</button>
+</div>
+</form>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if editing_competition or editing_apparatus %}
+<script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>
+{% endif %}
+{% endblock %}

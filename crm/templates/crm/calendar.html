@@ -1,0 +1,96 @@
+{% extends 'crm/base.html' %}
+{% block actions %}
+<button data-modal="reminder-modal" class="btn btn-primary">
+<i data-lucide="plus">
+</i>Новое напоминание</button>
+{% endblock %}
+{% block content %}
+<section class="card mb-4 p-4">
+<div class="flex flex-wrap items-end gap-3">
+<form method="post" class="flex items-end gap-2">
+{% csrf_token %}
+<input type="hidden" name="action" value="set_shift">
+<label>
+<span class="label">Мой первый рабочий день цикла 2/2</span>
+<input class="field" type="date" name="shift_anchor" value="{{ request.user.profile.shift_anchor|date:'Y-m-d' }}">
+</label>
+<button class="btn btn-soft">Сохранить график</button>
+</form>
+<div class="text-xs text-slate-500">Филиал: {{ request.user.profile.branch|default:"не назначен" }}</div>
+</div>
+{% if shift_rows %}
+<div class="mt-3 flex flex-wrap gap-2">
+{% for row in shift_rows %}
+<span class="badge bg-slate-100 text-slate-700">{{ row.profile.user.get_full_name|default:row.profile.user.username }} · {{ row.profile.branch|default:"без филиала" }}</span>
+{% endfor %}
+</div>
+{% endif %}
+</section>
+<div class="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+{% for day in days %}
+<section class="card min-h-52 p-3 {% if day.date == today %}ring-2 ring-orange-300{% endif %}">
+<div class="mb-3">
+<b>{{ day.date|date:"D, d.m" }}</b>
+{% for row in shift_rows %}
+{% if day.date in row.work_days %}
+<small class="mt-1 block text-[10px] text-emerald-600">{{ row.profile.user.first_name|default:row.profile.user.username }} работает</small>
+{% endif %}
+{% endfor %}
+</div>
+<div class="space-y-2">
+{% for item in day.items %}
+<article class="rounded-xl border p-2 text-xs {% if item.is_done %}bg-slate-50 text-slate-400{% else %}bg-white{% endif %}">
+<b class="block">{{ item.remind_at|date:"H:i" }} · {{ item.title }}</b>
+<span>{{ item.assignee.get_full_name|default:item.assignee.username }}</span>
+<div class="mt-2 flex gap-1">
+<a class="text-blue-600" href="?edit={{ item.pk }}">Изменить</a>
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="action" value="toggle">
+<input type="hidden" name="reminder_id" value="{{ item.pk }}">
+<button class="text-emerald-600">
+{% if item.is_done %}Вернуть{% else %}Готово{% endif %}
+</button>
+</form>
+</div>
+</article>
+{% empty %}
+<p class="text-xs text-slate-400">Нет задач</p>
+{% endfor %}
+</div>
+</section>
+{% endfor %}
+</div>
+{% endblock %}
+{% block modals %}
+<section id="reminder-modal" class="modal {% if editing %}open{% endif %}">
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="action" value="save">
+<div class="modal-head">
+<b>
+{% if editing %}Перенести или изменить{% else %}Новое напоминание{% endif %}
+</b>
+<button type="button" data-close>
+<i data-lucide="x">
+</i>
+</button>
+</div>
+<div class="modal-body grid gap-4">
+{% for field in form %}
+<label>
+<span class="label">{{ field.label }}</span>{{ field }}</label>
+{% endfor %}
+</div>
+<div class="modal-foot">
+<button type="button" data-close class="btn btn-soft">Отмена</button>
+<button class="btn btn-primary">Сохранить</button>
+</div>
+</form>
+</section>
+{% endblock %}
+{% block scripts %}
+{% if editing %}
+<script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>
+{% endif %}
+{% endblock %}

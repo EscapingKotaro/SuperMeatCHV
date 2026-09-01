@@ -1,0 +1,122 @@
+{% extends 'crm/base.html' %}
+{% block actions %}
+<div class="flex gap-2">
+<button data-modal="import-modal" class="btn btn-soft">
+<i data-lucide="clipboard-paste">
+</i>Вставить из рекламы</button>
+<button data-modal="lead-modal" class="btn btn-primary">
+<i data-lucide="plus">
+</i>Добавить заявку</button>
+</div>
+{% endblock %}
+{% block content %}
+{% if imported_count %}
+<div class="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">Новых заявок из рекламы: {{ imported_count }}. Они выделены синим.</div>
+{% endif %}
+<section class="card overflow-hidden">
+<div class="table-wrap">
+<table class="data-table">
+<thead>
+<tr>
+<th>Заявка</th>
+<th>Контакт</th>
+<th>Источник</th>
+<th>Пробное</th>
+<th>Статус</th>
+<th>Действия</th>
+</tr>
+</thead>
+<tbody>
+{% for lead in leads %}
+<tr class="{% if lead.imported_from_ad %}bg-blue-50/70{% endif %}">
+<td>
+<b>{{ lead.full_name }}</b>
+<small class="block text-slate-500">{{ lead.age_text|default:lead.birth_date }}</small>
+</td>
+<td>{{ lead.phone|default:"—" }}</td>
+<td>{{ lead.source|default:"Не указан" }}{% if lead.imported_from_ad %}
+<span class="badge ml-1 bg-blue-100 text-blue-700">из рекламы</span>
+{% endif %}
+</td>
+<td>{{ lead.trial_at|date:"d.m.Y H:i"|default:"Не назначено" }}</td>
+<td>{{ lead.get_status_display }}</td>
+<td>
+<div class="flex flex-wrap gap-2">
+<a href="?edit={{ lead.pk }}" class="btn btn-soft">Изменить</a>
+{% if not lead.newcomers.exists %}
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="action" value="create_newcomer">
+<input type="hidden" name="lead_id" value="{{ lead.pk }}">
+<button class="btn btn-soft">В новички</button>
+</form>
+{% endif %}
+</div>
+</td>
+</tr>
+{% empty %}
+<tr>
+<td colspan="6" class="py-12 text-center text-slate-500">Заявок пока нет</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+</section>
+{% endblock %}
+{% block modals %}
+<section id="lead-modal" class="modal {% if editing %}open{% endif %}">
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="action" value="save">
+<div class="modal-head">
+<b>
+{% if editing %}Изменить заявку{% else %}Новая заявка{% endif %}
+</b>
+<button type="button" data-close>
+<i data-lucide="x">
+</i>
+</button>
+</div>
+<div class="modal-body grid max-h-[70vh] gap-4 overflow-y-auto sm:grid-cols-2">
+{% for field in form %}
+<label class="{% if field.name == 'comment' %}sm:col-span-2{% endif %}">
+<span class="label">{{ field.label }}</span>{{ field }}</label>
+{% endfor %}
+</div>
+<div class="modal-foot">
+<button type="button" data-close class="btn btn-soft">Отмена</button>
+<button class="btn btn-primary">Сохранить</button>
+</div>
+</form>
+</section>
+<section id="import-modal" class="modal">
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="action" value="import_raw">
+<div class="modal-head">
+<b>Импорт рекламной заявки</b>
+<button type="button" data-close>
+<i data-lucide="x">
+</i>
+</button>
+</div>
+<div class="modal-body">
+<label>
+<span class="label">Вставьте текст заявки</span>
+<textarea name="raw_application" class="field min-h-52" placeholder="Имя: Анна Петрова&#10;Телефон: +7...&#10;Возраст: 7 лет&#10;Кампания: Люберцы">
+</textarea>
+</label>
+</div>
+<div class="modal-foot">
+<button type="button" data-close class="btn btn-soft">Отмена</button>
+<button class="btn btn-primary">Распознать</button>
+</div>
+</form>
+</section>
+{% endblock %}
+{% block scripts %}
+{% if editing %}
+<script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>
+{% endif %}
+{% endblock %}

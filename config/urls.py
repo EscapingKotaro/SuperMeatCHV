@@ -15,12 +15,33 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
+from django.conf import settings
+from django.conf.urls.static import static
 from django.urls import path
 from crm import views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('', views.app_page, name='home'),
+    path('', views.attendance_page, name='home'),
     path('login/', views.login_page, name='login'),
-    path('<str:page>/', views.app_page, name='app_page'),
+    path('logout/', views.logout_page, name='logout'),
+    path('attendance/', views.attendance_page, name='attendance'),
+    path('children/<int:pk>/edit/', views.child_edit, name='child_edit'),
+    path('applications/', views.applications_page, name='applications'),
+    path('newcomers/', views.newcomers_page, name='newcomers'),
+    path('calendar/', views.calendar_page, name='calendar'),
+    path('search/', views.search_page, name='search'),
+    path('statistics/', views.statistics_page, name='statistics'),
+    path('payments/', views.payments_page, name='payments'),
+    path('expenses/', views.expenses_page, name='expenses'),
+    path('competitions/', views.competitions_page, name='competitions'),
+    path('competitions/<int:pk>/export/', views.competition_export, name='competition_export'),
+    path('notifications/', views.notifications_page, name='notifications'),
+    path('boss/', views.boss_page, name='boss'),
+    path('users/', views.users_page, name='users'),
+    path('profile/', views.profile_page, name='profile'),
+    path('backup/export/', views.backup_export, name='backup_export'),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

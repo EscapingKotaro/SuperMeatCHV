@@ -152,8 +152,8 @@ class ChildAdmin(admin.ModelAdmin):
 
 @admin.register(Group)
 class GroupAdmin(admin.ModelAdmin):
-    list_display = ("name", "trainer", "children_count", "is_active")
-    list_filter = ("trainer", "is_active")
+    list_display = ("name", "branch", "trainer", "single_session_price", "children_count", "is_active")
+    list_filter = ("branch", "trainer", "is_active")
     search_fields = ("name",)
     inlines = (ScheduleSlotInline := type("ScheduleSlotInline", (admin.TabularInline,),
                  {"model": ScheduleSlot, "extra": 1}),)
@@ -176,10 +176,41 @@ class TrainerAdmin(RoleGate):
 
 @admin.register(Attendance)
 class AttendanceAdmin(admin.ModelAdmin):
-    list_display = ("child", "date", "status", "comment")
+    list_display = ("child", "date", "status", "charge_amount", "comment")
     list_filter = ("status", "date", "child__group")
     search_fields = ("child__last_name", "child__first_name")
     date_hierarchy = "date"
+
+
+@admin.register(Branch)
+class BranchAdmin(admin.ModelAdmin):
+    list_display = ("name", "address", "is_active")
+
+
+@admin.register(Tariff)
+class TariffAdmin(admin.ModelAdmin):
+    list_display = ("name", "price", "sessions_total", "duration_days", "is_active")
+    list_filter = ("is_active",)
+
+
+@admin.register(Lead)
+class LeadAdmin(admin.ModelAdmin):
+    list_display = ("full_name", "phone", "source", "status", "imported_from_ad", "created_at")
+    list_filter = ("status", "imported_from_ad", "source")
+    search_fields = ("full_name", "phone", "comment")
+
+
+@admin.register(Newcomer)
+class NewcomerAdmin(admin.ModelAdmin):
+    list_display = ("full_name", "trial_at", "attended", "paid", "lesson_cancelled", "child")
+    list_filter = ("attended", "paid", "lesson_cancelled", "trainer")
+    search_fields = ("full_name", "phone", "comment")
+
+
+@admin.register(Reminder)
+class ReminderAdmin(admin.ModelAdmin):
+    list_display = ("title", "remind_at", "assignee", "visible_to_all", "is_done")
+    list_filter = ("is_done", "visible_to_all", "assignee")
 
 
 # ---------- Финансы: рядовой НЕ видит KPI и ЗП ----------
@@ -196,12 +227,27 @@ class PaymentAdmin(admin.ModelAdmin):
 
 @admin.register(Expense)
 class ExpenseAdmin(admin.ModelAdmin):
-    list_display = ("date", "title", "amount", "created_by")
-    list_filter = ("date",)
+    list_display = ("date", "title", "category", "amount", "created_by")
+    list_filter = ("date", "category")
 
     def save_model(self, request, obj, form, change):
         obj.created_by = request.user
         super().save_model(request, obj, form, change)
+
+
+@admin.register(AuditEvent)
+class AuditEventAdmin(RoleGate):
+    min_level = 2
+    list_display = ("created_at", "actor", "action", "description")
+    list_filter = ("action", "created_at")
+    search_fields = ("description", "actor__username")
+    readonly_fields = ("actor", "action", "object_type", "object_id", "description", "created_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(RevenueTarget)

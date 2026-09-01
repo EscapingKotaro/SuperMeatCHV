@@ -1,0 +1,97 @@
+{% extends 'crm/base.html' %}
+{% block actions %}
+<button data-modal="newcomer-modal" class="btn btn-primary">
+<i data-lucide="user-plus">
+</i>Добавить новичка</button>
+{% endblock %}
+{% block content %}
+<section class="card overflow-hidden">
+<div class="table-wrap">
+<table class="data-table">
+<thead>
+<tr>
+<th>Новичок</th>
+<th>Пробное</th>
+<th class="text-center">Был</th>
+<th class="text-center">Оплатил</th>
+<th class="text-center">Отмена</th>
+<th>Комментарий</th>
+<th>Действия</th>
+</tr>
+</thead>
+<tbody>
+{% for item in newcomers %}
+<tr>
+<td>
+<b>{{ item.full_name }}</b>
+<small class="block text-slate-500">{{ item.phone }} · {{ item.source }}</small>
+</td>
+<td>{{ item.trial_at|date:"d.m.Y H:i"|default:"Не назначено" }}</td>
+<td class="text-center">
+{% if item.attended %}✓{% else %}—{% endif %}
+</td>
+<td class="text-center">
+{% if item.paid %}✓{% else %}—{% endif %}
+</td>
+<td class="text-center">
+{% if item.lesson_cancelled %}✓{% else %}—{% endif %}
+</td>
+<td class="max-w-xs">{{ item.comment|default:"—" }}</td>
+<td>
+<div class="flex gap-2">
+<a href="?edit={{ item.pk }}" class="btn btn-soft">Изменить</a>
+{% if not item.child %}
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="action" value="convert">
+<input type="hidden" name="newcomer_id" value="{{ item.pk }}">
+<button class="btn btn-soft">В спортсмены</button>
+</form>
+{% else %}
+<span class="badge bg-emerald-50 text-emerald-700">Карточка создана</span>
+{% endif %}
+</div>
+</td>
+</tr>
+{% empty %}
+<tr>
+<td colspan="7" class="py-12 text-center text-slate-500">Новичков пока нет</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+</section>
+{% endblock %}
+{% block modals %}
+<section id="newcomer-modal" class="modal {% if editing %}open{% endif %}">
+<form method="post">
+{% csrf_token %}
+<input type="hidden" name="action" value="save">
+<div class="modal-head">
+<b>
+{% if editing %}Изменить новичка{% else %}Новый новичок{% endif %}
+</b>
+<button type="button" data-close>
+<i data-lucide="x">
+</i>
+</button>
+</div>
+<div class="modal-body grid max-h-[70vh] gap-4 overflow-y-auto sm:grid-cols-2">
+{% for field in form %}
+<label class="{% if field.name == 'comment' %}sm:col-span-2{% endif %}">
+<span class="label">{{ field.label }}</span>{{ field }}</label>
+{% endfor %}
+</div>
+<div class="modal-foot">
+<button type="button" data-close class="btn btn-soft">Отмена</button>
+<button class="btn btn-primary">Сохранить</button>
+</div>
+</form>
+</section>
+{% endblock %}
+{% block scripts %}
+{% if editing %}
+<script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>
+{% endif %}
+{% endblock %}

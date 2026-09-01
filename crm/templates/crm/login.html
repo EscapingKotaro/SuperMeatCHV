@@ -1,1 +1,75 @@
-{% load static %}<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Вход · ВЫСОТА CRM</title><script src="https://cdn.tailwindcss.com"></script><script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet"><link rel="stylesheet" href="{% static 'crm/app.css' %}"></head><body class="min-h-screen bg-[#F6F7F9] text-[#17202A]"><main class="grid min-h-screen lg:grid-cols-2"><section class="hidden overflow-hidden bg-[#17202A] p-12 text-white lg:flex lg:flex-col lg:justify-between"><div class="flex items-center gap-3"><span class="grid h-11 w-11 place-items-center rounded-xl bg-[#FF5C35]"><i data-lucide="sparkles"></i></span><b class="text-xl">ВЫСОТА CRM</b></div><div><p class="max-w-xl text-4xl font-extrabold leading-tight">Вся работа клуба — в одном понятном месте.</p><p class="mt-4 max-w-lg text-sm leading-6 text-slate-400">Посещения, абонементы, соревнования и показатели команды без лишних таблиц и хаоса.</p><div class="mt-10 flex gap-8 text-xs"><span><b class="block text-2xl text-[#FF5C35]">128</b>спортсменов</span><span><b class="block text-2xl text-[#FF5C35]">82%</b>посещаемость</span></div></div><small class="text-slate-500">Спортивный клуб «Высота» · 2026</small></section><section class="flex items-center justify-center p-6"><div class="w-full max-w-sm"><div class="mb-8 flex items-center gap-3 lg:hidden"><span class="grid h-10 w-10 place-items-center rounded-xl bg-[#FF5C35] text-white"><i data-lucide="sparkles"></i></span><b>ВЫСОТА CRM</b></div><p class="eyebrow">Добро пожаловать</p><h1 class="text-3xl font-extrabold">Вход в систему</h1><p class="mt-2 text-sm text-slate-500">Введите данные рабочего аккаунта</p><form class="mt-8 space-y-4" action="/attendance/"><label><span class="label">Логин</span><input class="field" value="m.kokorina"></label><label><span class="label">Пароль</span><input type="password" class="field" value="123456789"></label><div class="flex justify-between text-xs"><label class="flex gap-2"><input type="checkbox" checked> Запомнить меня</label><a class="font-bold text-[#FF5C35]" href="#">Забыли пароль?</a></div><button class="btn btn-primary mt-2 w-full py-3">Войти <i data-lucide="arrow-right"></i></button></form><p class="mt-6 text-center text-xs text-slate-400">Нет доступа? Обратитесь к главному администратору</p></div></section></main><script>lucide.createIcons()</script></body></html>
+{% load static %}
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Вход · ВЫСОТА CRM</title>
+<script src="https://cdn.tailwindcss.com">
+</script>
+<script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js">
+</script>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{% static 'crm/app.css' %}">
+</head>
+<body class="min-h-screen bg-[#F6F7F9] text-[#17202A]">
+<main class="grid min-h-screen lg:grid-cols-2">
+  <section class="hidden bg-[#17202A] p-12 text-white lg:flex lg:flex-col lg:justify-between">
+<div class="flex items-center gap-3">
+<span class="grid h-11 w-11 place-items-center rounded-xl bg-[#FF5C35]">
+<i data-lucide="sparkles">
+</i>
+</span>
+<b class="text-xl">ВЫСОТА CRM</b>
+</div>
+<div>
+<p class="max-w-xl text-4xl font-extrabold leading-tight">Вся работа клуба — в одном понятном месте.</p>
+<p class="mt-4 max-w-lg text-sm leading-6 text-slate-400">Посещения, абонементы, соревнования и показатели команды без лишних таблиц и хаоса.</p>
+</div>
+<small class="text-slate-500">Спортивный клуб «Высота»</small>
+</section>
+  <section class="flex items-center justify-center p-6">
+<div class="w-full max-w-sm">
+<div class="mb-8 flex items-center gap-3 lg:hidden">
+<span class="grid h-10 w-10 place-items-center rounded-xl bg-[#FF5C35] text-white">
+<i data-lucide="sparkles">
+</i>
+</span>
+<b>ВЫСОТА CRM</b>
+</div>
+<p class="eyebrow">Добро пожаловать</p>
+<h1 class="text-3xl font-extrabold">Вход в систему</h1>
+<p class="mt-2 text-sm text-slate-500">Введите данные рабочего аккаунта</p>
+    {% if messages %}
+{% for message in messages %}
+<div class="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{{ message }}</div>
+{% endfor %}
+{% endif %}
+    <form class="mt-8 space-y-4" method="post">
+{% csrf_token %}
+<label>
+<span class="label">Логин</span>
+<input name="username" class="field" autocomplete="username" autofocus required>
+</label>
+<label>
+<span class="label">Пароль</span>
+<input name="password" type="password" class="field" autocomplete="current-password" required>
+</label>
+<button class="btn btn-primary mt-2 w-full py-3">Войти <i data-lucide="arrow-right">
+</i>
+</button>
+</form>
+    <div class="mt-6 rounded-xl bg-white p-4 text-xs text-slate-500">
+<b class="mb-2 block text-slate-700">Тестовые аккаунты после команды seed_demo:</b>
+<p>
+<code>boss</code> · <code>senior</code> · <code>admin</code>
+</p>
+<p>Пароль для всех: <code>Demo12345!</code>
+</p>
+</div>
+  </div>
+</section>
+</main>
+<script>lucide.createIcons()</script>
+</body>
+</html>
