@@ -30,7 +30,7 @@ def calculate_projected_end_date(group, start_date, sessions_count):
         for slot in slots:
             if current_date.weekday() == slot.weekday:
                 count += 1
-                if count == sessions_count:
+                if count > sessions_count:
                     return current_date
         current_date += timedelta(days=1)
         max_days -= 1
