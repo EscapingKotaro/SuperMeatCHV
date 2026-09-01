@@ -123,6 +123,7 @@ def login_page(request):
         user = authenticate(request, username=username, password=password)
         if user and user.is_active:
             login(request, user)
+            request.session.set_expiry(1209600 if request.POST.get("remember_me") else 0)
             return redirect(request.GET.get("next") or "attendance")
         messages.error(request, "Неверный логин или пароль")
     return render(request, "crm/login.html")
@@ -144,7 +145,7 @@ def attendance_page(request):
     except ValueError:
         chosen = timezone.localdate()
     week_start = chosen - timedelta(days=chosen.weekday())
-    week_dates = [week_start + timedelta(days=i) for i in range(7)]
+    week_dates = [week_start + timedelta(days=i) for i in range(14)]
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -207,7 +208,14 @@ def attendance_page(request):
             for day in week_dates:
                 status = mark_map.get((child.pk, day), "")
                 symbol, css = style_map.get(status, ("", "bg-slate-100 text-slate-400"))
-                child_marks.append({"date": day, "status": status, "symbol": symbol, "css": css})
+                child_marks.append({
+                    "date": day,
+                    "status": status,
+                    "symbol": symbol,
+                    "css": css,
+                    "week_number": 1 if day < week_start + timedelta(days=7) else 2,
+                    "is_expiry": child.nearest_expiry() == day,
+                })
             children.append({
                 "child": child,
                 "form": ChildForm(instance=child, prefix=f"child-{child.pk}"),
@@ -223,8 +231,8 @@ def attendance_page(request):
             children.sort(key=lambda item: item["left"])
     return render(request, "crm/attendance.html", page_context(
         request, "attendance", groups=groups, selected_group=selected_group,
-        week_dates=week_dates, week_start=week_start, prev_week=week_start-timedelta(days=7),
-        next_week=week_start+timedelta(days=7), children=children, today=timezone.localdate(),
+        week_dates=week_dates, week_start=week_start, prev_week=week_start-timedelta(days=14),
+        next_week=week_start+timedelta(days=14), children=children, today=timezone.localdate(),
     ))
 
 

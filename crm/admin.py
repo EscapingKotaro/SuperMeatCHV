@@ -174,12 +174,41 @@ class TrainerAdmin(RoleGate):
         return ", ".join(g.name for g in obj.groups.all())
 
 
+@admin.register(StaffProfile)
+class StaffProfileAdmin(RoleGate):
+    min_level = 1
+    list_display = ("user", "role", "branch", "shift_anchor")
+    list_filter = ("role", "branch")
+    search_fields = ("user__username", "user__first_name", "user__last_name")
+
+
+@admin.register(ScheduleSlot)
+class ScheduleSlotAdmin(admin.ModelAdmin):
+    list_display = ("group", "weekday", "start_time", "duration_minutes")
+    list_filter = ("group", "weekday")
+    ordering = ("group", "weekday", "start_time")
+
+
 @admin.register(Attendance)
 class AttendanceAdmin(admin.ModelAdmin):
     list_display = ("child", "date", "status", "charge_amount", "comment")
     list_filter = ("status", "date", "child__group")
     search_fields = ("child__last_name", "child__first_name")
     date_hierarchy = "date"
+
+
+@admin.register(Subscription)
+class SubscriptionAdmin(admin.ModelAdmin):
+    list_display = ("child", "tariff", "start_date", "end_date", "sessions_total", "price", "is_active")
+    list_filter = ("is_active", "tariff", "start_date", "end_date")
+    search_fields = ("child__last_name", "child__first_name")
+
+
+@admin.register(ChildRank)
+class ChildRankAdmin(admin.ModelAdmin):
+    list_display = ("child", "year", "rank")
+    list_filter = ("year", "rank")
+    search_fields = ("child__last_name", "child__first_name")
 
 
 @admin.register(Branch)
@@ -320,3 +349,40 @@ class CompetitionAdmin(admin.ModelAdmin):
                     [scores.get(a.id, "") for a in comp.apparatus.all()] +
                     [float(e.total_points()), e.place or ""])
             return xlsx_response(headers, rows, f"competition_{comp.pk}")
+
+
+@admin.register(Apparatus)
+class ApparatusAdmin(admin.ModelAdmin):
+    list_display = ("competition", "name", "order")
+    list_filter = ("competition",)
+    search_fields = ("name", "competition__name")
+
+
+@admin.register(CompetitionEntry)
+class CompetitionEntryAdmin(admin.ModelAdmin):
+    list_display = ("child", "competition", "category", "rank", "place")
+    list_filter = ("competition", "category")
+    search_fields = ("child__last_name", "child__first_name", "competition__name")
+
+
+@admin.register(ApparatusScore)
+class ApparatusScoreAdmin(admin.ModelAdmin):
+    list_display = ("entry", "apparatus", "points")
+    list_filter = ("apparatus__competition", "apparatus")
+
+
+@admin.register(Camp)
+class CampAdmin(admin.ModelAdmin):
+    search_fields = ("name",)
+
+
+@admin.register(CampStay)
+class CampStayAdmin(admin.ModelAdmin):
+    list_display = ("child", "camp", "start_date", "end_date")
+    list_filter = ("camp", "start_date")
+
+
+@admin.register(ManagerTask)
+class ManagerTaskAdmin(admin.ModelAdmin):
+    list_display = ("title", "assignee", "due_date", "is_done", "created_by")
+    list_filter = ("is_done", "assignee", "due_date")

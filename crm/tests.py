@@ -189,3 +189,25 @@ class CrmWorkflowTests(TestCase):
         for name in ("attendance", "applications", "newcomers", "calendar", "payments", "expenses", "competitions", "notifications", "search", "statistics", "boss", "users", "profile"):
             with self.subTest(name=name):
                 self.assertEqual(self.client.get(reverse(name)).status_code, 200)
+
+    def test_attendance_shows_two_weeks_and_expiry_boundary(self):
+        start = timezone.localdate() - timedelta(days=timezone.localdate().weekday())
+        Subscription.objects.create(
+            child=self.child,
+            start_date=start,
+            end_date=start + timedelta(days=5),
+            sessions_total=8,
+            price=Decimal("5000"),
+        )
+        self.client.login(username="admin", password="TestPass123!")
+        response = self.client.get(reverse("attendance"), {"group": self.group.pk, "week": start.isoformat()})
+        self.assertEqual(len(response.context["week_dates"]), 14)
+        self.assertContains(response, "border-red-500")
+
+    def test_login_remember_me_sets_two_week_session(self):
+        self.client.logout()
+        response = self.client.post(reverse("login"), {
+            "username": "admin", "password": "TestPass123!", "remember_me": "on",
+        })
+        self.assertRedirects(response, reverse("attendance"))
+        self.assertGreater(self.client.session.get_expiry_age(), 60 * 60 * 24 * 13)
