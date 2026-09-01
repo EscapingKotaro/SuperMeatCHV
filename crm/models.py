@@ -183,28 +183,48 @@ class Child(models.Model):
 
     def sessions_left_on_date(self, target_date):
         """
-        Считает, сколько занятий останется у ребёнка на конкретную будущую дату.
+        Считает, сколько занятий останется у ребёнка на конкретную дату.
+        Учитывает "проблему сегодняшней неопределенности": если сегодня есть занятие
+        по расписанию, но отметки еще нет, считаем его как прошедшее.
         """
         left = self.sessions_left()
         if left <= 0 or not self.group:
             return 0
 
         today = timezone.localdate()
-        if target_date <= today:
+        
+        if target_date < today:
             return left
-
-        # Считаем количество занятий по расписанию между сегодня (не включая) и target_date
-        slots = ScheduleSlot.objects.filter(group=self.group)
-        count = 0
-        current = today + timedelta(days=1)
-
-        while current <= target_date:
-            for slot in slots:
-                if current.weekday() == slot.weekday:
-                    count += 1
-            current += timedelta(days=1)
-
-        return max(0, left - count)
+            
+        elif target_date == today:
+            # Проверяем, есть ли сегодня занятие по расписанию
+            slots_today = ScheduleSlot.objects.filter(group=self.group, weekday=today.weekday())
+            if slots_today.exists():
+                # Проверяем, есть ли отметка на сегодня
+                has_mark = self.attendances.filter(
+                    date=today, 
+                    status__in=('present', 'absent')
+                ).exists()
+                
+                if not has_mark:
+                    # Занятие еще не отмечено, но по расписанию оно есть
+                    # Считаем его как "уже прошедшее" для прогноза
+                    return max(0, left - 1)
+            return left
+            
+        else:
+            # Для будущих дат: считаем все занятия от сегодня (включая) до target_date
+            slots = ScheduleSlot.objects.filter(group=self.group)
+            count = 0
+            current = today
+            
+            while current <= target_date:
+                for slot in slots:
+                    if current.weekday() == slot.weekday:
+                        count += 1
+                current += timedelta(days=1)
+            
+            return max(0, left - count)
 
     def debt(self):
         """Долг = сумма абонементов − оплаты."""
