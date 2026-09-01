@@ -9,19 +9,43 @@
 
 {% block content %}
 <section class="card mb-4 p-3">
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="flex flex-wrap items-center gap-3">
         {% if selected_group %}
-            <select id="group-select" class="field max-w-64 font-bold" onchange="location.href='?group_id='+this.value+'&week_start={{ week_start|date:'Y-m-d' }}'">
+            <!-- Выбор группы -->
+            <select id="group-select" class="field max-w-64 font-bold" onchange="location.href='?group_id='+this.value+'&ref_date={{ ref_date|date:'Y-m-d' }}'">
                 {% for g in groups %}
                     <option value="{{ g.id }}" {% if g.id == selected_group.id %}selected{% endif %}>{{ g.name }}</option>
                 {% endfor %}
             </select>
-            <a href="?group_id={{ selected_group.id }}&week_start={{ week_start_prev }}" class="btn btn-dark"><i data-lucide="chevron-left"></i></a>
-            <button class="btn btn-soft">{{ week_start|date:"d.m" }} – {{ period_end|date:"d.m" }} {{ week_start|date:"F"|lower }}</button>
-            <a href="?group_id={{ selected_group.id }}&week_start={{ week_start_next }}" class="btn btn-dark"><i data-lucide="chevron-right"></i></a>
+
+            <!-- Навигация по времени -->
+            <div class="flex items-center gap-2 rounded-xl bg-slate-100 p-1">
+                <a href="?group_id={{ selected_group.id }}&ref_date={{ prev_ref }}" class="grid h-8 w-8 place-items-center rounded-lg hover:bg-white hover:shadow-sm transition">
+                    <i data-lucide="chevron-left" class="h-4 w-4"></i>
+                </a>
+
+                <!-- Контрольная дата -->
+                <form method="get" class="flex items-center gap-2">
+                    <input type="hidden" name="group_id" value="{{ selected_group.id }}">
+                    <input type="date" name="ref_date" value="{{ ref_date|date:'Y-m-d' }}"
+                           class="bg-transparent text-sm font-semibold text-slate-700 outline-none cursor-pointer hover:text-[#FF5C35]"
+                           onchange="this.form.submit()">
+                </form>
+
+                <a href="?group_id={{ selected_group.id }}&ref_date={{ next_ref }}" class="grid h-8 w-8 place-items-center rounded-lg hover:bg-white hover:shadow-sm transition">
+                    <i data-lucide="chevron-right" class="h-4 w-4"></i>
+                </a>
+            </div>
+
+            <span class="text-xs text-slate-400">
+                Показано {{ week_data|length }} занятий
+            </span>
+
         {% else %}
             <span class="text-slate-500">Нет групп</span>
         {% endif %}
+
+        <!-- Легенда -->
         <div class="ml-auto flex flex-wrap gap-2 text-[10px] font-bold text-slate-600">
             <span class="badge bg-emerald-100 text-emerald-700">+ Пришёл</span>
             <span class="badge bg-red-100 text-red-700">× Пропуск</span>
@@ -33,20 +57,26 @@
 
 <section class="card overflow-hidden">
     <div class="table-wrap">
-        <table class="data-table min-w-[1400px]"> <!-- Увеличили ширину, чтобы влезло 14 дней -->
+        <table class="data-table min-w-[1400px]">
             <thead>
-    <tr>
-        <th class="sticky left-0 z-10 bg-[#FAFBFC]" rowspan="2">Спортсмен</th>
-        <th rowspan="2">Абонемент</th>
-        {% for entry in week_data %}
-            <th class="text-center {% if entry.date == today %}bg-orange-50 text-[#FF5C35]{% endif %} {% if entry.week_number == 2 %}bg-slate-50{% endif %}">
-                {{ entry.date|date:"D" }}<br><b class="{% if entry.date == today %}text-[#FF5C35]{% else %}text-slate-900{% endif %}">{{ entry.date|date:"d" }}</b>
-            </th>
-        {% endfor %}
-        <th>Окончание</th>
-        <th></th>
-    </tr>
-</thead>
+                <tr>
+                    <th class="sticky left-0 z-10 bg-[#FAFBFC]" rowspan="2">Спортсмен</th>
+                    <th rowspan="2">Абонемент</th>
+                    {% for entry in week_data %}
+                        <th class="text-center {% if entry.is_today %}bg-orange-50 text-[#FF5C35]{% endif %}">
+                            {{ entry.date|date:"D" }}<br>
+                            <b class="{% if entry.is_today %}text-[#FF5C35]{% else %}text-slate-900{% endif %}">
+                                {{ entry.date|date:"d.m" }}
+                            </b>
+                            {% if entry.start_time %}
+                                <div class="text-[9px] font-normal text-slate-400">{{ entry.start_time|date:"H:i" }}</div>
+                            {% endif %}
+                        </th>
+                    {% endfor %}
+                    <th>Окончание</th>
+                    <th></th>
+                </tr>
+            </thead>
             <tbody>
                 {% for item in children_data %}
                     <tr>
@@ -71,9 +101,9 @@
                                 <span class="text-slate-500">Без абонемента</span>
                             {% endif %}
                         </td>
+
                         {% for entry in item.attendance_entries %}
-                            
-    <td class="text-center {% if entry.date == today %}bg-orange-50/40{% endif %} {% if entry.week_number == 2 %}bg-slate-50/50{% endif %} {% if forloop.counter0 == item.subscription_end_index %}border-r-2 border-red-500{% endif %}">
+                            <td class="text-center {% if entry.date == today %}bg-orange-50/40{% endif %} {% if forloop.counter0 == item.subscription_end_index %}border-r-2 border-red-500{% endif %}">
                                 <button data-attendance
                                         data-child-id="{{ item.child.id }}"
                                         data-date="{{ entry.date|date:'Y-m-d' }}"
@@ -83,6 +113,7 @@
                                 </button>
                             </td>
                         {% endfor %}
+
                         <td>
                             {% if item.subscription_end %}
                                 {% if item.subscription_end < today %}
@@ -99,17 +130,14 @@
                         <td><button data-modal="child-card"><i data-lucide="more-horizontal" class="h-4 w-4"></i></button></td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="8" class="text-center py-8 text-slate-500">Нет детей в этой группе</td></tr>
+                    <tr><td colspan="100" class="text-center py-8 text-slate-500">Нет детей в этой группе</td></tr>
                 {% endfor %}
             </tbody>
         </table>
     </div>
-    <div class="flex items-center justify-between border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-        <span>{{ children_data|length }} из {{ children_data|length }} спортсменов</span>
-        <span>Кликните по ячейке, чтобы сменить отметку</span>
-    </div>
 </section>
 {% endblock %}
+
 
 {% block modals %}
 <!-- Модалки можно оставить как были, при необходимости заполнить динамикой -->

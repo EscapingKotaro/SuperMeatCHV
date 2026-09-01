@@ -75,145 +75,165 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from .models import Child, Group, ScheduleSlot, Attendance
 
+from datetime import timedelta, datetime
+import calendar
+from django.shortcuts import render, get_object_or_404
+from django.contrib.auth.decorators import login_required
+from django.utils import timezone
+from .models import Group, ScheduleSlot, Child
+
+def generate_class_dates(group, start_date, count=100):
+    """
+    Генерирует список дат занятий для группы, начиная с start_date.
+    Возвращает отсортированный список объектов date.
+    """
+    slots = ScheduleSlot.objects.filter(group=group).order_by('weekday', 'start_time')
+    if not slots:
+        return []
+
+    dates = []
+    # Генерируем даты на ~3 месяца вперед, чтобы хватило для навигации
+    end_gen_date = start_date + timedelta(days=90)
+
+    current = start_date
+    while current <= end_gen_date and len(dates) < count * 2: # Берем с запасом
+        for slot in slots:
+            # Проверяем, совпадает ли день недели
+            # weekday() возвращает 0 (пн) - 6 (вс). В модели у нас тоже 0-6?
+            # В твоей модели WEEKDAYS = [(i, d) ...], где i от 0 до 6.
+            if current.weekday() == slot.weekday:
+                dates.append(current)
+        current += timedelta(days=1)
+
+    # Убираем дубликаты (если вдруг логика слотов позволяет несколько слотов в один день,
+    # но для табеля нам нужна одна строка на день, обычно берут самое раннее время или просто день)
+    # Для простоты оставим уникальные даты
+    unique_dates = sorted(list(set(dates)))
+    return unique_dates
+
 @login_required
 def attendance_view(request):
-    # Получаем параметры
     group_id = request.GET.get('group_id')
-    week_start_str = request.GET.get('week_start')  # формат YYYY-MM-DD (понедельник первой недели)
+    ref_date_str = request.GET.get('ref_date') # Новая контрольная дата
 
-    # Определяем группу
+    # 1. Определяем группу
     if group_id:
         group = get_object_or_404(Group, id=group_id)
     else:
-        group = Group.objects.filter(is_active=True).first() or Group.objects.first()
+        group = Group.objects.filter(is_active=True).first()
         if not group:
-            # Если групп вообще нет
-            return render(request, 'crm/attendance.html', {
-                'groups': Group.objects.none(),
-                'selected_group': None,
-                'days': [],
-                'week_data': [],
-                'children_data': [],
-                'week_start': None,
-            })
+             return render(request, 'crm/attendance.html', {'groups': Group.objects.none(), 'selected_group': None})
 
-    # Определяем начало первой недели (по умолчанию – понедельник текущей недели)
-    if week_start_str:
+    # 2. Определяем опорную дату (reference date)
+    today = timezone.localdate()
+    if ref_date_str:
         try:
-            week_start = datetime.strptime(week_start_str, '%Y-%m-%d').date()
+            ref_date = datetime.strptime(ref_date_str, '%Y-%m-%d').date()
         except ValueError:
-            week_start = timezone.localdate() - timedelta(days=5)
+            ref_date = today
     else:
-        # Начало окна = сегодня - 5 дней
-        week_start = timezone.localdate() - timedelta(days=5)
-    # Получаем все слоты расписания группы (дни недели и время)
-    period_end = week_start + timedelta(days=13)
-    slots = ScheduleSlot.objects.filter(group=group).order_by('weekday', 'start_time')
-    if not slots.exists():
-        # Если расписания нет, дни будут пустыми
-        days = []
-        week_data = []
-    else:
-        # Строим список дат на две недели (текущая + следующая)
-        days = []
-        week_data = []  # Список словарей: {date, week_number, weekday, start_time}
-        for week_offset in (0, 7):  # 0 – текущая неделя, 7 – следующая
-            for slot in slots:
-                day_date = week_start + timedelta(days=slot.weekday + week_offset)
-                # Защита от дублей, если несколько слотов в один день
-                if day_date not in [d['date'] for d in week_data]:
-                    week_data.append({
-                        'date': day_date,
-                        'week_number': 1 if week_offset == 0 else 2,
-                        'weekday': slot.weekday,
-                        'start_time': slot.start_time,
-                    })
-                else:
-                    # Обновляем время, если уже есть дата (возьмём самое раннее)
-                    for d in week_data:
-                        if d['date'] == day_date:
-                            d['start_time'] = min(d['start_time'], slot.start_time)
-                            break
-        # Сортируем по дате и времени
-        week_data.sort(key=lambda x: (x['date'], x['start_time']))
-        days = [d['date'] for d in week_data]
+        ref_date = today
 
-    # Выбираем детей группы
+    # 3. Генерируем все даты занятий (кэшировать бы это, но для начала так)
+    # Генерируем от начала года, чтобы точно захватить прошлые занятия
+    year_start = today.replace(month=1, day=1)
+    all_class_dates = generate_class_dates(group, year_start)
+
+    if not all_class_dates:
+        return render(request, 'crm/attendance.html', {
+            'groups': Group.objects.filter(is_active=True),
+            'selected_group': group,
+            'week_data': [],
+            'children_data': [],
+            'ref_date': ref_date,
+            'error': 'Нет расписания'
+        })
+
+    # 4. Находим индекс ближайшего занятия к ref_date
+    # Ищем первое занятие, которое >= ref_date
+    current_index = 0
+    for i, d in enumerate(all_class_dates):
+        if d >= ref_date:
+            current_index = i
+            break
+
+    # Если ref_date больше последней известной даты, берем последний индекс
+    if current_index == 0 and all_class_dates[-1] < ref_date:
+         current_index = len(all_class_dates) - 1
+
+    # 5. Формируем окно: 4 назад, 15 вперед
+    start_idx = max(0, current_index - 4)
+    end_idx = min(len(all_class_dates), current_index + 15)
+
+    window_dates = all_class_dates[start_idx:end_idx]
+
+    # 6. Подготовка данных для шаблона
+    week_data = []
+    for d in window_dates:
+        # Найдем время начала первого занятия в этот день (для сортировки и отображения)
+        slots_today = ScheduleSlot.objects.filter(group=group, weekday=d.weekday())
+        start_time = slots_today.first().start_time if slots_today else None
+
+        week_data.append({
+            'date': d,
+            'start_time': start_time,
+            'is_today': d == today
+        })
+
+    # Дети
     children = Child.objects.filter(group=group).select_related('group__trainer').prefetch_related(
         'subscriptions', 'payments', 'attendances', 'ranks'
     ).order_by('last_name', 'first_name')
 
-    # Для каждого ребёнка собираем данные
     children_data = []
-    today = timezone.localdate()
     for child in children:
-        sessions_left = child.sessions_left()
-        sessions_total = 0
         active_sub = child.active_subscription()
-        if active_sub:
-            sessions_total = active_sub.sessions_total
 
-        debt = child.debt()
+        # Маппинг посещений
+        att_map = {}
+        for att in child.attendances.filter(date__in=window_dates):
+            att_map[att.date] = att.status
 
-        # Инициалы
-        initials = f"{child.last_name[0]}{child.first_name[0]}".upper()
+        entries = []
+        sub_end_index = None
+        for idx, wd in enumerate(week_data):
+            status = att_map.get(wd['date'], '')
+            entries.append({'date': wd['date'], 'status': status})
 
-        # Разряд (последний)
-        latest_rank = child.ranks.order_by('-year').first()
-        rank_str = latest_rank.rank if latest_rank else 'б/р'
+            # Проверка окончания абонемента
+            if active_sub and wd['date'] == active_sub.end_date:
+                sub_end_index = idx
 
-        # Отметки на выбранные даты
-        attendance_map = {}
-        for att in child.attendances.filter(date__in=days):
-            attendance_map[att.date] = att.status
-
-        # Формируем список записей для шаблона
-        attendance_entries = []
-        for entry in week_data:
-            day = entry['date']
-            attendance_entries.append({
-                'date': day,
-                'week_number': entry['week_number'],
-                'status': attendance_map.get(day, '')
-            })
-
-        # Проверка, скоро ли окончание абонемента
-        subscription_end_soon = False
-        if active_sub:
-            subscription_end_soon = (active_sub.end_date <= today + timedelta(days=3)) and (active_sub.end_date >= today)
-        subscription_end_index = None
-        if active_sub and attendance_entries:
-            # Если абонемент заканчивается внутри окна
-            if active_sub.end_date <= attendance_entries[-1]['date']:
-                for idx, entry in enumerate(attendance_entries):
-                    if entry['date'] <= active_sub.end_date:
-                        subscription_end_index = idx
         children_data.append({
             'child': child,
-            'initials': initials,
+            'initials': f"{child.last_name[0]}{child.first_name[0]}".upper(),
             'birth_year': child.birth_year,
-            'rank': rank_str,
-            'sessions_left': sessions_left,
-            'sessions_total': sessions_total,
-            'debt': debt,
+            'rank': child.ranks.order_by('-year').first().rank if child.ranks.exists() else 'б/р',
+            'sessions_left': child.sessions_left(),
+            'sessions_total': active_sub.sessions_total if active_sub else 0,
+            'debt': child.debt(),
             'subscription_end': active_sub.end_date if active_sub else None,
-            'subscription_end_soon': subscription_end_soon,
+            'subscription_end_soon': active_sub and (active_sub.end_date <= today + timedelta(days=3)) and (active_sub.end_date >= today),
             'status': child.status,
-            'attendance_entries': attendance_entries,
-            'subscription_end_index': subscription_end_index,
+            'attendance_entries': entries,
+            'subscription_end_index': sub_end_index,
         })
+
+    # Навигация: предыдущее/следующее окно
+    # Просто сдвигаем ref_date на количество дней в окне (примерно) или лучше по индексу
+    # Для простоты UI сделаем кнопки "Назад" и "Вперед" по окну
+    prev_ref = window_dates[0] - timedelta(days=1) if window_dates else today
+    next_ref = window_dates[-1] + timedelta(days=1) if window_dates else today
 
     context = {
         'groups': Group.objects.filter(is_active=True),
         'selected_group': group,
-        'days': days,
-        'week_data': week_data,  # для отображения подписей недель в шапке
-        'week_start': week_start,
-        'week_start_prev': (week_start - timedelta(days=14)).strftime('%Y-%m-%d'),
-        'week_start_next': (week_start + timedelta(days=14)).strftime('%Y-%m-%d'),
+        'week_data': week_data,
         'children_data': children_data,
+        'ref_date': ref_date,
+        'prev_ref': prev_ref.strftime('%Y-%m-%d'),
+        'next_ref': next_ref.strftime('%Y-%m-%d'),
         'today': today,
-        'period_end': period_end,
     }
     return render(request, 'crm/attendance.html', context)
 
@@ -276,8 +296,9 @@ def senior_manager_required(view_func):
 
 # --- 1. Список пользователей ---
 
-#@senior_manager_required
+
 @login_required
+@senior_manager_required
 def user_list(request):
     users = User.objects.all().order_by('-date_joined')
     return render(request, 'crm/users/user_list.html', {'users': users})
