@@ -153,6 +153,17 @@ class Child(models.Model):
         today = timezone.localdate()
         return self.subscriptions.filter(end_date__gte=today).order_by("end_date").first()
 
+    def sessions_left(self):
+        """Остаток занятий по активным абонементам («7 из 8 осталось»)."""
+        today = timezone.localdate()
+        left = 0
+        for sub in self.subscriptions.filter(end_date__gte=today):
+            used = self.attendances.filter(
+                status__in=("present", "absent"),
+                date__gte=sub.start_date, date__lte=sub.end_date).count()
+            left += max(0, sub.sessions_total - used)
+        return left
+
     def projected_end_date(self):
         """
         Дата последнего занятия по текущему активному абонементу.
