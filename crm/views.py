@@ -193,18 +193,23 @@ def attendance_view(request):
     children_data = []
     for child in children:
         active_sub = child.active_subscription()
+        
+        # Используем projected_end_date() который теперь учитывает сегодняшнюю неопределенность
         projected_end = child.projected_end_date()
-
+        
         att_map = {}
-        # Фильтруем посещения только по датам нашего окна
         for att in child.attendances.filter(date__in=window_dates):
             att_map[att.date] = att.status
 
         entries = []
         sub_end_index = None
+        
         for idx, wd in enumerate(week_data):
             status = att_map.get(wd['date'], '')
             entries.append({'date': wd['date'], 'status': status})
+            
+            # Разделитель ставим ПОСЛЕ последнего занятия
+            # То есть если projected_end = 03.09, разделитель после 03.09
             if projected_end and wd['date'] == projected_end:
                 sub_end_index = idx
 
@@ -407,17 +412,16 @@ def revenue_forecast_view(request):
             if not active_sub:
                 continue
 
-            # Сколько занятий осталось ИМЕННО на current_date
             left_on_date = child.sessions_left_on_date(current_date)
 
             # Блок 1: Срочно (0 занятий)
-            if left_on_date <= 0:
+            if left_on_date == 0:
                 urgent_list.append({
                     'name': f"{child.last_name} {child.first_name}",
                     'amount': active_sub.price
                 })
                 processed_child_ids.add(child.id)
-                continue  # ВАЖНО: пропускаем дальнейшие проверки
+                continue
 
             # Блок 2: Осталось 1 занятие
             if left_on_date == 1:
@@ -426,7 +430,7 @@ def revenue_forecast_view(request):
                     'amount': active_sub.price
                 })
                 processed_child_ids.add(child.id)
-                continue  # ВАЖНО: пропускаем дальнейшие проверки
+                continue
 
             # Блок 3: Прогноз (до окончания менее 5 календарных дней)
             proj_end = calculate_projected_end_date(child.group, current_date, left_on_date)
