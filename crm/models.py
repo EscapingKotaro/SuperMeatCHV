@@ -26,7 +26,7 @@ def calculate_projected_end_date(group, start_date, sessions_count):
     count = 0
     max_days = 365
     
-    while count < sessions_count and max_days > 0:
+    while max_days > 0:
         for slot in slots:
             if current_date.weekday() == slot.weekday:
                 count += 1
