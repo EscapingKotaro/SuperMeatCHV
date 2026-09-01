@@ -82,41 +82,44 @@ from django.contrib.auth.decorators import login_required
 from django.utils import timezone
 from .models import Group, ScheduleSlot, Child
 
-def generate_class_dates(group, start_date, count=100):
+from datetime import timedelta, datetime
+from django.shortcuts import render, get_object_or_404
+from django.contrib.auth.decorators import login_required
+from django.utils import timezone
+from .models import Group, ScheduleSlot, Child
+
+def generate_class_dates(group, start_date, limit=50):
     """
-    Генерирует список дат занятий для группы, начиная с start_date.
-    Возвращает отсортированный список объектов date.
+    Генерирует список дат занятий начиная с start_date.
+    limit - сколько дат вперед генерировать.
     """
     slots = ScheduleSlot.objects.filter(group=group).order_by('weekday', 'start_time')
     if not slots:
         return []
 
     dates = []
-    # Генерируем даты на ~3 месяца вперед, чтобы хватило для навигации
-    end_gen_date = start_date + timedelta(days=90)
-
+    # Начинаем генерацию с указанной даты
     current = start_date
-    while current <= end_gen_date and len(dates) < count * 2: # Берем с запасом
+
+    # Защита от бесконечного цикла: идем вперед, пока не наберем limit дат
+    # или не пройдем 6 месяцев (на всякий случай)
+    end_limit = start_date + timedelta(days=180)
+
+    while current <= end_limit and len(dates) < limit:
         for slot in slots:
-            # Проверяем, совпадает ли день недели
-            # weekday() возвращает 0 (пн) - 6 (вс). В модели у нас тоже 0-6?
-            # В твоей модели WEEKDAYS = [(i, d) ...], где i от 0 до 6.
             if current.weekday() == slot.weekday:
                 dates.append(current)
         current += timedelta(days=1)
 
-    # Убираем дубликаты (если вдруг логика слотов позволяет несколько слотов в один день,
-    # но для табеля нам нужна одна строка на день, обычно берут самое раннее время или просто день)
-    # Для простоты оставим уникальные даты
-    unique_dates = sorted(list(set(dates)))
-    return unique_dates
+    # Убираем дубликаты (если несколько слотов в один день) и сортируем
+    return sorted(list(set(dates)))
 
 @login_required
 def attendance_view(request):
     group_id = request.GET.get('group_id')
-    ref_date_str = request.GET.get('ref_date') # Новая контрольная дата
+    ref_date_str = request.GET.get('ref_date')
 
-    # 1. Определяем группу
+    # 1. Группа
     if group_id:
         group = get_object_or_404(Group, id=group_id)
     else:
@@ -124,7 +127,7 @@ def attendance_view(request):
         if not group:
              return render(request, 'crm/attendance.html', {'groups': Group.objects.none(), 'selected_group': None})
 
-    # 2. Определяем опорную дату (reference date)
+    # 2. Опорная дата
     today = timezone.localdate()
     if ref_date_str:
         try:
@@ -134,10 +137,12 @@ def attendance_view(request):
     else:
         ref_date = today
 
-    # 3. Генерируем все даты занятий (кэшировать бы это, но для начала так)
-    # Генерируем от начала года, чтобы точно захватить прошлые занятия
-    year_start = today.replace(month=1, day=1)
-    all_class_dates = generate_class_dates(group, year_start)
+    # 3. Генерируем даты.
+    # ВАЖНО: Начинаем генерацию с понедельника текущей недели, чтобы захватить начало недели
+    start_of_week = ref_date - timedelta(days=ref_date.weekday())
+
+    # Генерируем с запасом (например, 40 занятий вперед), чтобы точно хватило для среза
+    all_class_dates = generate_class_dates(group, start_of_week, limit=40)
 
     if not all_class_dates:
         return render(request, 'crm/attendance.html', {
@@ -150,27 +155,25 @@ def attendance_view(request):
         })
 
     # 4. Находим индекс ближайшего занятия к ref_date
-    # Ищем первое занятие, которое >= ref_date
     current_index = 0
     for i, d in enumerate(all_class_dates):
         if d >= ref_date:
             current_index = i
             break
 
-    # Если ref_date больше последней известной даты, берем последний индекс
-    if current_index == 0 and all_class_dates[-1] < ref_date:
+    # Если ref_date больше последней даты в списке, берем последний элемент
+    if all_class_dates[-1] < ref_date:
          current_index = len(all_class_dates) - 1
 
-    # 5. Формируем окно: 4 назад, 15 вперед
+    # 5. Формируем окно: 4 назад, 6 вперед (Итого 10 занятий)
     start_idx = max(0, current_index - 4)
-    end_idx = min(len(all_class_dates), current_index + 15)
+    end_idx = min(len(all_class_dates), current_index + 6)
 
     window_dates = all_class_dates[start_idx:end_idx]
 
-    # 6. Подготовка данных для шаблона
+    # 6. Подготовка данных
     week_data = []
     for d in window_dates:
-        # Найдем время начала первого занятия в этот день (для сортировки и отображения)
         slots_today = ScheduleSlot.objects.filter(group=group, weekday=d.weekday())
         start_time = slots_today.first().start_time if slots_today else None
 
@@ -189,8 +192,8 @@ def attendance_view(request):
     for child in children:
         active_sub = child.active_subscription()
 
-        # Маппинг посещений
         att_map = {}
+        # Фильтруем посещения только по датам нашего окна
         for att in child.attendances.filter(date__in=window_dates):
             att_map[att.date] = att.status
 
@@ -200,7 +203,6 @@ def attendance_view(request):
             status = att_map.get(wd['date'], '')
             entries.append({'date': wd['date'], 'status': status})
 
-            # Проверка окончания абонемента
             if active_sub and wd['date'] == active_sub.end_date:
                 sub_end_index = idx
 
@@ -219,9 +221,7 @@ def attendance_view(request):
             'subscription_end_index': sub_end_index,
         })
 
-    # Навигация: предыдущее/следующее окно
-    # Просто сдвигаем ref_date на количество дней в окне (примерно) или лучше по индексу
-    # Для простоты UI сделаем кнопки "Назад" и "Вперед" по окну
+    # Навигация
     prev_ref = window_dates[0] - timedelta(days=1) if window_dates else today
     next_ref = window_dates[-1] + timedelta(days=1) if window_dates else today
 
@@ -234,6 +234,7 @@ def attendance_view(request):
         'prev_ref': prev_ref.strftime('%Y-%m-%d'),
         'next_ref': next_ref.strftime('%Y-%m-%d'),
         'today': today,
+        'page': 'attendance' # Для подсветки активной кнопки в меню
     }
     return render(request, 'crm/attendance.html', context)
 
