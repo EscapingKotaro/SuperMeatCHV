@@ -25,7 +25,7 @@ urlpatterns = [
     path('login/', views.login_page, name='login'),
     path('logout/', views.logout_view, name='logout'),
 
-    path('<str:page>/', views.app_page, name='app_page'),
+    path('test/<str:page>/', views.app_page, name='app_page'),
 
     
     path('crm/attendance/', views.attendance_view, name='attendance'),
