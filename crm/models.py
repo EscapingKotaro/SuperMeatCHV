@@ -12,20 +12,20 @@ from django.utils import timezone
 
 def calculate_projected_end_date(group, start_date, sessions_count):
     """
-    Универсальная функция: рассчитывает дату N-го занятия (sessions_count)
-    начиная с start_date для данной группы, исходя из её расписания.
+    Рассчитывает дату последнего занятия.
+    start_date — дата, с которой начинаем считать (включительно).
     """
     if sessions_count <= 0 or not group:
         return None
-
+        
     slots = ScheduleSlot.objects.filter(group=group).order_by('weekday', 'start_time')
     if not slots.exists():
         return None
-
+        
     current_date = start_date
     count = 0
-    max_days = 365  # Защита от бесконечного цикла
-
+    max_days = 365
+    
     while count < sessions_count and max_days > 0:
         for slot in slots:
             if current_date.weekday() == slot.weekday:
@@ -34,7 +34,7 @@ def calculate_projected_end_date(group, start_date, sessions_count):
                     return current_date
         current_date += timedelta(days=1)
         max_days -= 1
-
+        
     return None
 
 
@@ -154,22 +154,45 @@ class Child(models.Model):
         return self.subscriptions.filter(end_date__gte=today).order_by("end_date").first()
 
     def sessions_left(self):
-        """Остаток занятий по активным абонементам («7 из 8 осталось»)."""
+        """Остаток занятий по активным абонементам."""
         today = timezone.localdate()
         left = 0
         for sub in self.subscriptions.filter(end_date__gte=today):
             used = self.attendances.filter(
                 status__in=("present", "absent"),
-                date__gte=sub.start_date, date__lte=sub.end_date).count()
+                date__gte=sub.start_date, date__lte=today  # ВАЖНО: до сегодня, не до end_date
+            ).count()
             left += max(0, sub.sessions_total - used)
         return left
 
-    def projected_end_date(self):
+    def has_class_today(self):
+        """Есть ли сегодня занятие по расписанию."""
+        today = timezone.localdate()
+        if not self.group:
+            return False
+        return ScheduleSlot.objects.filter(group=self.group, weekday=today.weekday()).exists()
+
+    def has_mark_today(self):
+        """Есть ли отметка за сегодня."""
+        today = timezone.localdate()
+        return self.attendances.filter(
+            date=today, 
+            status__in=('present', 'absent')
+        ).exists()
+
+    def effective_sessions_left(self):
         """
-        Дата последнего занятия по текущему активному абонементу.
-        Считается от сегодняшнего дня (или даты начала абонемента, если он в будущем).
+        Реальный остаток с учётом 'проблемы сегодняшней неопределенности'.
+        Если сегодня есть занятие по расписанию, но отметки нет — считаем как -1.
         """
         left = self.sessions_left()
+        if self.has_class_today() and not self.has_mark_today():
+            return max(0, left - 1)
+        return left
+
+    def projected_end_date(self):
+        """Дата последнего занятия по текущему абонементу."""
+        left = self.effective_sessions_left()
         if left <= 0:
             return None
 
@@ -177,54 +200,35 @@ class Child(models.Model):
         if not active_sub or not self.group:
             return None
 
-        # Начинаем отсчет от сегодня, либо от даты начала абонемента
-        start = max(timezone.localdate(), active_sub.start_date)
+        # Начинаем от сегодня (включая сегодня как возможное занятие)
+        start = timezone.localdate()
         return calculate_projected_end_date(self.group, start, left)
 
     def sessions_left_on_date(self, target_date):
         """
-        Считает, сколько занятий останется у ребёнка на конкретную дату.
-        Учитывает "проблему сегодняшней неопределенности": если сегодня есть занятие
-        по расписанию, но отметки еще нет, считаем его как прошедшее.
+        Сколько занятий останется на target_date.
         """
-        left = self.sessions_left()
+        left = self.effective_sessions_left()
         if left <= 0 or not self.group:
             return 0
 
         today = timezone.localdate()
         
-        if target_date < today:
+        if target_date <= today:
             return left
             
-        elif target_date == today:
-            # Проверяем, есть ли сегодня занятие по расписанию
-            slots_today = ScheduleSlot.objects.filter(group=self.group, weekday=today.weekday())
-            if slots_today.exists():
-                # Проверяем, есть ли отметка на сегодня
-                has_mark = self.attendances.filter(
-                    date=today, 
-                    status__in=('present', 'absent')
-                ).exists()
-                
-                if not has_mark:
-                    # Занятие еще не отмечено, но по расписанию оно есть
-                    # Считаем его как "уже прошедшее" для прогноза
-                    return max(0, left - 1)
-            return left
-            
-        else:
-            # Для будущих дат: считаем все занятия от сегодня (включая) до target_date
-            slots = ScheduleSlot.objects.filter(group=self.group)
-            count = 0
-            current = today
-            
-            while current <= target_date:
-                for slot in slots:
-                    if current.weekday() == slot.weekday:
-                        count += 1
-                current += timedelta(days=1)
-            
-            return max(0, left - count)
+        # Считаем занятия от завтра до target_date включительно
+        slots = ScheduleSlot.objects.filter(group=self.group)
+        count = 0
+        current = today + timedelta(days=1)
+        
+        while current <= target_date:
+            for slot in slots:
+                if current.weekday() == slot.weekday:
+                    count += 1
+            current += timedelta(days=1)
+        
+        return max(0, left - count)
 
     def debt(self):
         """Долг = сумма абонементов − оплаты."""
