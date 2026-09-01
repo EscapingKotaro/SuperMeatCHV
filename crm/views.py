@@ -194,8 +194,8 @@ def attendance_view(request):
     for child in children:
         active_sub = child.active_subscription()
         
-        # Эффективный остаток (с учетом сегодняшней неопределенности)
-        effective_left = child.effective_sessions_left()
+        # Используем projected_end_date() который теперь учитывает сегодняшнюю неопределенность
+        projected_end = child.projected_end_date()
         
         att_map = {}
         for att in child.attendances.filter(date__in=window_dates):
@@ -204,25 +204,14 @@ def attendance_view(request):
         entries = []
         sub_end_index = None
         
-        # Просто считаем занятия по ячейкам
-        sessions_counted = 0
-        
         for idx, wd in enumerate(week_data):
             status = att_map.get(wd['date'], '')
             entries.append({'date': wd['date'], 'status': status})
             
-            # Проверяем, есть ли в этот день занятие по расписанию
-            has_slot = ScheduleSlot.objects.filter(
-                group=child.group, 
-                weekday=wd['date'].weekday()
-            ).exists()
-            
-            if has_slot:
-                sessions_counted += 1
-                
-                # Если насчитали столько же, сколько осталось — это последнее занятие
-                if sessions_counted == effective_left:
-                    sub_end_index = idx
+            # Разделитель ставим ПОСЛЕ последнего занятия
+            # То есть если projected_end = 03.09, разделитель после 03.09
+            if projected_end and wd['date'] == projected_end:
+                sub_end_index = idx
 
         children_data.append({
             'child': child,
