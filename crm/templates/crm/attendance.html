@@ -75,8 +75,6 @@
                             {% endif %}
                         </th>
                     {% endfor %}
-                    <th>Окончание</th>
-                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -92,17 +90,19 @@
     </a>
 </td>
                         <td>
-                            {% if item.sessions_left is not None %}
-                                <b>{{ item.sessions_left }} из {{ item.sessions_total }}</b>
-                                {% if item.debt > 0 %}
-                                    <small class="block text-red-600">Долг {{ item.debt }} ₽</small>
-                                {% else %}
-                                    <small class="block text-slate-400">Оплачено</small>
-                                {% endif %}
-                            {% else %}
-                                <span class="text-slate-500">Без абонемента</span>
-                            {% endif %}
-                        </td>
+    {% if item.sessions_left is not None %}
+        <b>{{ item.sessions_left }} из {{ item.sessions_total }}</b>
+        {% if item.sessions_left > item.sessions_total %}
+            <small class="block text-emerald-600">Оплачено вперёд</small>
+        {% elif item.debt > 0 %}
+            <small class="block text-red-600">Долг {{ item.debt }} ₽</small>
+        {% else %}
+            <small class="block text-slate-400">Оплачено</small>
+        {% endif %}
+    {% else %}
+        <span class="text-slate-500">Без абонемента</span>
+    {% endif %}
+</td>
 
                         {% for entry in item.attendance_entries %}
                             <td class="text-center {% if entry.date == today %}bg-orange-50/40{% endif %} {% if forloop.counter0 == item.subscription_end_index %}border-r-2 border-red-500{% endif %}">
