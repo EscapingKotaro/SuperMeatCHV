@@ -3,7 +3,9 @@
 {% block actions %}
 <div class="flex gap-2">
     <button class="btn btn-soft"><i data-lucide="archive"></i>Архив</button>
-    <button data-modal="child-modal" class="btn btn-primary"><i data-lucide="user-plus"></i>Добавить ребёнка</button>
+    <a href="{% url 'child_create' %}" class="btn btn-primary">
+        <i data-lucide="user-plus"></i>Добавить ребёнка
+    </a>
 </div>
 {% endblock %}
 
@@ -81,14 +83,14 @@
                 {% for item in children_data %}
                     <tr>
                         <td class="sticky left-0 bg-white">
-                            <button data-modal="child-card" class="flex items-center gap-3 text-left">
-                                <span class="grid h-9 w-9 place-items-center rounded-xl bg-violet-100 font-extrabold text-violet-700">{{ item.initials }}</span>
-                                <span>
-                                    <b class="block">{{ item.child.last_name }} {{ item.child.first_name }}</b>
-                                    <small class="text-slate-500">{{ item.birth_year }} · {{ item.rank }}</small>
-                                </span>
-                            </button>
-                        </td>
+    <a href="{% url 'child_card' item.child.id %}" class="flex items-center gap-3 text-left hover:bg-slate-50 p-2 rounded-lg transition">
+        <span class="grid h-9 w-9 place-items-center rounded-xl bg-violet-100 font-extrabold text-violet-700">{{ item.initials }}</span>
+        <span>
+            <b class="block">{{ item.child.last_name }} {{ item.child.first_name }}</b>
+            <small class="text-slate-500">{{ item.birth_year }} · {{ item.rank }}</small>
+        </span>
+    </a>
+</td>
                         <td>
                             {% if item.sessions_left is not None %}
                                 <b>{{ item.sessions_left }} из {{ item.sessions_total }}</b>
@@ -113,21 +115,6 @@
                                 </button>
                             </td>
                         {% endfor %}
-
-                        <td>
-                            {% if item.subscription_end %}
-                                {% if item.subscription_end < today %}
-                                    <span class="badge bg-red-50 text-red-700">просрочен</span>
-                                {% elif item.subscription_end_soon %}
-                                    <span class="badge bg-red-50 text-red-700">через {{ item.subscription_end|timeuntil }}</span>
-                                {% else %}
-                                    {{ item.subscription_end|date:"d E" }}
-                                {% endif %}
-                            {% else %}
-                                —
-                            {% endif %}
-                        </td>
-                        <td><button data-modal="child-card"><i data-lucide="more-horizontal" class="h-4 w-4"></i></button></td>
                     </tr>
                 {% empty %}
                     <tr><td colspan="100" class="text-center py-8 text-slate-500">Нет детей в этой группе</td></tr>

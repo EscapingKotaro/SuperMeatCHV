@@ -461,7 +461,122 @@ def revenue_forecast_view(request):
     context = {
         'days': days,
         'title': 'Прогноз доходов',
-        'subtitle': 'Ожидаемые продления на ближайшие 7 дней',
+        'subtitle': 'Ожидаемые продления на ближайшие 4 дня',
         'page': 'revenue_forecast'
     }
     return render(request, 'crm/revenue_forecast.html', context)
+
+
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.utils import timezone
+from datetime import timedelta
+from .models import Child, Group, ScheduleSlot, Subscription, Attendance, ChildRank
+from .forms import ChildForm, SubscriptionForm  # создадим ниже
+
+@login_required
+def child_card_view(request, child_id):
+    """Просмотр карточки ребенка"""
+    child = get_object_or_404(Child, id=child_id)
+
+    # Получаем связанные данные
+    subscriptions = child.subscriptions.all().order_by('-start_date')
+    attendances = child.attendances.all().order_by('-date')[:50]  # Последние 50 посещений
+    ranks = child.ranks.all().order_by('-year')
+
+    # Статистика
+    active_sub = child.active_subscription()
+    sessions_left = child.sessions_left()
+    debt = child.debt()
+
+    context = {
+        'child': child,
+        'subscriptions': subscriptions,
+        'attendances': attendances,
+        'ranks': ranks,
+        'active_sub': active_sub,
+        'sessions_left': sessions_left,
+        'debt': debt,
+        'page': 'child_card'
+    }
+    return render(request, 'crm/child_card.html', context)
+
+@login_required
+def child_edit_view(request, child_id):
+    """Редактирование ребенка"""
+    child = get_object_or_404(Child, id=child_id)
+
+    if request.method == 'POST':
+        form = ChildForm(request.POST, request.FILES, instance=child)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Данные ребенка обновлены')
+            return redirect('child_card', child_id=child.id)
+    else:
+        form = ChildForm(instance=child)
+
+    context = {
+        'form': form,
+        'child': child,
+        'page': 'child_edit'
+    }
+    return render(request, 'crm/child_edit.html', context)
+
+@login_required
+def child_create_view(request):
+    """Создание нового ребенка"""
+    if request.method == 'POST':
+        form = ChildForm(request.POST, request.FILES)
+        if form.is_valid():
+            child = form.save()
+            messages.success(request, f'Ребенок {child.last_name} {child.first_name} добавлен')
+            return redirect('child_card', child_id=child.id)
+    else:
+        form = ChildForm()
+
+    context = {
+        'form': form,
+        'page': 'child_create'
+    }
+    return render(request, 'crm/child_edit.html', context)
+
+@login_required
+def child_delete_view(request, child_id):
+    """Удаление ребенка"""
+    child = get_object_or_404(Child, id=child_id)
+
+    if request.method == 'POST':
+        child_name = f"{child.last_name} {child.first_name}"
+        child.delete()
+        messages.success(request, f'Ребенок {child_name} удален')
+        return redirect('attendance')
+
+    context = {
+        'child': child,
+        'page': 'child_delete'
+    }
+    return render(request, 'crm/child_delete.html', context)
+
+@login_required
+def add_subscription_view(request, child_id):
+    """Добавление абонемента"""
+    child = get_object_or_404(Child, id=child_id)
+
+    if request.method == 'POST':
+        form = SubscriptionForm(request.POST)
+        if form.is_valid():
+            subscription = form.save(commit=False)
+            subscription.child = child
+            subscription.save()
+            messages.success(request, 'Абонемент добавлен')
+            return redirect('child_card', child_id=child.id)
+    else:
+        form = SubscriptionForm()
+
+    context = {
+        'form': form,
+        'child': child,
+        'page': 'add_subscription'
+    }
+    return render(request, 'crm/add_subscription.html', context)

@@ -39,5 +39,13 @@ urlpatterns = [
 
     # Смена пароля для любого авторизованного пользователя
     path('profile/change-password/', views.change_password, name='change_password'),
+# Карточка ребенка
+    path('child/<int:child_id>/', views.child_card_view, name='child_card'),
+    path('child/<int:child_id>/edit/', views.child_edit_view, name='child_edit'),
+    path('child/create/', views.child_create_view, name='child_create'),
+    path('child/<int:child_id>/delete/', views.child_delete_view, name='child_delete'),
+
+    # API для добавления абонемента
+    path('child/<int:child_id>/subscription/add/', views.add_subscription_view, name='add_subscription'),
 ]
 

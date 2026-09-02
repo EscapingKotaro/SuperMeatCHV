@@ -1,0 +1,232 @@
+{% extends "crm/base.html" %}
+
+{% block actions %}
+<div class="flex gap-2">
+    <a href="{% url 'child_edit' child.id %}" class="btn btn-soft">
+        <i data-lucide="edit"></i>Редактировать
+    </a>
+    <a href="{% url 'add_subscription' child.id %}" class="btn btn-primary">
+        <i data-lucide="plus"></i>Добавить абонемент
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Левая колонка: Основная информация -->
+    <div class="lg:col-span-1 space-y-6">
+        <!-- Карточка профиля -->
+        <div class="card p-6">
+            <div class="flex items-center gap-4 mb-6">
+                <div class="grid h-16 w-16 place-items-center rounded-2xl bg-violet-100 text-2xl font-extrabold text-violet-700">
+                    {{ child.last_name|slice:":1" }}{{ child.first_name|slice:":1" }}
+                </div>
+                <div>
+                    <h2 class="text-xl font-extrabold">{{ child.last_name }} {{ child.first_name }}</h2>
+                    {% if child.patronymic %}
+                        <p class="text-sm text-slate-500">{{ child.patronymic }}</p>
+                    {% endif %}
+                    <span class="inline-block mt-2 px-2 py-1 text-xs font-bold rounded-lg
+                        {% if child.status == 'active' %}bg-emerald-100 text-emerald-700
+                        {% elif child.status == 'trial' %}bg-amber-100 text-amber-700
+                        {% elif child.status == 'archived' %}bg-slate-100 text-slate-700
+                        {% else %}bg-red-100 text-red-700{% endif %}">
+                        {{ child.get_status_display }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="space-y-3 text-sm">
+                <div>
+                    <span class="text-slate-500">Год рождения:</span>
+                    <b class="ml-2">{{ child.birth_year }}</b>
+                </div>
+                {% if child.address %}
+                <div>
+                    <span class="text-slate-500">Адрес:</span>
+                    <p class="mt-1">{{ child.address }}</p>
+                </div>
+                {% endif %}
+                {% if child.parent_name %}
+                <div>
+                    <span class="text-slate-500">Родитель:</span>
+                    <b class="ml-2">{{ child.parent_name }}</b>
+                </div>
+                {% endif %}
+                {% if child.parent_phone %}
+                <div>
+                    <span class="text-slate-500">Телефон:</span>
+                    <a href="tel:{{ child.parent_phone }}" class="ml-2 font-bold text-[#FF5C35] hover:underline">
+                        {{ child.parent_phone }}
+                    </a>
+                </div>
+                {% endif %}
+                {% if child.group %}
+                <div>
+                    <span class="text-slate-500">Группа:</span>
+                    <b class="ml-2">{{ child.group.name }}</b>
+                </div>
+                {% endif %}
+                {% if child.discount_percent > 0 %}
+                <div>
+                    <span class="text-slate-500">Скидка:</span>
+                    <b class="ml-2 text-emerald-600">{{ child.discount_percent }}%</b>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Статистика -->
+        <div class="card p-6">
+            <h3 class="font-extrabold mb-4">Статистика</h3>
+            <div class="space-y-3">
+                {% if active_sub %}
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-slate-500">Абонемент:</span>
+                    <b>{{ sessions_left }} из {{ active_sub.sessions_total }}</b>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-slate-500">Окончание:</span>
+                    <b>{{ active_sub.end_date|date:"d.m.Y" }}</b>
+                </div>
+                {% if debt > 0 %}
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-slate-500">Долг:</span>
+                    <b class="text-red-600">{{ debt }} ₽</b>
+                </div>
+                {% else %}
+                <div class="flex justify-between items-center">
+                    <span class="text-sm text-slate-500">Оплата:</span>
+                    <b class="text-emerald-600">Оплачено</b>
+                </div>
+                {% endif %}
+                {% else %}
+                <p class="text-sm text-slate-500">Нет активного абонемента</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Разряды -->
+        {% if ranks %}
+        <div class="card p-6">
+            <h3 class="font-extrabold mb-4">Разряды</h3>
+            <div class="space-y-2">
+                {% for rank in ranks %}
+                <div class="flex justify-between items-center text-sm">
+                    <span class="text-slate-500">{{ rank.year }}:</span>
+                    <b>{{ rank.rank }}</b>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Справка -->
+        {% if child.certificate %}
+        <div class="card p-6">
+            <h3 class="font-extrabold mb-4">Справка</h3>
+            <img src="{{ child.certificate.url }}" alt="Справка" class="w-full rounded-lg">
+            {% if child.certificate_note %}
+            <p class="mt-3 text-sm text-slate-600">{{ child.certificate_note }}</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Правая колонка: Абонементы и посещения -->
+    <div class="lg:col-span-2 space-y-6">
+        <!-- Абонементы -->
+        <div class="card p-6">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-extrabold">Абонементы</h3>
+                <a href="{% url 'add_subscription' child.id %}" class="text-sm font-bold text-[#FF5C35] hover:underline">
+                    + Добавить
+                </a>
+            </div>
+            {% if subscriptions %}
+            <div class="space-y-3">
+                {% for sub in subscriptions %}
+                <div class="border border-slate-200 rounded-xl p-4 {% if sub == active_sub %}bg-emerald-50 border-emerald-200{% endif %}">
+                    <div class="flex items-center justify-between mb-2">
+                        <div>
+                            <b class="text-sm">{{ sub.start_date|date:"d.m.Y" }} — {{ sub.end_date|date:"d.m.Y" }}</b>
+                            {% if sub == active_sub %}
+                            <span class="ml-2 px-2 py-0.5 text-xs font-bold bg-emerald-100 text-emerald-700 rounded">Активный</span>
+                            {% endif %}
+                        </div>
+                        <b class="text-lg">{{ sub.price }} ₽</b>
+                    </div>
+                    <div class="flex gap-4 text-xs text-slate-500">
+                        <span>{{ sub.sessions_total }} занятий</span>
+                        {% if sub.promo %}
+                        <span class="text-[#FF5C35]">{{ sub.promo }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-sm text-slate-500">Нет абонементов</p>
+            {% endif %}
+        </div>
+
+        <!-- История посещений -->
+        <div class="card p-6">
+            <h3 class="font-extrabold mb-4">История посещений</h3>
+            {% if attendances %}
+            <div class="overflow-x-auto">
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="border-b border-slate-200">
+                            <th class="text-left py-2">Дата</th>
+                            <th class="text-left py-2">Статус</th>
+                            <th class="text-left py-2">Комментарий</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for att in attendances %}
+                        <tr class="border-b border-slate-100">
+                            <td class="py-2">{{ att.date|date:"d.m.Y" }}</td>
+                            <td class="py-2">
+                                <span class="px-2 py-1 text-xs font-bold rounded-lg
+                                    {% if att.status == 'present' %}bg-emerald-100 text-emerald-700
+                                    {% elif att.status == 'absent' %}bg-red-100 text-red-700
+                                    {% elif att.status == 'frozen' %}bg-blue-100 text-blue-700
+                                    {% elif att.status == 'vacation' %}bg-amber-100 text-amber-700
+                                    {% else %}bg-yellow-100 text-yellow-700{% endif %}">
+                                    {{ att.get_status_display }}
+                                </span>
+                            </td>
+                            <td class="py-2 text-slate-500">{{ att.comment|default:"—" }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="text-sm text-slate-500">Нет посещений</p>
+            {% endif %}
+        </div>
+
+        <!-- Комментарий -->
+        {% if child.note %}
+        <div class="card p-6">
+            <h3 class="font-extrabold mb-4">Комментарий</h3>
+            <p class="text-sm text-slate-600 whitespace-pre-wrap">{{ child.note }}</p>
+        </div>
+        {% endif %}
+
+        <!-- Кнопка удаления -->
+        <div class="card p-6 border-red-200">
+            <h3 class="font-extrabold mb-4 text-red-600">Опасная зона</h3>
+            <p class="text-sm text-slate-600 mb-4">Удаление ребенка необратимо. Все связанные данные (абонементы, посещения) будут удалены.</p>
+            <form method="post" action="{% url 'child_delete' child.id %}" onsubmit="return confirm('Вы уверены, что хотите удалить ребенка {{ child.last_name }} {{ child.first_name }}?')">
+                {% csrf_token %}
+                <button type="submit" class="btn bg-red-600 text-white hover:bg-red-700">
+                    <i data-lucide="trash-2"></i>Удалить ребенка
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
