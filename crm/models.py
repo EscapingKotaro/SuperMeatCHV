@@ -97,7 +97,9 @@ class Child(models.Model):
     last_name  = models.CharField("Фамилия", max_length=100)
     first_name = models.CharField("Имя", max_length=100)
     patronymic = models.CharField("Отчество", max_length=100, blank=True)
-    birth_year = models.PositiveSmallIntegerField("Год рождения")
+    birth_year = models.PositiveSmallIntegerField("Год рождения") # говно поле
+    birth_date = models.DateField("Дата рождения", blank=True, null=True, 
+                                   help_text="Для точного расчета возраста")
     address    = models.CharField("Адрес проживания", max_length=255, blank=True)
     parent_name  = models.CharField("Родитель", max_length=200, blank=True)
     parent_phone = models.CharField("Телефон родителя", max_length=20, blank=True)
@@ -130,6 +132,33 @@ class Child(models.Model):
     def active_subscription(self):
         today = timezone.localdate()
         return self.subscriptions.filter(end_date__gte=today).order_by("end_date").first()
+
+    def age_display(self):
+        """Возвращает возраст в формате '4 г.' или '4 г. 6 мес.'"""
+        if self.birth_date:
+            today = timezone.localdate()
+            years = today.year - self.birth_date.year
+            months = today.month - self.birth_date.month
+            if today.day < self.birth_date.day:
+                months -= 1
+            if months < 0:
+                years -= 1
+                months += 12
+            
+            if years == 0:
+                return f"{months} мес."
+            elif months == 0:
+                return f"{years} г."
+            else:
+                return f"{years} г. {months} мес."
+        else:
+            # Если только год рождения
+            age = timezone.localdate().year - self.birth_year
+            return f"{age} г."
+
+    def has_certificate(self):
+        """Есть ли справка"""
+        return bool(self.certificate)
 
     def sessions_left(self):
         """Остаток занятий по активным абонементам."""

@@ -129,6 +129,9 @@ def attendance_view(request):
         if not group:
              return render(request, 'crm/attendance.html', {'groups': Group.objects.none(), 'selected_group': None})
 
+    # Получаем тренера группы
+    trainer = group.trainer if group else None
+
     # 2. Опорная дата
     today = timezone.localdate()
     if ref_date_str:
@@ -139,11 +142,8 @@ def attendance_view(request):
     else:
         ref_date = today
 
-    # 3. Генерируем даты.
-    # ВАЖНО: Начинаем генерацию с понедельника текущей недели, чтобы захватить начало недели
+    # 3. Генерируем даты
     start_of_week = ref_date - timedelta(days=ref_date.weekday())
-
-    # Генерируем с запасом (например, 40 занятий вперед), чтобы точно хватило для среза
     all_class_dates = generate_class_dates(group, start_of_week, limit=40)
 
     if not all_class_dates:
@@ -156,21 +156,19 @@ def attendance_view(request):
             'error': 'Нет расписания'
         })
 
-    # 4. Находим индекс ближайшего занятия к ref_date
+    # 4. Находим индекс
     current_index = 0
     for i, d in enumerate(all_class_dates):
         if d >= ref_date:
             current_index = i
             break
 
-    # Если ref_date больше последней даты в списке, берем последний элемент
     if all_class_dates[-1] < ref_date:
          current_index = len(all_class_dates) - 1
 
-    # 5. Формируем окно: 4 назад, 6 вперед (Итого 10 занятий)
+    # 5. Формируем окно
     start_idx = max(0, current_index - 4)
     end_idx = min(len(all_class_dates), current_index + 6)
-
     window_dates = all_class_dates[start_idx:end_idx]
 
     # 6. Подготовка данных
@@ -178,7 +176,6 @@ def attendance_view(request):
     for d in window_dates:
         slots_today = ScheduleSlot.objects.filter(group=group, weekday=d.weekday())
         start_time = slots_today.first().start_time if slots_today else None
-
         week_data.append({
             'date': d,
             'start_time': start_time,
@@ -193,8 +190,6 @@ def attendance_view(request):
     children_data = []
     for child in children:
         active_sub = child.active_subscription()
-        
-        # Используем projected_end_date() который теперь учитывает сегодняшнюю неопределенность
         projected_end = child.projected_end_date()
         
         att_map = {}
@@ -207,41 +202,35 @@ def attendance_view(request):
         for idx, wd in enumerate(week_data):
             status = att_map.get(wd['date'], '')
             entries.append({'date': wd['date'], 'status': status})
-            
-            # Разделитель ставим ПОСЛЕ последнего занятия
-            # То есть если projected_end = 03.09, разделитель после 03.09
             if projected_end and wd['date'] == projected_end:
                 sub_end_index = idx
 
+        # Собираем данные для ячейки
         children_data.append({
             'child': child,
             'initials': f"{child.last_name[0]}{child.first_name[0]}".upper(),
-            'birth_year': child.birth_year,
-            'rank': child.ranks.order_by('-year').first().rank if child.ranks.exists() else 'б/р',
+            'age': child.age_display(),
             'sessions_left': child.sessions_left(),
             'sessions_total': active_sub.sessions_total if active_sub else 0,
             'debt': child.debt(),
+            'has_certificate': child.has_certificate(),
+            'discount_percent': child.discount_percent,
             'subscription_end': active_sub.end_date if active_sub else None,
-            'subscription_end_soon': active_sub and (active_sub.end_date <= today + timedelta(days=3)) and (active_sub.end_date >= today),
-            'status': child.status,
-            'attendance_entries': entries,
             'subscription_end_index': sub_end_index,
+            'attendance_entries': entries,
         })
-
-    # Навигация
-    prev_ref = window_dates[0] - timedelta(days=1) if window_dates else today
-    next_ref = window_dates[-1] + timedelta(days=1) if window_dates else today
 
     context = {
         'groups': Group.objects.filter(is_active=True),
         'selected_group': group,
+        'trainer': trainer,
         'week_data': week_data,
         'children_data': children_data,
         'ref_date': ref_date,
-        'prev_ref': prev_ref.strftime('%Y-%m-%d'),
-        'next_ref': next_ref.strftime('%Y-%m-%d'),
+        'prev_ref': (window_dates[0] - timedelta(days=1)).strftime('%Y-%m-%d') if window_dates else today.strftime('%Y-%m-%d'),
+        'next_ref': (window_dates[-1] + timedelta(days=1)).strftime('%Y-%m-%d') if window_dates else today.strftime('%Y-%m-%d'),
         'today': today,
-        'page': 'attendance' # Для подсветки активной кнопки в меню
+        'page': 'attendance'
     }
     return render(request, 'crm/attendance.html', context)
 

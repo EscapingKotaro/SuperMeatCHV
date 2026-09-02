@@ -26,7 +26,6 @@
                     <i data-lucide="chevron-left" class="h-4 w-4"></i>
                 </a>
 
-                <!-- Контрольная дата -->
                 <form method="get" class="flex items-center gap-2">
                     <input type="hidden" name="group_id" value="{{ selected_group.id }}">
                     <input type="date" name="ref_date" value="{{ ref_date|date:'Y-m-d' }}"
@@ -47,7 +46,6 @@
             <span class="text-slate-500">Нет групп</span>
         {% endif %}
 
-        <!-- Легенда -->
         <div class="ml-auto flex flex-wrap gap-2 text-[10px] font-bold text-slate-600">
             <span class="badge bg-emerald-100 text-emerald-700">+ Пришёл</span>
             <span class="badge bg-red-100 text-red-700">× Пропуск</span>
@@ -62,8 +60,14 @@
         <table class="data-table min-w-[1400px]">
             <thead>
                 <tr>
-                    <th class="sticky left-0 z-10 bg-[#FAFBFC]" rowspan="2">Спортсмен</th>
-                    <th rowspan="2">Абонемент</th>
+                    <th class="sticky left-0 z-10 bg-[#FAFBFC]">
+                        {% if trainer %}
+                            <div class="text-xs text-slate-500 font-normal">Преподаватель</div>
+                            <div class="font-extrabold text-slate-900">{{ trainer.full_name }}</div>
+                        {% else %}
+                            Спортсмен
+                        {% endif %}
+                    </th>
                     {% for entry in week_data %}
                         <th class="text-center {% if entry.is_today %}bg-orange-50 text-[#FF5C35]{% endif %}">
                             {{ entry.date|date:"D" }}<br>
@@ -81,28 +85,51 @@
                 {% for item in children_data %}
                     <tr>
                         <td class="sticky left-0 bg-white">
-    <a href="{% url 'child_card' item.child.id %}" class="flex items-center gap-3 text-left hover:bg-slate-50 p-2 rounded-lg transition">
-        <span class="grid h-9 w-9 place-items-center rounded-xl bg-violet-100 font-extrabold text-violet-700">{{ item.initials }}</span>
-        <span>
-            <b class="block">{{ item.child.last_name }} {{ item.child.first_name }}</b>
-            <small class="text-slate-500">{{ item.birth_year }} · {{ item.rank }}</small>
-        </span>
-    </a>
-</td>
-                        <td>
-    {% if item.sessions_left is not None %}
-        <b>{{ item.sessions_left }} из {{ item.sessions_total }}</b>
-        {% if item.sessions_left > item.sessions_total %}
-            <small class="block text-emerald-600">Оплачено вперёд</small>
-        {% elif item.debt > 0 %}
-            <small class="block text-red-600">Долг {{ item.debt }} ₽</small>
-        {% else %}
-            <small class="block text-slate-400">Оплачено</small>
-        {% endif %}
-    {% else %}
-        <span class="text-slate-500">Без абонемента</span>
-    {% endif %}
-</td>
+                            <a href="{% url 'child_card' item.child.id %}" class="flex items-center gap-3 text-left hover:bg-slate-50 p-2 rounded-lg transition">
+                                <span class="grid h-9 w-9 place-items-center rounded-xl bg-violet-100 font-extrabold text-violet-700">{{ item.initials }}</span>
+                                <div class="flex-1 min-w-0">
+                                    <div class="flex items-center gap-2">
+                                        <b class="block truncate">{{ item.child.last_name }} {{ item.child.first_name }}</b>
+                                        <span class="text-xs text-slate-500 whitespace-nowrap">{{ item.age }}</span>
+                                    </div>
+                                    <div class="flex items-center gap-2 mt-1 text-xs">
+                                        <span class="font-bold text-slate-700">
+                                            {{ item.sessions_left }}/{{ item.sessions_total }}
+                                        </span>
+                                        
+                                        <!-- Иконка долга (монетка) -->
+                                        {% if item.debt > 0 %}
+                                        <span class="inline-flex items-center gap-1 text-red-600" title="Долг {{ item.debt }} ₽">
+                                            <i data-lucide="coins" class="h-3 w-3"></i>
+                                            <span class="text-[10px]">{{ item.debt|floatformat:0 }}₽</span>
+                                        </span>
+                                        {% endif %}
+                                        
+                                        <!-- Иконка справки (лист бумаги) -->
+                                        {% if item.has_certificate %}
+                                        <span class="inline-flex items-center text-blue-600" title="Справка есть">
+                                            <i data-lucide="file-text" class="h-3 w-3"></i>
+                                        </span>
+                                        {% endif %}
+                                        
+                                        <!-- Иконка скидки (%) -->
+                                        {% if item.discount_percent > 0 %}
+                                        <span class="inline-flex items-center text-emerald-600" title="Скидка {{ item.discount_percent }}%">
+                                            <i data-lucide="percent" class="h-3 w-3"></i>
+                                            <span class="text-[10px]">{{ item.discount_percent }}%</span>
+                                        </span>
+                                        {% endif %}
+                                        
+                                        <!-- Дата окончания абонемента -->
+                                        {% if item.subscription_end %}
+                                        <span class="text-[10px] text-slate-500" title="Окончание абонемента">
+                                            до {{ item.subscription_end|date:"d.m" }}
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </a>
+                        </td>
 
                         {% for entry in item.attendance_entries %}
                             <td class="text-center {% if entry.date == today %}bg-orange-50/40{% endif %} {% if forloop.counter0 == item.subscription_end_index %}border-r-2 border-red-500{% endif %}">
@@ -125,9 +152,7 @@
 </section>
 {% endblock %}
 
-
 {% block modals %}
-<!-- Модалки можно оставить как были, при необходимости заполнить динамикой -->
 <section id="child-modal" class="modal">...</section>
 <section id="child-card" class="modal">...</section>
 {% endblock %}
