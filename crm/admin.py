@@ -120,7 +120,7 @@ class CampStayInline(admin.TabularInline):
 @admin.register(Child)
 class ChildAdmin(admin.ModelAdmin):
     list_display = (
-        "last_name", "first_name", "patronymic", "birth_year",
+        "last_name", "first_name", "patronymic", "birth_year","birth_date",
         "parent_name", "parent_phone", "group", "status", "debt",
     )
     list_filter = ("status", "group", "birth_year", "trial_from")

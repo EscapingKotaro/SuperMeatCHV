@@ -13,14 +13,12 @@
 <section class="card mb-4 p-3">
     <div class="flex flex-wrap items-center gap-3">
         {% if selected_group %}
-            <!-- Выбор группы -->
             <select id="group-select" class="field max-w-64 font-bold" onchange="location.href='?group_id='+this.value+'&ref_date={{ ref_date|date:'Y-m-d' }}'">
                 {% for g in groups %}
                     <option value="{{ g.id }}" {% if g.id == selected_group.id %}selected{% endif %}>{{ g.name }}</option>
                 {% endfor %}
             </select>
 
-            <!-- Навигация по времени -->
             <div class="flex items-center gap-2 rounded-xl bg-slate-100 p-1">
                 <a href="?group_id={{ selected_group.id }}&ref_date={{ prev_ref }}" class="grid h-8 w-8 place-items-center rounded-lg hover:bg-white hover:shadow-sm transition">
                     <i data-lucide="chevron-left" class="h-4 w-4"></i>
@@ -60,10 +58,10 @@
         <table class="data-table min-w-[1400px]">
             <thead>
                 <tr>
-                    <th class="sticky left-0 z-10 bg-[#FAFBFC]">
+                    <th class="sticky left-0 z-10 bg-[#FAFBFC] text-center">
                         {% if trainer %}
-                            <div class="text-xs text-slate-500 font-normal">Преподаватель</div>
-                            <div class="font-extrabold text-slate-900">{{ trainer.full_name }}</div>
+                            <div class="text-[10px] text-slate-400 font-normal uppercase tracking-wider">Преподаватель</div>
+                            <div class="font-extrabold text-slate-900 text-sm">{{ trainer.full_name }}</div>
                         {% else %}
                             Спортсмен
                         {% endif %}
@@ -85,23 +83,25 @@
                 {% for item in children_data %}
                     <tr>
                         <td class="sticky left-0 bg-white">
-                            <a href="{% url 'child_card' item.child.id %}" class="flex items-center gap-3 text-left hover:bg-slate-50 p-2 rounded-lg transition">
-                                <span class="grid h-9 w-9 place-items-center rounded-xl bg-violet-100 font-extrabold text-violet-700">{{ item.initials }}</span>
-                                <div class="flex-1 min-w-0">
+                            <a href="{% url 'child_card' item.child.id %}" class="block hover:bg-slate-50 px-2 py-2 rounded-lg transition">
+                                <!-- Строка 1: ФИО + возраст справа -->
+                                <div class="flex items-baseline justify-between gap-2">
+                                    <b class="text-sm truncate">{{ item.child.last_name }} {{ item.child.first_name }}</b>
+                                    <span class="text-[10px] text-slate-400 whitespace-nowrap font-medium">{{ item.age }}</span>
+                                </div>
+                                
+                                <!-- Строка 2: иконки + дата окончания справа -->
+                                <div class="flex items-center justify-between gap-2 mt-1">
                                     <div class="flex items-center gap-2">
-                                        <b class="block truncate">{{ item.child.last_name }} {{ item.child.first_name }}</b>
-                                        <span class="text-xs text-slate-500 whitespace-nowrap">{{ item.age }}</span>
-                                    </div>
-                                    <div class="flex items-center gap-2 mt-1 text-xs">
-                                        <span class="font-bold text-slate-700">
+                                        <!-- Остаток занятий -->
+                                        <span class="text-[11px] font-bold text-slate-700">
                                             {{ item.sessions_left }}/{{ item.sessions_total }}
                                         </span>
                                         
                                         <!-- Иконка долга (монетка) -->
                                         {% if item.debt > 0 %}
-                                        <span class="inline-flex items-center gap-1 text-red-600" title="Долг {{ item.debt }} ₽">
+                                        <span class="inline-flex items-center gap-0.5 text-red-600" title="Долг {{ item.debt|floatformat:0 }} ₽">
                                             <i data-lucide="coins" class="h-3 w-3"></i>
-                                            <span class="text-[10px]">{{ item.debt|floatformat:0 }}₽</span>
                                         </span>
                                         {% endif %}
                                         
@@ -116,17 +116,16 @@
                                         {% if item.discount_percent > 0 %}
                                         <span class="inline-flex items-center text-emerald-600" title="Скидка {{ item.discount_percent }}%">
                                             <i data-lucide="percent" class="h-3 w-3"></i>
-                                            <span class="text-[10px]">{{ item.discount_percent }}%</span>
-                                        </span>
-                                        {% endif %}
-                                        
-                                        <!-- Дата окончания абонемента -->
-                                        {% if item.subscription_end %}
-                                        <span class="text-[10px] text-slate-500" title="Окончание абонемента">
-                                            до {{ item.subscription_end|date:"d.m" }}
                                         </span>
                                         {% endif %}
                                     </div>
+                                    
+                                    <!-- Дата окончания абонемента справа -->
+                                    {% if item.subscription_end %}
+                                    <span class="text-[10px] text-slate-400 whitespace-nowrap">
+                                        до {{ item.subscription_end|date:"d.m" }}
+                                    </span>
+                                    {% endif %}
                                 </div>
                             </a>
                         </td>
