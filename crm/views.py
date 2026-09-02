@@ -395,7 +395,7 @@ def revenue_forecast_view(request):
     days = []
     processed_child_ids = set()
 
-    for i in range(7):
+    for i in range(4):
         current_date = today + timedelta(days=i)
         
         children = Child.objects.filter(status=Child.Status.ACTIVE).select_related('group')
