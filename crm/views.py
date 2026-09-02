@@ -418,6 +418,8 @@ def revenue_forecast_view(request):
             if left_on_date == 0:
                 urgent_list.append({
                     'name': f"{child.last_name} {child.first_name}",
+                    'parent_name': child.parent_name,
+                    'parent_phone': child.parent_phone,
                     'amount': active_sub.price
                 })
                 processed_child_ids.add(child.id)
@@ -427,6 +429,8 @@ def revenue_forecast_view(request):
             if left_on_date == 1:
                 one_left_list.append({
                     'name': f"{child.last_name} {child.first_name}",
+                    'parent_name': child.parent_name,
+                    'parent_phone': child.parent_phone,
                     'amount': active_sub.price
                 })
                 processed_child_ids.add(child.id)
@@ -437,6 +441,8 @@ def revenue_forecast_view(request):
             if proj_end and (proj_end - current_date).days < 5:
                 forecast_list.append({
                     'name': f"{child.last_name} {child.first_name}",
+                    'parent_name': child.parent_name,
+                    'parent_phone': child.parent_phone,
                     'amount': active_sub.price
                 })
                 processed_child_ids.add(child.id)

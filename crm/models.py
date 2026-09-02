@@ -39,28 +39,6 @@ def calculate_projected_end_date(group, start_date, sessions_count):
 
 
 
-class Role(models.TextChoices):
-    MANAGER = "manager", "Рядовой админ"
-    SENIOR  = "senior",  "Старший админ"
-    BOSS    = "boss",    "Начальник"
-
-RANK = {Role.MANAGER: 0, Role.SENIOR: 1, Role.BOSS: 2}
-
-def user_role(user):
-    if user.is_superuser:
-        return Role.BOSS
-    p = getattr(user, "profile", None)
-    return p.role if p else Role.MANAGER
-
-
-class StaffProfile(models.Model):
-    """Роль пользователя (менеджер / старший / начальник)."""
-    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
-                                related_name="profile", verbose_name="пользователь")
-    role = models.CharField(max_length=20, choices=Role.choices, default=Role.MANAGER)
-
-    def __str__(self):
-        return f"{self.user} — {self.get_role_display()}"
 
 
 class Trainer(models.Model):
@@ -517,3 +495,32 @@ class User(AbstractUser):
 
     def __str__(self):
         return f"{self.username} ({self.get_role_display()})"
+
+
+
+################### Отстойник ###############################
+
+
+
+class Role(models.TextChoices):
+    MANAGER = "manager", "Рядовой админ"
+    SENIOR  = "senior",  "Старший админ"
+    BOSS    = "boss",    "Начальник"
+
+RANK = {Role.MANAGER: 0, Role.SENIOR: 1, Role.BOSS: 2}
+
+def user_role(user):
+    if user.is_superuser:
+        return Role.BOSS
+    p = getattr(user, "profile", None)
+    return p.role if p else Role.MANAGER
+
+
+class StaffProfile(models.Model):
+    """Роль пользователя (менеджер / старший / начальник)."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+                                related_name="profile", verbose_name="пользователь")
+    role = models.CharField(max_length=20, choices=Role.choices, default=Role.MANAGER)
+
+    def __str__(self):
+        return f"{self.user} — {self.get_role_display()}"

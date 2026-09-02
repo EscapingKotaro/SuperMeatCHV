@@ -26,9 +26,17 @@
                 </h4>
                 <ul class="space-y-2">
                     {% for item in day.urgent %}
-                    <li class="flex items-center justify-between rounded-lg bg-red-50 p-2 text-sm">
-                        <span class="font-medium text-slate-700 truncate pr-2">{{ item.name }}</span>
-                        <span class="font-bold text-red-700">{{ item.amount|floatformat:0 }}</span>
+                    <li class="flex items-start justify-between rounded-lg bg-red-50 p-2 text-sm">
+                        <div class="truncate pr-2 flex-1">
+                            <span class="block font-semibold text-slate-800">{{ item.name }}</span>
+                            <span class="block text-[11px] text-slate-500 mt-0.5">
+                                {{ item.parent_name|default:"Родитель не указан" }}
+                                {% if item.parent_phone %}
+                                    <span class="text-slate-400 mx-1">·</span>{{ item.parent_phone }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        <span class="font-bold text-red-700 whitespace-nowrap ml-2">{{ item.amount|floatformat:0 }} ₽</span>
                     </li>
                     {% endfor %}
                 </ul>
@@ -44,9 +52,17 @@
                 </h4>
                 <ul class="space-y-2">
                     {% for item in day.one_left %}
-                    <li class="flex items-center justify-between rounded-lg bg-amber-50 p-2 text-sm">
-                        <span class="font-medium text-slate-700 truncate pr-2">{{ item.name }}</span>
-                        <span class="font-bold text-amber-700">{{ item.amount|floatformat:0 }}</span>
+                    <li class="flex items-start justify-between rounded-lg bg-amber-50 p-2 text-sm">
+                        <div class="truncate pr-2 flex-1">
+                            <span class="block font-semibold text-slate-800">{{ item.name }}</span>
+                            <span class="block text-[11px] text-slate-500 mt-0.5">
+                                {{ item.parent_name|default:"Родитель не указан" }}
+                                {% if item.parent_phone %}
+                                    <span class="text-slate-400 mx-1">·</span>{{ item.parent_phone }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        <span class="font-bold text-amber-700 whitespace-nowrap ml-2">{{ item.amount|floatformat:0 }} ₽</span>
                     </li>
                     {% endfor %}
                 </ul>
@@ -62,9 +78,17 @@
                 </h4>
                 <ul class="space-y-2">
                     {% for item in day.forecast %}
-                    <li class="flex items-center justify-between rounded-lg bg-blue-50 p-2 text-sm">
-                        <span class="font-medium text-slate-700 truncate pr-2">{{ item.name }}</span>
-                        <span class="font-bold text-blue-700">{{ item.amount|floatformat:0 }}</span>
+                    <li class="flex items-start justify-between rounded-lg bg-blue-50 p-2 text-sm">
+                        <div class="truncate pr-2 flex-1">
+                            <span class="block font-semibold text-slate-800">{{ item.name }}</span>
+                            <span class="block text-[11px] text-slate-500 mt-0.5">
+                                {{ item.parent_name|default:"Родитель не указан" }}
+                                {% if item.parent_phone %}
+                                    <span class="text-slate-400 mx-1">·</span>{{ item.parent_phone }}
+                                {% endif %}
+                            </span>
+                        </div>
+                        <span class="font-bold text-blue-700 whitespace-nowrap ml-2">{{ item.amount|floatformat:0 }} ₽</span>
                     </li>
                     {% endfor %}
                 </ul>
