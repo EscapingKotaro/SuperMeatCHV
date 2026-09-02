@@ -209,10 +209,26 @@ class Child(models.Model):
         return max(0, left - count)
 
     def debt(self):
-        """Долг = сумма абонементов − оплаты."""
-        total = self.subscriptions.aggregate(s=Sum("price"))["s"] or 0
-        paid = self.payments.aggregate(s=Sum("amount"))["s"] or 0
-        return Decimal(total) - Decimal(paid)
+        """Долг = сумма активных абонементов − оплаты по ним."""
+        from django.db.models import Q
+        
+        today = timezone.localdate()
+        active_subs = self.subscriptions.filter(end_date__gte=today)
+        
+        if not active_subs.exists():
+            return Decimal(0)
+        
+        # Сумма активных абонементов
+        total = active_subs.aggregate(s=Sum("price"))["s"] or 0
+        
+        # Считаем оплаты: привязанные к активным абонементам + общие без привязки
+        active_sub_ids = active_subs.values_list('id', flat=True)
+        paid = self.payments.filter(
+            Q(subscription__in=active_sub_ids) | Q(subscription__isnull=True)
+        ).aggregate(s=Sum("amount"))["s"] or 0
+        
+        debt = Decimal(total) - Decimal(paid)
+        return max(0, debt)  # Не показываем отрицательный долг (переплату)
 
     def missed_percent(self):
         present = self.attendances.filter(status="present").count()
