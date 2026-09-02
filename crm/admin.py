@@ -137,7 +137,7 @@ class ChildAdmin(admin.ModelAdmin):
     ]
     fieldsets = (
         ("Основное", {
-            "fields": ("last_name", "first_name", "patronymic", "birth_year", "status", "group")
+            "fields": ("last_name", "first_name", "patronymic", "birth_year","birth_date", "status", "group")
         }),
         ("Контакты", {
             "fields": ("parent_name", "parent_phone", "address")
