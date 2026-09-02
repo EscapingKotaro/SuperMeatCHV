@@ -237,37 +237,35 @@ class Child(models.Model):
         
         return max(0, left - count)
 
+    def debt_sessions(self):
+        """Сколько занятий ребенок сходил сверх оплаченного."""
+        # Все абонементы (не только активные) — считаем общее количество оплаченных занятий
+        paid_sessions = sum(sub.sessions_total for sub in self.subscriptions.all())
+        # Сколько занятий фактически посещено (или отмечено как пропуск)
+        used_sessions = self.attendances.filter(status__in=("present", "absent")).count()
+        return max(0, used_sessions - paid_sessions)
+
     def debt(self):
-        """Долг = сумма активных абонементов − оплаты по ним."""
-        from django.db.models import Q
-        
-        today = timezone.localdate()
-        active_subs = self.subscriptions.filter(end_date__gte=today)
-        
-        if not active_subs.exists():
+        """Сумма долга в рублях = сверхлимитные занятия × цена за занятие."""
+        debt_sess = self.debt_sessions()
+        if debt_sess == 0:
             return Decimal(0)
-        
-        # Сумма активных абонементов
-        total = active_subs.aggregate(s=Sum("price"))["s"] or 0
-        
-        # Считаем оплаты: привязанные к активным абонементам + общие без привязки
-        active_sub_ids = active_subs.values_list('id', flat=True)
-        paid = self.payments.filter(
-            Q(subscription__in=active_sub_ids) | Q(subscription__isnull=True)
-        ).aggregate(s=Sum("amount"))["s"] or 0
-        
-        debt = Decimal(total) - Decimal(paid)
-        return max(0, debt)  # Не показываем отрицательный долг (переплату)
+        # Берем цену за занятие из последнего абонемента
+        last_sub = self.subscriptions.order_by('-start_date').first()
+        if not last_sub or last_sub.sessions_total == 0:
+            return Decimal(0)
+        price_per_session = last_sub.price / last_sub.sessions_total
+        return Decimal(debt_sess) * price_per_session
 
-    def missed_percent(self):
-        present = self.attendances.filter(status="present").count()
-        absent = self.attendances.filter(status="absent").count()
-        total = present + absent
-        return round(absent * 100 / total) if total else 0
+        def missed_percent(self):
+            present = self.attendances.filter(status="present").count()
+            absent = self.attendances.filter(status="absent").count()
+            total = present + absent
+            return round(absent * 100 / total) if total else 0
 
-    def nearest_expiry(self):
-        sub = self.active_subscription()
-        return sub.end_date if sub else None
+        def nearest_expiry(self):
+            sub = self.active_subscription()
+            return sub.end_date if sub else None
 
 
 class ChildRank(models.Model):
