@@ -5,10 +5,24 @@
     <!-- Сортировка -->
     <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
         <span class="text-[10px] text-slate-500 px-2 font-bold">Сорт:</span>
-        <a href="?{{ base_params|format:ref_date|replace:'{}',ref_date }}" class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'name' %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">А-Я</a>
-        <!-- Хак для шаблона: просто дублируем ссылки с текущим sort_by -->
-        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=sessions{% if show_archived %}&show_archived=1{% endif %}" class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'sessions' %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">Занятия</a>
-        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=debt{% if show_archived %}&show_archived=1{% endif %}" class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'debt' %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">Долг</a>
+        
+        <!-- Сортировка по имени (А-Я) -->
+        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=name{% if show_archived %}&show_archived=1{% endif %}" 
+           class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'name' or not sort_by %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+            А-Я
+        </a>
+        
+        <!-- Сортировка по занятиям -->
+        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=sessions{% if show_archived %}&show_archived=1{% endif %}" 
+           class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'sessions' %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+            Занятия
+        </a>
+        
+        <!-- Сортировка по долгу -->
+        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=debt{% if show_archived %}&show_archived=1{% endif %}" 
+           class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'debt' %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+            Долг
+        </a>
     </div>
 
     <!-- Переключатель Архива -->
