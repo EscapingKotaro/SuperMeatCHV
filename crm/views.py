@@ -122,7 +122,8 @@ def generate_class_dates(group, start_date, limit=60):
 def attendance_view(request):
     group_id = request.GET.get('group_id')
     ref_date_str = request.GET.get('ref_date')
-    sort_by = request.GET.get('sort', 'name')  # name, sessions, debt
+    sort_by = request.GET.get('sort', 'name')
+    show_archived = request.GET.get('show_archived') == '1'
 
     # 1. Группа
     if group_id:
@@ -136,9 +137,9 @@ def attendance_view(request):
             })
 
     trainer = group.trainer if group else None
+    today = timezone.localdate()
 
     # 2. Опорная дата
-    today = timezone.localdate()
     if ref_date_str:
         try:
             ref_date = datetime.strptime(ref_date_str, '%Y-%m-%d').date()
@@ -171,12 +172,12 @@ def attendance_view(request):
     if all_class_dates[-1] < ref_date:
         current_index = len(all_class_dates) - 1
 
-    # 5. Формируем окно: 4 назад, 6 вперед (10 занятий)
+    # 5. Формируем окно
     start_idx = max(0, current_index - 4)
     end_idx = min(len(all_class_dates), current_index + 6)
     window_dates = all_class_dates[start_idx:end_idx]
 
-    # 6. Подготовка данных
+    # 6. Подготовка данных о днях
     week_data = []
     for d in window_dates:
         slots_today = ScheduleSlot.objects.filter(group=group, weekday=d.weekday())
@@ -187,24 +188,34 @@ def attendance_view(request):
             'is_today': d == today
         })
 
-    # 7. Получаем детей (только активных и на пробном, не архивных)
-    children = Child.objects.filter(
-        group=group,
-        status__in=[Child.Status.ACTIVE, Child.Status.TRIAL]
-    ).select_related('group__trainer').prefetch_related(
+    # 7. ПОЛУЧАЕМ ДЕТЕЙ (с учетом архива)
+    if show_archived:
+        children_qs = Child.objects.filter(
+            group=group,
+            status__in=[Child.Status.ARCHIVED, Child.Status.LOST]
+        )
+    else:
+        children_qs = Child.objects.filter(
+            group=group,
+            status__in=[Child.Status.ACTIVE, Child.Status.TRIAL]
+        )
+
+    children_qs = children_qs.select_related('group__trainer').prefetch_related(
         'subscriptions', 'payments', 'attendances', 'ranks'
     )
 
-    # 8. Сортировка
+    # 8. СОРТИРОВКА (превращаем в список и сортируем)
+    children_list = list(children_qs)
+    
     if sort_by == 'sessions':
-        children = sorted(children, key=lambda c: c.sessions_left(), reverse=True)
+        children_list.sort(key=lambda c: c.sessions_left(), reverse=True)
     elif sort_by == 'debt':
-        children = sorted(children, key=lambda c: c.debt(), reverse=True)
+        children_list.sort(key=lambda c: c.debt(), reverse=True)
     else:
-        children = children.order_by('last_name', 'first_name')
+        children_list.sort(key=lambda c: (c.last_name.lower(), c.first_name.lower()))
 
     children_data = []
-    for child in children:
+    for child in children_list:
         active_sub = child.active_subscription()
         projected_end = child.projected_end_date()
 
@@ -220,17 +231,14 @@ def attendance_view(request):
             status = att_map.get(wd['date'], '')
             entries.append({'date': wd['date'], 'status': status})
             
-            # Красная линия в день окончания
             if projected_end and wd['date'] == projected_end:
                 sub_end_index = idx
             
-            # Подсветка за неделю до окончания
             if projected_end and wd['date'] >= projected_end - timedelta(days=7) and wd['date'] <= projected_end:
                 subscription_ending_soon = True
 
-        # Проверяем пробный период
-        is_trial_expired = child.is_trial_expired()
-        if is_trial_expired:
+        # Авто-перевод в потерянные, если пробный истек (только для не-архивных)
+        if not show_archived and child.is_trial_expired():
             child.mark_as_lost()
 
         children_data.append({
@@ -246,7 +254,7 @@ def attendance_view(request):
             'subscription_end_index': sub_end_index,
             'subscription_ending_soon': subscription_ending_soon,
             'is_trial': child.status == Child.Status.TRIAL,
-            'trial_expired': is_trial_expired,
+            'is_archived': child.status in [Child.Status.ARCHIVED, Child.Status.LOST],
             'attendance_entries': entries,
         })
 
@@ -259,6 +267,11 @@ def attendance_view(request):
     prev_ref = (window_dates[0] - timedelta(days=window_span)).strftime('%Y-%m-%d') if window_dates else (today - timedelta(days=7)).strftime('%Y-%m-%d')
     next_ref = (window_dates[-1] + timedelta(days=window_span)).strftime('%Y-%m-%d') if window_dates else (today + timedelta(days=7)).strftime('%Y-%m-%d')
 
+    # Базовые параметры для ссылок, чтобы сортировка не слетала
+    base_params = f"group_id={group.id}&ref_date={{}}&sort={sort_by}"
+    if show_archived:
+        base_params += "&show_archived=1"
+
     context = {
         'groups': Group.objects.filter(is_active=True),
         'selected_group': group,
@@ -270,6 +283,8 @@ def attendance_view(request):
         'next_ref': next_ref,
         'today': today,
         'sort_by': sort_by,
+        'show_archived': show_archived,
+        'base_params': base_params,
         'page': 'attendance'
     }
     return render(request, 'crm/attendance.html', context)
