@@ -59,5 +59,11 @@ urlpatterns = [
     path('groups/create/', views.group_create_view, name='group_create'),
     path('groups/<int:pk>/edit/', views.group_edit_view, name='group_edit'),
     path('groups/<int:pk>/delete/', views.group_delete_view, name='group_delete'),
+
+
+    path('child/<int:child_id>/archive/', views.archive_child_view, name='archive_child'),
+    path('child/<int:child_id>/restore/', views.restore_child_view, name='restore_child'),
+    path('group/<int:group_id>/trial/', views.add_trial_child_view, name='add_trial_child'),
+    path('attendance/cancel/', views.cancel_attendance_view, name='cancel_attendance'),
 ]
 

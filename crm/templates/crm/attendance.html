@@ -2,9 +2,36 @@
 
 {% block actions %}
 <div class="flex gap-2">
-    <button class="btn btn-soft"><i data-lucide="archive"></i>Архив</button>
-    <a href="{% url 'child_create' %}" class="btn btn-primary">
-        <i data-lucide="user-plus"></i>Добавить ребёнка
+    <!-- Сортировка -->
+    <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+        <span class="text-[10px] text-slate-500 px-2 font-bold">Сорт:</span>
+        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=name" 
+           class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'name' %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+            А-Я
+        </a>
+        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=sessions" 
+           class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'sessions' %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+            Занятия
+        </a>
+        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=debt" 
+           class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'debt' %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+            Долг
+        </a>
+    </div>
+
+    <!-- Архив -->
+    <a href="?group_id={{ selected_group.id }}&show_archived=1" class="btn btn-soft text-xs">
+        <i data-lucide="archive"></i>Архив
+    </a>
+
+    <!-- Добавить на пробное -->
+    <button data-modal="trial-modal" class="btn btn-soft text-xs">
+        <i data-lucide="user-plus"></i>Пробное
+    </button>
+
+    <!-- Добавить ребёнка -->
+    <a href="{% url 'child_create' %}" class="btn btn-primary text-xs">
+        <i data-lucide="user-plus"></i>Добавить
     </a>
 </div>
 {% endblock %}
@@ -49,6 +76,7 @@
             <span class="badge bg-red-100 text-red-700 px-1.5 py-0.5">× Пропуск</span>
             <span class="badge bg-blue-100 text-blue-700 px-1.5 py-0.5">❄ Заморозка</span>
             <span class="badge bg-amber-100 text-amber-700 px-1.5 py-0.5">О Отпуск</span>
+            <span class="badge bg-purple-100 text-purple-700 px-1.5 py-0.5">П Пробное</span>
         </div>
     </div>
 </section>
@@ -81,9 +109,16 @@
             </thead>
             <tbody>
                 {% for item in children_data %}
-                    <tr>
+                    <tr class="{% if item.is_trial %}bg-purple-50/30{% endif %}">
                         <td class="sticky left-0 bg-white">
-                            <a href="{% url 'child_card' item.child.id %}" class="block hover:bg-slate-50 px-1.5 py-1 rounded transition">
+                            <a href="{% url 'child_card' item.child.id %}" class="block hover:bg-slate-50 px-1.5 py-1 rounded transition relative">
+                                <!-- Бейдж пробного -->
+                                {% if item.is_trial %}
+                                <span class="absolute -top-1 -right-1 px-1.5 py-0.5 text-[8px] font-bold bg-purple-100 text-purple-700 rounded-full">
+                                    ПРОБ
+                                </span>
+                                {% endif %}
+
                                 <!-- Строка 1: ФИО + возраст справа -->
                                 <div class="flex items-baseline justify-between gap-1">
                                     <b class="text-xs truncate">{{ item.child.last_name }} {{ item.child.first_name }}</b>
@@ -105,14 +140,14 @@
                                         </span>
                                         {% endif %}
 
-                                        <!-- Иконка справки (лист бумаги) -->
+                                        <!-- Иконка справки -->
                                         {% if item.has_certificate %}
                                         <span class="inline-flex items-center text-blue-600" title="Справка есть">
                                             <i data-lucide="file-text" class="h-2.5 w-2.5"></i>
                                         </span>
                                         {% endif %}
 
-                                        <!-- Иконка скидки (%) -->
+                                        <!-- Иконка скидки -->
                                         {% if item.discount_percent > 0 %}
                                         <span class="inline-flex items-center text-emerald-600" title="Скидка {{ item.discount_percent }}%">
                                             <i data-lucide="percent" class="h-2.5 w-2.5"></i>
@@ -122,21 +157,30 @@
 
                                     <!-- Дата окончания абонемента справа -->
                                     {% if item.subscription_end %}
-                                    <span class="text-[9px] text-slate-400 whitespace-nowrap">
+                                    <span class="text-[9px] {% if item.subscription_ending_soon %}text-red-600 font-bold{% else %}text-slate-400{% endif %} whitespace-nowrap">
                                         до {{ item.subscription_end|date:"d.m" }}
                                     </span>
                                     {% endif %}
                                 </div>
                             </a>
+
+                            <!-- Кнопка архива -->
+                            <form method="post" action="{% url 'archive_child' item.child.id %}" class="mt-1" onsubmit="return confirm('Архивировать {{ item.child.last_name }}?')">
+                                {% csrf_token %}
+                                <button type="submit" class="text-[9px] text-slate-400 hover:text-red-600 flex items-center gap-0.5">
+                                    <i data-lucide="archive" class="h-2.5 w-2.5"></i>В архив
+                                </button>
+                            </form>
                         </td>
 
                         {% for entry in item.attendance_entries %}
-                            <td class="text-center {% if entry.date == today %}bg-orange-50/40{% endif %} {% if forloop.counter0 == item.subscription_end_index %}border-r-2 border-red-500{% endif %}">
+                            <td class="text-center {% if entry.date == today %}bg-orange-50/40{% endif %} {% if forloop.counter0 == item.subscription_end_index %}border-r-2 border-red-500{% endif %} {% if item.subscription_ending_soon and entry.date >= item.subscription_end|date:'Y-m-d'|add:'-7' %}bg-red-50/20{% endif %}">
                                 <button data-attendance
                                         data-child-id="{{ item.child.id }}"
                                         data-date="{{ entry.date|date:'Y-m-d' }}"
                                         data-state="{% if entry.status == 'present' %}1{% elif entry.status == 'absent' %}2{% elif entry.status == 'frozen' %}3{% elif entry.status == 'vacation' %}4{% elif entry.status == 'excused' %}5{% else %}0{% endif %}"
-                                        class="attendance-cell w-8 h-8 text-xs {% if entry.status == 'present' %}bg-emerald-100 text-emerald-700{% elif entry.status == 'absent' %}bg-red-100 text-red-700{% elif entry.status == 'frozen' %}bg-blue-100 text-blue-700{% elif entry.status == 'vacation' %}bg-amber-100 text-amber-700{% elif entry.status == 'excused' %}bg-yellow-100 text-yellow-700{% else %}bg-slate-100 text-slate-400{% endif %}">
+                                        class="attendance-cell w-8 h-8 text-xs {% if entry.status == 'present' %}bg-emerald-100 text-emerald-700{% elif entry.status == 'absent' %}bg-red-100 text-red-700{% elif entry.status == 'frozen' %}bg-blue-100 text-blue-700{% elif entry.status == 'vacation' %}bg-amber-100 text-amber-700{% elif entry.status == 'excused' %}bg-yellow-100 text-yellow-700{% else %}bg-slate-100 text-slate-400{% endif %}"
+                                        oncontextmenu="showCancelMenu(event, '{{ item.child.id }}', '{{ entry.date|date:'Y-m-d' }}'); return false;">
                                     {% if entry.status == 'present' %}+{% elif entry.status == 'absent' %}×{% elif entry.status == 'frozen' %}❄{% elif entry.status == 'vacation' %}О{% elif entry.status == 'excused' %}У{% endif %}
                                 </button>
                             </td>
@@ -149,8 +193,109 @@
         </table>
     </div>
 </section>
-{% endblock %}
 
-{% block modals %}
+<!-- Модалка пробного занятия -->
+<div id="trial-modal" class="modal hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+    <div class="bg-white rounded-2xl p-6 w-full max-w-md">
+        <h3 class="text-lg font-extrabold mb-4">Добавить на пробное (14 дней)</h3>
+        <form method="post" action="{% url 'add_trial_child' selected_group.id %}">
+            {% csrf_token %}
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Фамилия</label>
+                    <input type="text" name="last_name" required class="field">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Имя</label>
+                    <input type="text" name="first_name" required class="field">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Телефон родителя</label>
+                    <input type="tel" name="parent_phone" class="field" placeholder="+7 (___) ___-__-__">
+                </div>
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button type="submit" class="btn btn-primary flex-1">Добавить</button>
+                <button type="button" onclick="closeModal('trial-modal')" class="btn btn-soft">Отмена</button>
+            </div>
+        </form>
+    </div>
+</div>
 
+<!-- Контекстное меню правого клика -->
+<div id="context-menu" class="hidden fixed z-50 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[180px]">
+    <button onclick="cancelAttendance()" class="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 flex items-center gap-2">
+        <i data-lucide="x" class="h-4 w-4 text-red-600"></i>
+        Отменить отметку
+    </button>
+    <button onclick="closeContextMenu()" class="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 text-slate-500">
+        Закрыть
+    </button>
+</div>
+
+<script>
+let contextMenuData = null;
+
+function showCancelMenu(event, childId, date) {
+    event.preventDefault();
+    contextMenuData = { childId, date };
+    
+    const menu = document.getElementById('context-menu');
+    menu.style.left = event.pageX + 'px';
+    menu.style.top = event.pageY + 'px';
+    menu.classList.remove('hidden');
+    lucide.createIcons();
+}
+
+function closeContextMenu() {
+    document.getElementById('context-menu').classList.add('hidden');
+    contextMenuData = null;
+}
+
+function cancelAttendance() {
+    if (!contextMenuData) return;
+    
+    fetch('{% url "cancel_attendance" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: `child_id=${contextMenuData.childId}&date=${contextMenuData.date}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            location.reload();
+        } else {
+            alert('Ошибка: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Ошибка сети');
+    });
+    
+    closeContextMenu();
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.add('hidden');
+}
+
+// Закрытие контекстного меню при клике вне его
+document.addEventListener('click', function(e) {
+    const menu = document.getElementById('context-menu');
+    if (!menu.contains(e.target)) {
+        closeContextMenu();
+    }
+});
+
+// Открытие модалки пробного
+document.querySelectorAll('[data-modal]').forEach(btn => {
+    btn.addEventListener('click', function() {
+        const modalId = this.getAttribute('data-modal');
+        document.getElementById(modalId).classList.remove('hidden');
+    });
+});
+</script>
 {% endblock %}

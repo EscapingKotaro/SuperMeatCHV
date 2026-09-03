@@ -89,36 +89,40 @@ from django.utils import timezone
 from .models import Group, ScheduleSlot, Child
 
 
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from django.http import JsonResponse
+from django.views.decorators.http import require_POST
+from django.utils import timezone
+from datetime import timedelta, datetime
+from .models import Child, Group, ScheduleSlot, Attendance
+from .forms import ChildForm
 
-def generate_class_dates(group, start_date, limit=50):
-    """
-    Генерирует список дат занятий начиная с start_date.
-    limit - сколько дат вперед генерировать.
-    """
+def generate_class_dates(group, start_date, limit=60):
+    """Генерирует список дат занятий"""
     slots = ScheduleSlot.objects.filter(group=group).order_by('weekday', 'start_time')
     if not slots:
         return []
-
+    
     dates = []
-    # Начинаем генерацию с указанной даты
     current = start_date
-
-    # Защита от бесконечного цикла: идем вперед, пока не наберем limit дат
-    # или не пройдем 6 месяцев (на всякий случай)
     end_limit = start_date + timedelta(days=180)
-
+    
     while current <= end_limit and len(dates) < limit:
         for slot in slots:
             if current.weekday() == slot.weekday:
                 dates.append(current)
         current += timedelta(days=1)
-
-    # Убираем дубликаты (если несколько слотов в один день) и сортируем
+    
     return sorted(list(set(dates)))
+
+
 @login_required
 def attendance_view(request):
     group_id = request.GET.get('group_id')
     ref_date_str = request.GET.get('ref_date')
+    sort_by = request.GET.get('sort', 'name')  # name, sessions, debt
 
     # 1. Группа
     if group_id:
@@ -126,7 +130,10 @@ def attendance_view(request):
     else:
         group = Group.objects.filter(is_active=True).first()
         if not group:
-             return render(request, 'crm/attendance.html', {'groups': Group.objects.none(), 'selected_group': None})
+            return render(request, 'crm/attendance.html', {
+                'groups': Group.objects.none(),
+                'selected_group': None,
+            })
 
     trainer = group.trainer if group else None
 
@@ -162,7 +169,7 @@ def attendance_view(request):
             break
 
     if all_class_dates[-1] < ref_date:
-         current_index = len(all_class_dates) - 1
+        current_index = len(all_class_dates) - 1
 
     # 5. Формируем окно: 4 назад, 6 вперед (10 занятий)
     start_idx = max(0, current_index - 4)
@@ -180,10 +187,21 @@ def attendance_view(request):
             'is_today': d == today
         })
 
-    # Дети
-    children = Child.objects.filter(group=group).select_related('group__trainer').prefetch_related(
+    # 7. Получаем детей (только активных и на пробном, не архивных)
+    children = Child.objects.filter(
+        group=group,
+        status__in=[Child.Status.ACTIVE, Child.Status.TRIAL]
+    ).select_related('group__trainer').prefetch_related(
         'subscriptions', 'payments', 'attendances', 'ranks'
-    ).order_by('last_name', 'first_name')
+    )
+
+    # 8. Сортировка
+    if sort_by == 'sessions':
+        children = sorted(children, key=lambda c: c.sessions_left(), reverse=True)
+    elif sort_by == 'debt':
+        children = sorted(children, key=lambda c: c.debt(), reverse=True)
+    else:
+        children = children.order_by('last_name', 'first_name')
 
     children_data = []
     for child in children:
@@ -196,12 +214,24 @@ def attendance_view(request):
 
         entries = []
         sub_end_index = None
+        subscription_ending_soon = False
 
         for idx, wd in enumerate(week_data):
             status = att_map.get(wd['date'], '')
             entries.append({'date': wd['date'], 'status': status})
+            
+            # Красная линия в день окончания
             if projected_end and wd['date'] == projected_end:
                 sub_end_index = idx
+            
+            # Подсветка за неделю до окончания
+            if projected_end and wd['date'] >= projected_end - timedelta(days=7) and wd['date'] <= projected_end:
+                subscription_ending_soon = True
+
+        # Проверяем пробный период
+        is_trial_expired = child.is_trial_expired()
+        if is_trial_expired:
+            child.mark_as_lost()
 
         children_data.append({
             'child': child,
@@ -214,11 +244,17 @@ def attendance_view(request):
             'discount_percent': child.discount_percent,
             'subscription_end': active_sub.end_date if active_sub else None,
             'subscription_end_index': sub_end_index,
+            'subscription_ending_soon': subscription_ending_soon,
+            'is_trial': child.status == Child.Status.TRIAL,
+            'trial_expired': is_trial_expired,
             'attendance_entries': entries,
         })
 
-    # 7. Переключатель дат: сдвигаем на размер окна
-    window_span = 7  # Если одно занятие, сдвигаем на неделю
+    # 9. Переключатель дат
+    if len(window_dates) >= 2:
+        window_span = (window_dates[-1] - window_dates[0]).days
+    else:
+        window_span = 7
 
     prev_ref = (window_dates[0] - timedelta(days=window_span)).strftime('%Y-%m-%d') if window_dates else (today - timedelta(days=7)).strftime('%Y-%m-%d')
     next_ref = (window_dates[-1] + timedelta(days=window_span)).strftime('%Y-%m-%d') if window_dates else (today + timedelta(days=7)).strftime('%Y-%m-%d')
@@ -233,9 +269,76 @@ def attendance_view(request):
         'prev_ref': prev_ref,
         'next_ref': next_ref,
         'today': today,
+        'sort_by': sort_by,
         'page': 'attendance'
     }
     return render(request, 'crm/attendance.html', context)
+
+
+@login_required
+@require_POST
+def archive_child_view(request, child_id):
+    """Перевод ребенка в архив"""
+    child = get_object_or_404(Child, id=child_id)
+    child.archive()
+    messages.success(request, f'{child.last_name} {child.first_name} архивирован')
+    return redirect('attendance')
+
+
+@login_required
+@require_POST
+def restore_child_view(request, child_id):
+    """Восстановление из архива"""
+    child = get_object_or_404(Child, id=child_id)
+    child.restore_from_archive()
+    messages.success(request, f'{child.last_name} {child.first_name} восстановлен')
+    return redirect('attendance')
+
+
+@login_required
+@require_POST
+def add_trial_child_view(request, group_id):
+    """Добавление ребенка на пробное занятие"""
+    group = get_object_or_404(Group, id=group_id)
+    
+    if request.method == 'POST':
+        last_name = request.POST.get('last_name')
+        first_name = request.POST.get('first_name')
+        parent_phone = request.POST.get('parent_phone')
+        
+        if last_name and first_name:
+            child = Child.objects.create(
+                last_name=last_name,
+                first_name=first_name,
+                parent_phone=parent_phone,
+                group=group,
+                status=Child.Status.TRIAL,
+                trial_from=timezone.localdate()
+            )
+            messages.success(request, f'{child.last_name} {child.first_name} добавлен на пробное (14 дней)')
+            return redirect('attendance')
+    
+    return redirect('attendance')
+
+
+@login_required
+@require_POST
+def cancel_attendance_view(request):
+    """Отмена отметки через правый клик"""
+    child_id = request.POST.get('child_id')
+    date_str = request.POST.get('date')
+    
+    if child_id and date_str:
+        try:
+            date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            attendance = Attendance.objects.filter(child_id=child_id, date=date).first()
+            if attendance:
+                attendance.delete()
+                return JsonResponse({'status': 'ok', 'message': 'Отметка отменена'})
+        except ValueError:
+            pass
+    
+    return JsonResponse({'status': 'error', 'message': 'Ошибка'}, status=400)
 
 
 @require_POST

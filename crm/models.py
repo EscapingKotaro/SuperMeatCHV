@@ -255,6 +255,43 @@ class Child(models.Model):
         """Баланс = оплаты - абонементы (положительный = переплата)."""
         return self.total_paid() - self.total_spent()
 
+    def is_trial_expired(self):
+        """Проверяем, истёк ли пробный период (14 дней)"""
+        if self.status != self.Status.TRIAL or not self.trial_from:
+            return False
+        today = timezone.localdate()
+        return (today - self.trial_from).days >= 14
+
+    def mark_as_lost(self):
+        """Автоматически помечаем как потерянного"""
+        self.status = self.Status.LOST
+        self.save(update_fields=['status'])
+
+    def archive(self):
+        """Переводим в архив"""
+        self.status = self.Status.ARCHIVED
+        self.save(update_fields=['status'])
+
+    def restore_from_archive(self):
+        """Восстанавливаем из архива"""
+        self.status = self.Status.ACTIVE
+        self.save(update_fields=['status'])
+
+    def has_subscription_ending_soon(self):
+        """Абонемент заканчивается в течение 7 дней"""
+        end = self.nearest_expiry()
+        if not end:
+            return False
+        today = timezone.localdate()
+        return 0 <= (end - today).days <= 7
+
+    def days_until_expiry(self):
+        """Дней до окончания абонемента"""
+        end = self.nearest_expiry()
+        if not end:
+            return None
+        return (end - timezone.localdate()).days
+
 
 class ChildRank(models.Model):
     """Разряд идёт по годам."""
