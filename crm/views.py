@@ -469,7 +469,6 @@ from .forms import ChildForm, SubscriptionForm  # создадим ниже
 
 @login_required
 def child_card_view(request, child_id):
-    """Просмотр карточки ребенка"""
     child = get_object_or_404(Child, id=child_id)
 
     subscriptions = child.subscriptions.all().order_by('-start_date')
@@ -487,8 +486,48 @@ def child_card_view(request, child_id):
     promos = child.active_promos()
     groups_list = Group.objects.filter(is_active=True)
 
-    # Форма смены группы
-    group_change_form = None
+    # === HEAT-MAP: последние 365 дней ===
+    today = timezone.localdate()
+    year_ago = today - timedelta(days=364)
+
+    # Получаем все посещения за год
+    year_attendances = {
+        att.date: att.status
+        for att in child.attendances.filter(date__gte=year_ago)
+    }
+
+    # Строим сетку: 7 строк (дни недели) × ~53 столбца (недели)
+    # Начинаем с воскресенья года назад (чтобы первый столбец был полным)
+    start_date = year_ago - timedelta(days=year_ago.weekday() + 1)  # ближайшее воскресенье
+    end_date = today
+
+    weeks = []
+    current = start_date
+    while current <= end_date:
+        week = []
+        for day_in_week in range(7):  # 0=Пн ... 6=Вс
+            date = current + timedelta(days=day_in_week)
+            if date > end_date:
+                week.append(None)
+            else:
+                status = year_attendances.get(date)
+                week.append({
+                    'date': date,
+                    'status': status,
+                    'is_future': date > today,
+                })
+        weeks.append(week)
+        current += timedelta(days=7)
+
+    # Статистика по статусам за год
+    year_stats = {
+        'present': sum(1 for s in year_attendances.values() if s == 'present'),
+        'absent': sum(1 for s in year_attendances.values() if s == 'absent'),
+        'frozen': sum(1 for s in year_attendances.values() if s == 'frozen'),
+        'vacation': sum(1 for s in year_attendances.values() if s == 'vacation'),
+        'excused': sum(1 for s in year_attendances.values() if s == 'excused'),
+    }
+
     if request.method == 'POST' and 'change_group' in request.POST:
         new_group_id = request.POST.get('new_group')
         if new_group_id:
@@ -513,6 +552,9 @@ def child_card_view(request, child_id):
         'nearest_expiry': nearest_exp,
         'promos': promos,
         'groups_list': groups_list,
+        'weeks': weeks,
+        'year_stats': year_stats,
+        'today': today,
         'page': 'child_card'
     }
     return render(request, 'crm/child_card.html', context)

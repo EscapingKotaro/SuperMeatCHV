@@ -261,38 +261,81 @@
     <!-- ПРАВАЯ КОЛОНКА -->
     <div class="space-y-5">
         <!-- История посещений -->
-        <div class="card p-5">
-            <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
-                <i data-lucide="calendar-check" class="h-4 w-4 text-slate-400"></i>История посещений
-            </h3>
-            {% if attendances %}
-            <div class="space-y-1.5 max-h-[400px] overflow-y-auto">
-                {% for att in attendances %}
-                <div class="flex items-center gap-2 p-2 rounded-lg {% if att.date == today %}bg-orange-50{% else %}bg-slate-50{% endif %}">
-                    <div class="text-center w-12 shrink-0">
-                        <div class="text-[9px] text-slate-400 font-bold">{{ att.date|date:"M" }}</div>
-                        <div class="text-sm font-extrabold text-slate-900">{{ att.date|date:"d" }}</div>
-                    </div>
-                    <div class="flex-1 min-w-0">
-                        <span class="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded
-                            {% if att.status == 'present' %}bg-emerald-100 text-emerald-700
-                            {% elif att.status == 'absent' %}bg-red-100 text-red-700
-                            {% elif att.status == 'frozen' %}bg-blue-100 text-blue-700
-                            {% elif att.status == 'vacation' %}bg-amber-100 text-amber-700
-                            {% else %}bg-yellow-100 text-yellow-700{% endif %}">
-                            {{ att.get_status_display }}
-                        </span>
-                        {% if att.comment %}
-                        <div class="text-[10px] text-slate-500 mt-0.5 truncate">{{ att.comment }}</div>
-                        {% endif %}
-                    </div>
-                </div>
+        <!-- История посещений (heat-map) -->
+<div class="card p-5">
+    <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
+        <i data-lucide="calendar-check" class="h-4 w-4 text-slate-400"></i>
+        Посещения за год
+    </h3>
+
+    <!-- Сетка как в GitHub -->
+    <div class="overflow-x-auto pb-2">
+        <div class="flex gap-1 min-w-fit">
+            <!-- Подписи дней недели -->
+            <div class="flex flex-col gap-1 mr-1 text-[9px] text-slate-400 font-bold pt-5">
+                <div class="h-3 leading-3">Пн</div>
+                <div class="h-3 leading-3">Вт</div>
+                <div class="h-3 leading-3">Ср</div>
+                <div class="h-3 leading-3">Чт</div>
+                <div class="h-3 leading-3">Пт</div>
+                <div class="h-3 leading-3">Сб</div>
+                <div class="h-3 leading-3">Вс</div>
+            </div>
+
+            <!-- Столбцы недель -->
+            {% for week in weeks %}
+            <div class="flex flex-col gap-1">
+                {% for day in week %}
+                    {% if day %}
+                        <div
+                            class="h-3 w-3 rounded-sm cursor-pointer transition-transform hover:scale-150 hover:z-10 relative
+                                {% if day.is_future %}bg-slate-100
+                                {% elif day.status == 'present' %}bg-emerald-400
+                                {% elif day.status == 'absent' %}bg-red-400
+                                {% elif day.status == 'frozen' %}bg-blue-400
+                                {% elif day.status == 'vacation' %}bg-amber-400
+                                {% elif day.status == 'excused' %}bg-yellow-400
+                                {% else %}bg-slate-200{% endif %}"
+                            title="{{ day.date|date:'d.m.Y' }}{% if day.status %}: {{ day.status }}{% else %}: нет данных{% endif %}"
+                        ></div>
+                    {% else %}
+                        <div class="h-3 w-3"></div>
+                    {% endif %}
                 {% endfor %}
             </div>
-            {% else %}
-            <p class="text-xs text-slate-400 italic">Нет посещений</p>
-            {% endif %}
+            {% endfor %}
         </div>
+    </div>
+
+    <!-- Легенда -->
+    <div class="flex flex-wrap items-center gap-3 mt-4 pt-3 border-t border-slate-100 text-[10px] text-slate-500">
+        <span class="font-bold">Меньше</span>
+        <div class="flex gap-0.5">
+            <div class="h-3 w-3 rounded-sm bg-slate-200"></div>
+            <div class="h-3 w-3 rounded-sm bg-emerald-400"></div>
+            <div class="h-3 w-3 rounded-sm bg-red-400"></div>
+            <div class="h-3 w-3 rounded-sm bg-blue-400"></div>
+            <div class="h-3 w-3 rounded-sm bg-amber-400"></div>
+        </div>
+        <span class="font-bold">Больше</span>
+    </div>
+
+    <!-- Статистика за год -->
+    <div class="grid grid-cols-3 gap-2 mt-4">
+        <div class="bg-emerald-50 p-2 rounded-lg text-center">
+            <div class="text-lg font-extrabold text-emerald-700">{{ year_stats.present }}</div>
+            <div class="text-[9px] font-bold text-emerald-600 uppercase">Пришёл</div>
+        </div>
+        <div class="bg-red-50 p-2 rounded-lg text-center">
+            <div class="text-lg font-extrabold text-red-700">{{ year_stats.absent }}</div>
+            <div class="text-[9px] font-bold text-red-600 uppercase">Пропуск</div>
+        </div>
+        <div class="bg-blue-50 p-2 rounded-lg text-center">
+            <div class="text-lg font-extrabold text-blue-700">{{ year_stats.frozen }}</div>
+            <div class="text-[9px] font-bold text-blue-600 uppercase">Заморозка</div>
+        </div>
+    </div>
+</div>
 
         <!-- История соревнований -->
         <div class="card p-5">
