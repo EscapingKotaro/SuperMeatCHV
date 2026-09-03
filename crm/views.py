@@ -487,45 +487,53 @@ def child_card_view(request, child_id):
     groups_list = Group.objects.filter(is_active=True)
 
     # === HEAT-MAP: последние 365 дней ===
+        # === HEAT-MAP: последние 180 дней ===
     today = timezone.localdate()
-    year_ago = today - timedelta(days=364)
+    days_back = 180
+    year_ago = today - timedelta(days=days_back - 1)
 
-    # Получаем все посещения за год
-    year_attendances = {
+    # Получаем все посещения за период
+    period_attendances = {
         att.date: att.status
         for att in child.attendances.filter(date__gte=year_ago)
     }
 
-    # Строим сетку: 7 строк (дни недели) × ~53 столбца (недели)
-    # Начинаем с воскресенья года назад (чтобы первый столбец был полным)
-    start_date = year_ago - timedelta(days=year_ago.weekday() + 1)  # ближайшее воскресенье
+    # Начинаем с понедельника (weekday() возвращает 0=Пн, 6=Вс)
+    start_date = year_ago - timedelta(days=year_ago.weekday())
     end_date = today
 
     weeks = []
     current = start_date
+    week_index = 0
     while current <= end_date:
         week = []
+        week_start_date = current  # Понедельник этой недели
         for day_in_week in range(7):  # 0=Пн ... 6=Вс
             date = current + timedelta(days=day_in_week)
             if date > end_date:
                 week.append(None)
             else:
-                status = year_attendances.get(date)
+                status = period_attendances.get(date)
                 week.append({
                     'date': date,
                     'status': status,
                     'is_future': date > today,
                 })
-        weeks.append(week)
+        weeks.append({
+            'days': week,
+            'week_start': week_start_date,
+            'show_label': week_index % 5 == 0,  # Каждый 5-й столбец
+        })
         current += timedelta(days=7)
+        week_index += 1
 
-    # Статистика по статусам за год
-    year_stats = {
-        'present': sum(1 for s in year_attendances.values() if s == 'present'),
-        'absent': sum(1 for s in year_attendances.values() if s == 'absent'),
-        'frozen': sum(1 for s in year_attendances.values() if s == 'frozen'),
-        'vacation': sum(1 for s in year_attendances.values() if s == 'vacation'),
-        'excused': sum(1 for s in year_attendances.values() if s == 'excused'),
+    # Статистика по статусам за период
+    period_stats = {
+        'present': sum(1 for s in period_attendances.values() if s == 'present'),
+        'absent': sum(1 for s in period_attendances.values() if s == 'absent'),
+        'frozen': sum(1 for s in period_attendances.values() if s == 'frozen'),
+        'vacation': sum(1 for s in period_attendances.values() if s == 'vacation'),
+        'excused': sum(1 for s in period_attendances.values() if s == 'excused'),
     }
 
     if request.method == 'POST' and 'change_group' in request.POST:
@@ -553,7 +561,7 @@ def child_card_view(request, child_id):
         'promos': promos,
         'groups_list': groups_list,
         'weeks': weeks,
-        'year_stats': year_stats,
+        'period_stats': period_stats,
         'today': today,
         'page': 'child_card'
     }
