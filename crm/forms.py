@@ -5,7 +5,7 @@ class ChildForm(forms.ModelForm):
     class Meta:
         model = Child
         fields = [
-            'last_name', 'first_name', 'patronymic', 'birth_year',
+            'last_name', 'first_name', 'patronymic',
             'address', 'parent_name', 'parent_phone', 'certificate',
             'certificate_note', 'group', 'status', 'trial_from',
             'discount_percent', 'note'
@@ -14,7 +14,6 @@ class ChildForm(forms.ModelForm):
             'last_name': forms.TextInput(attrs={'class': 'field'}),
             'first_name': forms.TextInput(attrs={'class': 'field'}),
             'patronymic': forms.TextInput(attrs={'class': 'field'}),
-            'birth_year': forms.NumberInput(attrs={'class': 'field', 'min': '1990', 'max': '2024'}),
             'address': forms.TextInput(attrs={'class': 'field'}),
             'parent_name': forms.TextInput(attrs={'class': 'field'}),
             'parent_phone': forms.TextInput(attrs={'class': 'field', 'placeholder': '+7 (___) ___-__-__'}),
