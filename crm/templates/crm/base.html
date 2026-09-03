@@ -41,6 +41,12 @@
                 <a class="nav-pill {% if page == 'revenue_forecast' %}active{% endif %}" href="{% url 'revenue_forecast' %}">
                     <i data-lucide="trending-up"></i>Прогноз
                 </a>
+                <a class="nav-pill {% if page == 'trainers' %}active{% endif %}" href="{% url 'trainer_list' %}">
+    <i data-lucide="user-check"></i>Тренеры
+</a>
+<a class="nav-pill {% if page == 'groups' %}active{% endif %}" href="{% url 'group_list' %}">
+    <i data-lucide="users"></i>Группы
+</a>
                 <a class="nav-pill {% if page == 'statistics' %}active{% endif %}" href="/test/statistics/">
                     <i data-lucide="chart-no-axes-combined"></i>Статистика
                 </a>

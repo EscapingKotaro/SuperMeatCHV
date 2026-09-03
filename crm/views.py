@@ -569,3 +569,170 @@ def add_subscription_view(request, child_id):
         'page': 'add_subscription'
     }
     return render(request, 'crm/add_subscription.html', context)
+
+
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.decorators import login_required
+from django.contrib import messages
+from .models import Trainer, Group, ScheduleSlot
+from .forms import TrainerForm, GroupForm, ScheduleSlotFormSet
+
+# ==================== ТРЕНЕРЫ ====================
+
+@login_required
+def trainer_list_view(request):
+    """Список тренеров"""
+    trainers = Trainer.objects.all().prefetch_related('groups').order_by('full_name')
+    context = {
+        'trainers': trainers,
+        'title': 'Тренеры',
+        'subtitle': 'Управление тренерским составом',
+        'page': 'trainers'
+    }
+    return render(request, 'crm/trainers.html', context)
+
+@login_required
+def trainer_create_view(request):
+    """Создание тренера"""
+    if request.method == 'POST':
+        form = TrainerForm(request.POST)
+        if form.is_valid():
+            trainer = form.save()
+            messages.success(request, f'Тренер {trainer.full_name} добавлен')
+            return redirect('trainer_list')
+    else:
+        form = TrainerForm()
+
+    context = {
+        'form': form,
+        'title': 'Новый тренер',
+        'page': 'trainers'
+    }
+    return render(request, 'crm/trainer_edit.html', context)
+
+@login_required
+def trainer_edit_view(request, pk):
+    """Редактирование тренера"""
+    trainer = get_object_or_404(Trainer, pk=pk)
+    if request.method == 'POST':
+        form = TrainerForm(request.POST, instance=trainer)
+        if form.is_valid():
+            form.save()
+            messages.success(request, 'Данные тренера обновлены')
+            return redirect('trainer_list')
+    else:
+        form = TrainerForm(instance=trainer)
+
+    context = {
+        'form': form,
+        'trainer': trainer,
+        'title': f'Редактирование: {trainer.full_name}',
+        'page': 'trainers'
+    }
+    return render(request, 'crm/trainer_edit.html', context)
+
+@login_required
+def trainer_delete_view(request, pk):
+    """Удаление тренера"""
+    trainer = get_object_or_404(Trainer, pk=pk)
+    if request.method == 'POST':
+        # Проверяем, есть ли группы у тренера
+        if trainer.groups.exists():
+            messages.error(request, f'Нельзя удалить тренера {trainer.full_name}: у него есть группы. Сначала удалите или переназначьте группы.')
+            return redirect('trainer_list')
+        trainer.delete()
+        messages.success(request, f'Тренер {trainer.full_name} удален')
+        return redirect('trainer_list')
+
+    context = {
+        'trainer': trainer,
+        'title': 'Удаление тренера',
+        'page': 'trainers'
+    }
+    return render(request, 'crm/trainer_delete.html', context)
+
+
+# ==================== ГРУППЫ ====================
+
+@login_required
+def group_list_view(request):
+    """Список групп"""
+    groups = Group.objects.select_related('trainer').prefetch_related('schedule', 'children').order_by('name')
+    context = {
+        'groups': groups,
+        'title': 'Группы',
+        'subtitle': 'Управление группами и расписанием',
+        'page': 'groups'
+    }
+    return render(request, 'crm/groups.html', context)
+
+@login_required
+def group_create_view(request):
+    """Создание группы с расписанием"""
+    if request.method == 'POST':
+        group_form = GroupForm(request.POST)
+        slot_formset = ScheduleSlotFormSet(request.POST)
+
+        if group_form.is_valid() and slot_formset.is_valid():
+            group = group_form.save()
+            slot_formset.instance = group
+            slot_formset.save()
+            messages.success(request, f'Группа "{group.name}" создана')
+            return redirect('group_list')
+    else:
+        group_form = GroupForm()
+        slot_formset = ScheduleSlotFormSet()
+
+    context = {
+        'group_form': group_form,
+        'slot_formset': slot_formset,
+        'title': 'Новая группа',
+        'page': 'groups'
+    }
+    return render(request, 'crm/group_edit.html', context)
+
+@login_required
+def group_edit_view(request, pk):
+    """Редактирование группы с расписанием"""
+    group = get_object_or_404(Group, pk=pk)
+    if request.method == 'POST':
+        group_form = GroupForm(request.POST, instance=group)
+        slot_formset = ScheduleSlotFormSet(request.POST, instance=group)
+
+        if group_form.is_valid() and slot_formset.is_valid():
+            group_form.save()
+            slot_formset.save()
+            messages.success(request, f'Группа "{group.name}" обновлена')
+            return redirect('group_list')
+    else:
+        group_form = GroupForm(instance=group)
+        slot_formset = ScheduleSlotFormSet(instance=group)
+
+    context = {
+        'group_form': group_form,
+        'slot_formset': slot_formset,
+        'group': group,
+        'title': f'Редактирование: {group.name}',
+        'page': 'groups'
+    }
+    return render(request, 'crm/group_edit.html', context)
+
+@login_required
+def group_delete_view(request, pk):
+    """Удаление группы"""
+    group = get_object_or_404(Group, pk=pk)
+    if request.method == 'POST':
+        children_count = group.children.count()
+        if children_count > 0:
+            messages.error(request, f'Нельзя удалить группу "{group.name}": в ней {children_count} детей. Сначала переведите детей в другие группы.')
+            return redirect('group_list')
+        group.delete()
+        messages.success(request, f'Группа "{group.name}" удалена')
+        return redirect('group_list')
+
+    context = {
+        'group': group,
+        'title': 'Удаление группы',
+        'page': 'groups'
+    }
+    return render(request, 'crm/group_delete.html', context)

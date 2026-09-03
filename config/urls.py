@@ -47,5 +47,18 @@ urlpatterns = [
 
     # API для добавления абонемента
     path('child/<int:child_id>/subscription/add/', views.add_subscription_view, name='add_subscription'),
+
+    # Тренеры
+    path('trainers/', views.trainer_list_view, name='trainer_list'),
+    path('trainers/create/', views.trainer_create_view, name='trainer_create'),
+    path('trainers/<int:pk>/edit/', views.trainer_edit_view, name='trainer_edit'),
+    path('trainers/<int:pk>/delete/', views.trainer_delete_view, name='trainer_delete'),
+
+    # Группы
+    path('groups/', views.group_list_view, name='group_list'),
+    path('groups/create/', views.group_create_view, name='group_create'),
+    path('groups/<int:pk>/edit/', views.group_edit_view, name='group_edit'),
+    path('groups/<int:pk>/delete/', views.group_delete_view, name='group_delete'),
+]
 ]
 

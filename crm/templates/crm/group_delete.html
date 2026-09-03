@@ -1,0 +1,26 @@
+{% extends "crm/base.html" %}
+
+{% block content %}
+<div class="max-w-lg mx-auto">
+    <div class="card p-6 border-red-200">
+        <h2 class="text-2xl font-extrabold mb-4 text-red-600">Удаление группы</h2>
+        <p class="mb-6">Вы уверены, что хотите удалить группу <b>{{ group.name }}</b>?</p>
+
+        {% if group.children.exists %}
+        <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+            ⚠️ В группе {{ group.children.count }} детей. Сначала переведите их в другие группы.
+        </div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="flex gap-3">
+                <button type="submit" class="btn bg-red-600 text-white hover:bg-red-700" {% if group.children.exists %}disabled{% endif %}>
+                    <i data-lucide="trash-2"></i>Удалить
+                </button>
+                <a href="{% url 'group_list' %}" class="btn btn-soft">Отмена</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

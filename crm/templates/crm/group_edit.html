@@ -1,0 +1,145 @@
+{% extends "crm/base.html" %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-6">
+    <!-- Основная форма группы -->
+    <div class="card p-6">
+        <h2 class="text-2xl font-extrabold mb-6">{{ title }}</h2>
+
+        <form method="post" id="group-form">
+            {% csrf_token %}
+            <div class="space-y-4">
+                {% for field in group_form %}
+                <div>
+                    <label class="block text-sm font-medium text-slate-700 mb-1">
+                        {{ field.label }}
+                        {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
+                    </label>
+                    {{ field }}
+                    {% if field.errors %}
+                    <p class="mt-1 text-sm text-red-600">{{ field.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </form>
+    </div>
+
+    <!-- Расписание -->
+    <div class="card p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-extrabold">Расписание</h3>
+            <button type="button" id="add-slot" class="btn btn-soft text-xs">
+                <i data-lucide="plus"></i>Добавить слот
+            </button>
+        </div>
+
+        <div id="slots-container" class="space-y-3">
+            {% for form in slot_formset %}
+            <div class="slot-form flex items-end gap-3 p-3 bg-slate-50 rounded-xl {% if form.instance.pk %}existing-slot{% endif %}">
+                {{ form.id }}
+
+                <div class="flex-1">
+                    <label class="block text-xs font-medium text-slate-600 mb-1">День недели</label>
+                    {{ form.weekday }}
+                </div>
+
+                <div class="flex-1">
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Начало</label>
+                    {{ form.start_time }}
+                </div>
+
+                <div class="flex-1">
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Длительность (мин)</label>
+                    {{ form.duration_minutes }}
+                </div>
+
+                <div class="pb-1">
+                    <label class="block text-xs font-medium text-slate-600 mb-1">&nbsp;</label>
+                    <button type="button" class="delete-slot-btn grid h-9 w-9 place-items-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100">
+                        <i data-lucide="trash-2" class="h-4 w-4"></i>
+                    </button>
+                    {{ form.DELETE }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Шаблон для нового слота (скрыт) -->
+        <template id="empty-slot-template">
+            <div class="slot-form flex items-end gap-3 p-3 bg-slate-50 rounded-xl">
+                <div class="flex-1">
+                    <label class="block text-xs font-medium text-slate-600 mb-1">День недели</label>
+                    {{ slot_formset.empty_form.weekday }}
+                </div>
+                <div class="flex-1">
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Начало</label>
+                    {{ slot_formset.empty_form.start_time }}
+                </div>
+                <div class="flex-1">
+                    <label class="block text-xs font-medium text-slate-600 mb-1">Длительность (мин)</label>
+                    {{ slot_formset.empty_form.duration_minutes }}
+                </div>
+                <div class="pb-1">
+                    <label class="block text-xs font-medium text-slate-600 mb-1">&nbsp;</label>
+                    <button type="button" class="delete-slot-btn grid h-9 w-9 place-items-center rounded-lg bg-red-50 text-red-600 hover:bg-red-100">
+                        <i data-lucide="trash-2" class="h-4 w-4"></i>
+                    </button>
+                </div>
+            </div>
+        </template>
+
+        <div class="mt-6 flex gap-3">
+            <button type="submit" form="group-form" class="btn btn-primary">
+                <i data-lucide="save"></i>Сохранить
+            </button>
+            <a href="{% url 'group_list' %}" class="btn btn-soft">Отмена</a>
+        </div>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const container = document.getElementById('slots-container');
+    const addBtn = document.getElementById('add-slot');
+    const template = document.getElementById('empty-slot-template');
+    let slotIndex = {{ slot_formset.total_form_count }};
+
+    // Обновляем total forms
+    const totalFormsInput = document.querySelector('input[name="slots-TOTAL_FORMS"]');
+
+    addBtn.addEventListener('click', function() {
+        const clone = template.content.cloneNode(true);
+        // Заменяем __prefix__ на актуальный индекс
+        clone.innerHTML = clone.innerHTML.replace(/__prefix__/g, slotIndex);
+        container.appendChild(clone);
+        slotIndex++;
+        if (totalFormsInput) totalFormsInput.value = slotIndex;
+        lucide.createIcons();
+        attachDeleteHandlers();
+    });
+
+    function attachDeleteHandlers() {
+        document.querySelectorAll('.delete-slot-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const slotForm = this.closest('.slot-form');
+                const deleteInput = slotForm.querySelector('input[name$="-DELETE"]');
+                if (deleteInput) {
+                    // Если это существующий слот - помечаем на удаление
+                    deleteInput.checked = true;
+                    slotForm.style.opacity = '0.4';
+                    slotForm.style.pointerEvents = 'none';
+                } else {
+                    // Если это новый слот - просто удаляем из DOM
+                    slotForm.remove();
+                    slotIndex--;
+                    if (totalFormsInput) totalFormsInput.value = slotIndex;
+                }
+            });
+        });
+    }
+
+    attachDeleteHandlers();
+});
+</script>
+{% endblock %}
