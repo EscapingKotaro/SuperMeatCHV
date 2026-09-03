@@ -115,7 +115,6 @@ def generate_class_dates(group, start_date, limit=50):
 
     # Убираем дубликаты (если несколько слотов в один день) и сортируем
     return sorted(list(set(dates)))
-
 @login_required
 def attendance_view(request):
     group_id = request.GET.get('group_id')
@@ -129,7 +128,6 @@ def attendance_view(request):
         if not group:
              return render(request, 'crm/attendance.html', {'groups': Group.objects.none(), 'selected_group': None})
 
-    # Получаем тренера группы
     trainer = group.trainer if group else None
 
     # 2. Опорная дата
@@ -166,7 +164,7 @@ def attendance_view(request):
     if all_class_dates[-1] < ref_date:
          current_index = len(all_class_dates) - 1
 
-    # 5. Формируем окно
+    # 5. Формируем окно: 4 назад, 6 вперед (10 занятий)
     start_idx = max(0, current_index - 4)
     end_idx = min(len(all_class_dates), current_index + 6)
     window_dates = all_class_dates[start_idx:end_idx]
@@ -191,21 +189,20 @@ def attendance_view(request):
     for child in children:
         active_sub = child.active_subscription()
         projected_end = child.projected_end_date()
-        
+
         att_map = {}
         for att in child.attendances.filter(date__in=window_dates):
             att_map[att.date] = att.status
 
         entries = []
         sub_end_index = None
-        
+
         for idx, wd in enumerate(week_data):
             status = att_map.get(wd['date'], '')
             entries.append({'date': wd['date'], 'status': status})
             if projected_end and wd['date'] == projected_end:
                 sub_end_index = idx
 
-        # Собираем данные для ячейки
         children_data.append({
             'child': child,
             'initials': f"{child.last_name[0]}{child.first_name[0]}".upper(),
@@ -220,6 +217,15 @@ def attendance_view(request):
             'attendance_entries': entries,
         })
 
+    # 7. Переключатель дат: сдвигаем на размер окна
+    if len(window_dates) >= 2:
+        window_span = (window_dates[-1] - window_dates[0]).days
+    else:
+        window_span = 7  # Если одно занятие, сдвигаем на неделю
+
+    prev_ref = (window_dates[0] - timedelta(days=window_span)).strftime('%Y-%m-%d') if window_dates else (today - timedelta(days=7)).strftime('%Y-%m-%d')
+    next_ref = (window_dates[-1] + timedelta(days=window_span)).strftime('%Y-%m-%d') if window_dates else (today + timedelta(days=7)).strftime('%Y-%m-%d')
+
     context = {
         'groups': Group.objects.filter(is_active=True),
         'selected_group': group,
@@ -227,8 +233,8 @@ def attendance_view(request):
         'week_data': week_data,
         'children_data': children_data,
         'ref_date': ref_date,
-        'prev_ref': (window_dates[0] - timedelta(days=1)).strftime('%Y-%m-%d') if window_dates else today.strftime('%Y-%m-%d'),
-        'next_ref': (window_dates[-1] + timedelta(days=1)).strftime('%Y-%m-%d') if window_dates else today.strftime('%Y-%m-%d'),
+        'prev_ref': prev_ref,
+        'next_ref': next_ref,
         'today': today,
         'page': 'attendance'
     }
