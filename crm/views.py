@@ -218,10 +218,7 @@ def attendance_view(request):
         })
 
     # 7. Переключатель дат: сдвигаем на размер окна
-    if len(window_dates) >= 2:
-        window_span = (window_dates[-2] - window_dates[0]).days
-    else:
-        window_span = 7  # Если одно занятие, сдвигаем на неделю
+    window_span = 7  # Если одно занятие, сдвигаем на неделю
 
     prev_ref = (window_dates[0] - timedelta(days=window_span)).strftime('%Y-%m-%d') if window_dates else (today - timedelta(days=7)).strftime('%Y-%m-%d')
     next_ref = (window_dates[-1] + timedelta(days=window_span)).strftime('%Y-%m-%d') if window_dates else (today + timedelta(days=7)).strftime('%Y-%m-%d')
@@ -475,33 +472,55 @@ def child_card_view(request, child_id):
     """Просмотр карточки ребенка"""
     child = get_object_or_404(Child, id=child_id)
 
-    # Получаем связанные данные
     subscriptions = child.subscriptions.all().order_by('-start_date')
-    attendances = child.attendances.all().order_by('-date')[:50]  # Последние 50 посещений
+    attendances = child.attendances.all().order_by('-date')[:50]
     ranks = child.ranks.all().order_by('-year')
+    competitions = child.competition_entries.all().select_related('competition').order_by('-competition__date')[:20]
+    camps = child.camp_stays.all().select_related('camp').order_by('-start_date')
 
-    # Статистика
     active_sub = child.active_subscription()
     sessions_left = child.sessions_left()
     debt = child.debt()
+    balance = child.balance()
+    missed_pct = child.missed_percent()
+    nearest_exp = child.nearest_expiry()
+    promos = child.active_promos()
+    groups_list = Group.objects.filter(is_active=True)
+
+    # Форма смены группы
+    group_change_form = None
+    if request.method == 'POST' and 'change_group' in request.POST:
+        new_group_id = request.POST.get('new_group')
+        if new_group_id:
+            new_group = get_object_or_404(Group, id=new_group_id)
+            child.group = new_group
+            child.save(update_fields=['group'])
+            messages.success(request, f'Ребенок переведен в группу "{new_group.name}"')
+            return redirect('child_card', child_id=child.id)
 
     context = {
         'child': child,
         'subscriptions': subscriptions,
         'attendances': attendances,
         'ranks': ranks,
+        'competitions': competitions,
+        'camps': camps,
         'active_sub': active_sub,
         'sessions_left': sessions_left,
         'debt': debt,
+        'balance': balance,
+        'missed_percent': missed_pct,
+        'nearest_expiry': nearest_exp,
+        'promos': promos,
+        'groups_list': groups_list,
         'page': 'child_card'
     }
     return render(request, 'crm/child_card.html', context)
 
+
 @login_required
 def child_edit_view(request, child_id):
-    """Редактирование ребенка"""
     child = get_object_or_404(Child, id=child_id)
-
     if request.method == 'POST':
         form = ChildForm(request.POST, request.FILES, instance=child)
         if form.is_valid():
@@ -510,17 +529,11 @@ def child_edit_view(request, child_id):
             return redirect('child_card', child_id=child.id)
     else:
         form = ChildForm(instance=child)
+    return render(request, 'crm/child_edit.html', {'form': form, 'child': child, 'page': 'child_edit'})
 
-    context = {
-        'form': form,
-        'child': child,
-        'page': 'child_edit'
-    }
-    return render(request, 'crm/child_edit.html', context)
 
 @login_required
 def child_create_view(request):
-    """Создание нового ребенка"""
     if request.method == 'POST':
         form = ChildForm(request.POST, request.FILES)
         if form.is_valid():
@@ -529,52 +542,34 @@ def child_create_view(request):
             return redirect('child_card', child_id=child.id)
     else:
         form = ChildForm()
-
-    context = {
-        'form': form,
-        'page': 'child_create'
-    }
-    return render(request, 'crm/child_edit.html', context)
+    return render(request, 'crm/child_edit.html', {'form': form, 'page': 'child_create'})
 
 @login_required
 def child_delete_view(request, child_id):
-    """Удаление ребенка"""
     child = get_object_or_404(Child, id=child_id)
-
     if request.method == 'POST':
         child_name = f"{child.last_name} {child.first_name}"
         child.delete()
         messages.success(request, f'Ребенок {child_name} удален')
         return redirect('attendance')
+    return render(request, 'crm/child_delete.html', {'child': child, 'page': 'child_delete'})
 
-    context = {
-        'child': child,
-        'page': 'child_delete'
-    }
-    return render(request, 'crm/child_delete.html', context)
+
 
 @login_required
 def add_subscription_view(request, child_id):
-    """Добавление абонемента"""
     child = get_object_or_404(Child, id=child_id)
-
     if request.method == 'POST':
         form = SubscriptionForm(request.POST)
         if form.is_valid():
-            subscription = form.save(commit=False)
-            subscription.child = child
-            subscription.save()
+            sub = form.save(commit=False)
+            sub.child = child
+            sub.save()
             messages.success(request, 'Абонемент добавлен')
             return redirect('child_card', child_id=child.id)
     else:
         form = SubscriptionForm()
-
-    context = {
-        'form': form,
-        'child': child,
-        'page': 'add_subscription'
-    }
-    return render(request, 'crm/add_subscription.html', context)
+    return render(request, 'crm/add_subscription.html', {'form': form, 'child': child, 'page': 'add_subscription'})
 
 
 from django.shortcuts import render, get_object_or_404, redirect

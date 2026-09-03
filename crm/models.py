@@ -97,9 +97,7 @@ class Child(models.Model):
     last_name  = models.CharField("Фамилия", max_length=100)
     first_name = models.CharField("Имя", max_length=100)
     patronymic = models.CharField("Отчество", max_length=100, blank=True)
-    birth_year = models.PositiveSmallIntegerField("Год рождения") # говно поле
-    birth_date = models.DateField("Дата рождения", blank=True, null=True, 
-                                   help_text="Для точного расчета возраста")
+    birth_date = models.DateField("Дата рождения", blank=True, null=True)
     address    = models.CharField("Адрес проживания", max_length=255, blank=True)
     parent_name  = models.CharField("Родитель", max_length=200, blank=True)
     parent_phone = models.CharField("Телефон родителя", max_length=20, blank=True)
@@ -124,7 +122,6 @@ class Child(models.Model):
     def __str__(self):
         return f"{self.last_name} {self.first_name}"
 
-    # ---- вычисляемые поля карточки ----
     @property
     def trainer(self):
         return self.group.trainer if self.group else None
@@ -144,128 +141,119 @@ class Child(models.Model):
             if months < 0:
                 years -= 1
                 months += 12
-            
             if years == 0:
                 return f"{months} мес."
             elif months == 0:
                 return f"{years} г."
             else:
                 return f"{years} г. {months} мес."
-        else:
-            # Если только год рождения
-            age = timezone.localdate().year - self.birth_year
-            return f"{age} г."
+        return "—"
 
     def has_certificate(self):
-        """Есть ли справка"""
         return bool(self.certificate)
 
     def sessions_left(self):
-        """Остаток занятий по активным абонементам."""
         today = timezone.localdate()
         left = 0
         for sub in self.subscriptions.filter(end_date__gte=today):
             used = self.attendances.filter(
                 status__in=("present", "absent"),
-                date__gte=sub.start_date, date__lte=today  # ВАЖНО: до сегодня, не до end_date
+                date__gte=sub.start_date, date__lte=today
             ).count()
             left += max(0, sub.sessions_total - used)
         return left
 
     def has_class_today(self):
-        """Есть ли сегодня занятие по расписанию."""
         today = timezone.localdate()
         if not self.group:
             return False
         return ScheduleSlot.objects.filter(group=self.group, weekday=today.weekday()).exists()
 
     def has_mark_today(self):
-        """Есть ли отметка за сегодня."""
         today = timezone.localdate()
         return self.attendances.filter(
-            date=today, 
-            status__in=('present', 'absent')
+            date=today, status__in=('present', 'absent')
         ).exists()
 
     def effective_sessions_left(self):
-        """
-        Реальный остаток с учётом 'проблемы сегодняшней неопределенности'.
-        Если сегодня есть занятие по расписанию, но отметки нет — считаем как -1.
-        """
         left = self.sessions_left()
         if self.has_class_today() and not self.has_mark_today():
             return max(0, left - 1)
         return left
 
     def projected_end_date(self):
-        """Дата последнего занятия по текущему абонементу."""
         left = self.effective_sessions_left()
         if left <= 0:
             return None
-
         active_sub = self.active_subscription()
         if not active_sub or not self.group:
             return None
-
-        # Начинаем от сегодня (включая сегодня как возможное занятие)
         start = timezone.localdate()
         return calculate_projected_end_date(self.group, start, left)
 
     def sessions_left_on_date(self, target_date):
-        """
-        Сколько занятий останется на target_date.
-        """
         left = self.effective_sessions_left()
         if left <= 0 or not self.group:
             return 0
-
         today = timezone.localdate()
-        
         if target_date <= today:
             return left
-            
-        # Считаем занятия от завтра до target_date включительно
         slots = ScheduleSlot.objects.filter(group=self.group)
         count = 0
         current = today + timedelta(days=1)
-        
         while current <= target_date:
             for slot in slots:
                 if current.weekday() == slot.weekday:
                     count += 1
             current += timedelta(days=1)
-        
         return max(0, left - count)
 
     def debt_sessions(self):
-        """Сколько занятий ребенок сходил сверх оплаченного."""
-        # Все абонементы (не только активные) — считаем общее количество оплаченных занятий
         paid_sessions = sum(sub.sessions_total for sub in self.subscriptions.all())
-        # Сколько занятий фактически посещено (или отмечено как пропуск)
         used_sessions = self.attendances.filter(status__in=("present", "absent")).count()
         return max(0, used_sessions - paid_sessions)
 
     def debt(self):
-        """Сумма долга в рублях = сверхлимитные занятия × цена за занятие."""
         debt_sess = self.debt_sessions()
         if debt_sess == 0:
             return Decimal(0)
-        # Берем цену за занятие из последнего абонемента
         last_sub = self.subscriptions.order_by('-start_date').first()
         if not last_sub or last_sub.sessions_total == 0:
             return Decimal(0)
         price_per_session = last_sub.price / last_sub.sessions_total
         return Decimal(debt_sess) * price_per_session
 
-        def missed_percent(self):
-            present = self.attendances.filter(status="present").count()
-            absent = self.attendances.filter(status="absent").count()
-            total = present + absent
-            return round(absent * 100 / total) if total else 0
+    def missed_percent(self):
+        """Процент пропущенных занятий."""
+        present = self.attendances.filter(status="present").count()
+        absent = self.attendances.filter(status="absent").count()
+        total = present + absent
+        return round(absent * 100 / total) if total else 0
 
-        def nearest_expiry(self):
-            sub = self.active_subscription()
-            return sub.end_date if sub else None
+    def nearest_expiry(self):
+        """Ближайшая дата окончания абонемента."""
+        today = timezone.localdate()
+        sub = self.subscriptions.filter(end_date__gte=today).order_by("end_date").first()
+        return sub.end_date if sub else None
+
+    def active_promos(self):
+        """Активные акции по абонементам."""
+        today = timezone.localdate()
+        return self.subscriptions.filter(
+            end_date__gte=today, promo__isnull=False
+        ).exclude(promo="").values_list('promo', 'end_date')
+
+    def total_paid(self):
+        """Общая сумма оплат."""
+        return self.payments.aggregate(s=Sum("amount"))["s"] or Decimal(0)
+
+    def total_spent(self):
+        """Общая сумма абонементов."""
+        return self.subscriptions.aggregate(s=Sum("price"))["s"] or Decimal(0)
+
+    def balance(self):
+        """Баланс = оплаты - абонементы (положительный = переплата)."""
+        return self.total_paid() - self.total_spent()
 
 
 class ChildRank(models.Model):
