@@ -120,10 +120,10 @@ class CampStayInline(admin.TabularInline):
 @admin.register(Child)
 class ChildAdmin(admin.ModelAdmin):
     list_display = (
-        "last_name", "first_name", "patronymic", "birth_year","birth_date",
+        "last_name", "first_name", "patronymic","birth_date",
         "parent_name", "parent_phone", "group", "status", "debt",
     )
-    list_filter = ("status", "group", "birth_year", "trial_from")
+    list_filter = ("status", "group", "trial_from")
     search_fields = ("last_name", "first_name", "patronymic", "parent_name", "parent_phone")
     autocomplete_fields = ["group"]
     ordering = ("last_name", "first_name")
@@ -137,7 +137,7 @@ class ChildAdmin(admin.ModelAdmin):
     ]
     fieldsets = (
         ("Основное", {
-            "fields": ("last_name", "first_name", "patronymic", "birth_year","birth_date", "status", "group")
+            "fields": ("last_name", "first_name", "patronymic", "birth_date", "status", "group")
         }),
         ("Контакты", {
             "fields": ("parent_name", "parent_phone", "address")
