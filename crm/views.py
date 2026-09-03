@@ -142,7 +142,7 @@ def attendance_view(request):
 
     # 3. Генерируем даты
     start_of_week = ref_date - timedelta(days=ref_date.weekday())
-    all_class_dates = generate_class_dates(group, start_of_week, limit=40)
+    all_class_dates = generate_class_dates(group, start_of_week, limit=60)
 
     if not all_class_dates:
         return render(request, 'crm/attendance.html', {
@@ -219,7 +219,7 @@ def attendance_view(request):
 
     # 7. Переключатель дат: сдвигаем на размер окна
     if len(window_dates) >= 2:
-        window_span = (window_dates[-1] - window_dates[0]).days
+        window_span = (window_dates[-2] - window_dates[0]).days
     else:
         window_span = 7  # Если одно занятие, сдвигаем на неделю
 
