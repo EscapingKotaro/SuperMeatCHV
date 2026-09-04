@@ -794,3 +794,25 @@ class AuditEvent(models.Model):
 
     def __str__(self):
         return self.description
+
+
+from django.contrib.auth.models import AbstractUser
+from django.db import models
+
+
+class User(AbstractUser):
+    class Role(models.TextChoices):
+        MANAGER = 'manager', 'Менеджер'
+        SENIOR_MANAGER = 'senior_manager', 'Старший менеджер'
+        CHIEF = 'chief', 'Начальник'
+        ADMIN = 'admin', 'Админ'
+
+    role = models.CharField(
+        max_length=20,
+        choices=Role.choices,
+        default=Role.MANAGER,
+        verbose_name='Роль',
+    )
+
+    def __str__(self):
+        return f"{self.username} ({self.get_role_display()})"
