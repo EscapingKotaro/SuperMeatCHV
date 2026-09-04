@@ -814,5 +814,11 @@ class User(AbstractUser):
         verbose_name='Роль',
     )
 
+    
+    branch = models.ForeignKey("Branch", on_delete=models.SET_NULL, blank=True, null=True,
+                               related_name="staff", verbose_name="филиал")
+
     def __str__(self):
         return f"{self.username} ({self.get_role_display()})"
+
+    
