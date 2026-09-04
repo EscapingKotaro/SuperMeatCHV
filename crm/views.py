@@ -412,6 +412,80 @@ def cancel_attendance_view(request):
     
     return JsonResponse({'status': 'error', 'message': 'Ошибка'}, status=400)
 
+@login_required
+@require_POST
+def mark_attendance_view(request):
+    """Поставить или изменить отметку посещения."""
+
+    child_id = request.POST.get("child_id")
+    date_str = request.POST.get("date")
+    status = request.POST.get("status")
+
+    if not child_id or not date_str or not status:
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "Не передан child_id, date или status",
+            },
+            status=400,
+        )
+
+    try:
+        mark_date = date.fromisoformat(date_str)
+    except ValueError:
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "Некорректная дата",
+            },
+            status=400,
+        )
+
+    child = get_object_or_404(Child, pk=child_id)
+
+    allowed_statuses = {
+        Attendance.Status.PRESENT,
+        Attendance.Status.ABSENT,
+        Attendance.Status.EXCUSED,
+        Attendance.Status.FROZEN,
+        Attendance.Status.VACATION,
+    }
+
+    if status not in allowed_statuses:
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "Некорректный статус",
+            },
+            status=400,
+        )
+
+    charge = Decimal("0")
+
+    if (
+        status == Attendance.Status.PRESENT
+        and not child.active_subscription()
+        and child.group
+    ):
+        charge = child.group.single_session_price
+
+    attendance, created = Attendance.objects.update_or_create(
+        child=child,
+        date=mark_date,
+        slot=None,
+        defaults={
+            "status": status,
+            "charge_amount": charge,
+        },
+    )
+
+    return JsonResponse(
+        {
+            "status": "ok",
+            "created": created,
+            "attendance_id": attendance.pk,
+        }
+    )
 
 @login_required
 def attendance_page(request):

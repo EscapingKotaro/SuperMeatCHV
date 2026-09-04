@@ -247,61 +247,766 @@
 </div>
 
 <script>
-let contextMenuData = null;
+(() => {
+    "use strict";
 
-function showCancelMenu(event, childId, date) {
-    event.preventDefault();
-    contextMenuData = { childId, date };
-    
-    const menu = document.getElementById('context-menu');
-    // Ограничиваем, чтобы меню не улетало за правый край экрана
-    let left = event.pageX;
-    let top = event.pageY;
-    if (left + 180 > window.innerWidth) left -= 180;
-    
-    menu.style.left = left + 'px';
-    menu.style.top = top + 'px';
-    menu.classList.remove('hidden');
-    lucide.createIcons();
-}
+    const MARK_URL = "{% url 'mark_attendance' %}";
+    const CANCEL_URL = "{% url 'cancel_attendance' %}";
 
-function closeContextMenu() {
-    document.getElementById('context-menu').classList.add('hidden');
-    contextMenuData = null;
-}
+    let contextMenuData = null;
+    const savingButtons = new WeakSet();
 
-function cancelAttendance() {
-    if (!contextMenuData) return;
-    
-    fetch('{% url "cancel_attendance" %}', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/x-www-form-urlencoded',
-            'X-CSRFToken': '{{ csrf_token }}'
+    // =========================================================
+    // СОСТОЯНИЯ ЯЧЕЙКИ
+    // =========================================================
+
+    const STATES = {
+        0: {
+            status: "",
+            symbol: "",
+            classes: [
+                "bg-slate-100",
+                "text-slate-400"
+            ]
         },
-        body: `child_id=${contextMenuData.childId}&date=${contextMenuData.date}`
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.status === 'ok') {
-            location.reload();
-        } else {
-            alert('Ошибка: ' + data.message);
-        }
-    })
-    .catch(error => {
-        alert('Ошибка сети');
-    });
-    
-    closeContextMenu();
-}
 
-// Закрытие контекстного меню при клике вне его
-document.addEventListener('click', function(e) {
-    const menu = document.getElementById('context-menu');
-    if (!menu.contains(e.target)) {
-        closeContextMenu();
+        1: {
+            status: "present",
+            symbol: "+",
+            classes: [
+                "bg-emerald-100",
+                "text-emerald-700"
+            ]
+        },
+
+        2: {
+            status: "absent",
+            symbol: "×",
+            classes: [
+                "bg-red-100",
+                "text-red-700"
+            ]
+        },
+
+        3: {
+            status: "frozen",
+            symbol: "❄",
+            classes: [
+                "bg-blue-100",
+                "text-blue-700"
+            ]
+        },
+
+        4: {
+            status: "vacation",
+            symbol: "О",
+            classes: [
+                "bg-amber-100",
+                "text-amber-700"
+            ]
+        },
+
+        5: {
+            status: "excused",
+            symbol: "У",
+            classes: [
+                "bg-yellow-100",
+                "text-yellow-700"
+            ]
+        }
+    };
+
+
+    const ALL_STATE_CLASSES = [
+        "bg-slate-100",
+        "text-slate-400",
+
+        "bg-emerald-100",
+        "text-emerald-700",
+
+        "bg-red-100",
+        "text-red-700",
+
+        "bg-blue-100",
+        "text-blue-700",
+
+        "bg-amber-100",
+        "text-amber-700",
+
+        "bg-yellow-100",
+        "text-yellow-700"
+    ];
+
+
+    // =========================================================
+    // CSRF
+    // =========================================================
+
+    function getCsrfToken() {
+        // Сначала пробуем взять csrf_token из формы
+        const csrfInput = document.querySelector(
+            'input[name="csrfmiddlewaretoken"]'
+        );
+
+        if (csrfInput && csrfInput.value) {
+            return csrfInput.value;
+        }
+
+        // Если формы нет — берём csrftoken из cookie
+        const cookies = document.cookie
+            .split(";")
+            .map(cookie => cookie.trim());
+
+        const csrfCookie = cookies.find(
+            cookie => cookie.startsWith("csrftoken=")
+        );
+
+        if (!csrfCookie) {
+            return "";
+        }
+
+        return decodeURIComponent(
+            csrfCookie.substring("csrftoken=".length)
+        );
     }
-});
+
+
+    // =========================================================
+    // ОТРИСОВКА СОСТОЯНИЯ
+    // =========================================================
+
+    function paintAttendanceButton(button, state) {
+        const config = STATES[state];
+
+        if (!config) {
+            console.error(
+                "Неизвестное состояние attendance:",
+                state
+            );
+            return;
+        }
+
+        button.classList.remove(
+            ...ALL_STATE_CLASSES
+        );
+
+        button.classList.add(
+            ...config.classes
+        );
+
+        button.textContent = config.symbol;
+
+        button.dataset.state = String(state);
+    }
+
+
+    // =========================================================
+    // СОХРАНЕНИЕ ОТМЕТКИ
+    // =========================================================
+
+    async function markAttendance(button) {
+        if (!button) {
+            return;
+        }
+
+        if (savingButtons.has(button)) {
+            return;
+        }
+
+        const childId = button.dataset.childId;
+        const date = button.dataset.date;
+
+        const currentState = Number(
+            button.dataset.state || "0"
+        );
+
+        if (!childId) {
+            console.error(
+                "У ячейки отсутствует data-child-id",
+                button
+            );
+
+            alert(
+                "Ошибка табеля: не найден ID ребёнка."
+            );
+
+            return;
+        }
+
+        if (!date) {
+            console.error(
+                "У ячейки отсутствует data-date",
+                button
+            );
+
+            alert(
+                "Ошибка табеля: не найдена дата."
+            );
+
+            return;
+        }
+
+
+        /*
+         * Левый клик:
+         *
+         * пусто
+         *   ↓
+         * пришёл
+         *   ↓
+         * пропуск
+         *   ↓
+         * заморозка
+         *   ↓
+         * отпуск
+         *   ↓
+         * уважительная
+         *   ↓
+         * пришёл
+         *
+         * Полное удаление отметки —
+         * через правый клик.
+         */
+
+        let nextState = currentState + 1;
+
+        if (nextState > 5) {
+            nextState = 1;
+        }
+
+        const nextConfig = STATES[nextState];
+
+        if (!nextConfig) {
+            return;
+        }
+
+        savingButtons.add(button);
+
+        button.disabled = true;
+        button.classList.add("opacity-60");
+
+
+        try {
+            const body = new URLSearchParams();
+
+            body.append(
+                "child_id",
+                childId
+            );
+
+            body.append(
+                "date",
+                date
+            );
+
+            body.append(
+                "status",
+                nextConfig.status
+            );
+
+
+            const response = await fetch(
+                MARK_URL,
+                {
+                    method: "POST",
+
+                    credentials: "same-origin",
+
+                    headers: {
+                        "Content-Type":
+                            "application/x-www-form-urlencoded;charset=UTF-8",
+
+                        "X-CSRFToken":
+                            getCsrfToken(),
+
+                        "X-Requested-With":
+                            "XMLHttpRequest"
+                    },
+
+                    body: body.toString()
+                }
+            );
+
+
+            let data = null;
+
+            try {
+                data = await response.json();
+            } catch (error) {
+                console.error(
+                    "Сервер вернул не JSON:",
+                    error
+                );
+            }
+
+
+            if (!response.ok) {
+                const message =
+                    data?.message ||
+                    `HTTP ${response.status}`;
+
+                throw new Error(message);
+            }
+
+
+            if (
+                data &&
+                data.status &&
+                data.status !== "ok"
+            ) {
+                throw new Error(
+                    data.message ||
+                    "Не удалось сохранить отметку"
+                );
+            }
+
+
+            // Обновляем ячейку без перезагрузки страницы
+            paintAttendanceButton(
+                button,
+                nextState
+            );
+
+        } catch (error) {
+            console.error(
+                "Ошибка markAttendance:",
+                error
+            );
+
+            alert(
+                "Не удалось сохранить отметку:\n" +
+                error.message
+            );
+
+        } finally {
+            savingButtons.delete(button);
+
+            button.disabled = false;
+
+            button.classList.remove(
+                "opacity-60"
+            );
+        }
+    }
+
+
+    // =========================================================
+    // ЛЕВЫЙ КЛИК ПО ЯЧЕЙКЕ
+    // =========================================================
+
+    /*
+     * Используем capture=true.
+     *
+     * Это важно:
+     * у тебя, судя по /attendance/undefined,
+     * в base.html или общем app.js остался
+     * старый обработчик [data-attendance].
+     *
+     * Этот обработчик перехватывает клик раньше,
+     * чтобы старый JS больше не создавал
+     * /attendance/undefined.
+     */
+
+    document.addEventListener(
+        "click",
+        function(event) {
+            const button = event.target.closest(
+                "[data-attendance]"
+            );
+
+            if (!button) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            markAttendance(button);
+        },
+        true
+    );
+
+
+    // =========================================================
+    // КОНТЕКСТНОЕ МЕНЮ
+    // =========================================================
+
+    window.showCancelMenu = function(
+        event,
+        childId,
+        date
+    ) {
+        event.preventDefault();
+        event.stopPropagation();
+
+        if (!childId || !date) {
+            console.error(
+                "showCancelMenu получил некорректные данные:",
+                {
+                    childId,
+                    date
+                }
+            );
+
+            return;
+        }
+
+        contextMenuData = {
+            childId: String(childId),
+            date: String(date)
+        };
+
+
+        const menu = document.getElementById(
+            "context-menu"
+        );
+
+        if (!menu) {
+            console.error(
+                "Не найден #context-menu"
+            );
+
+            return;
+        }
+
+
+        menu.classList.remove("hidden");
+
+
+        // Используем clientX/clientY,
+        // потому что меню position: fixed
+        let left = event.clientX;
+        let top = event.clientY;
+
+
+        const menuWidth =
+            menu.offsetWidth || 180;
+
+        const menuHeight =
+            menu.offsetHeight || 90;
+
+
+        // Не даём меню выйти за правую границу
+        if (
+            left + menuWidth >
+            window.innerWidth
+        ) {
+            left =
+                window.innerWidth -
+                menuWidth -
+                10;
+        }
+
+
+        // Не даём меню выйти за нижнюю границу
+        if (
+            top + menuHeight >
+            window.innerHeight
+        ) {
+            top =
+                window.innerHeight -
+                menuHeight -
+                10;
+        }
+
+
+        left = Math.max(
+            5,
+            left
+        );
+
+        top = Math.max(
+            5,
+            top
+        );
+
+
+        menu.style.left =
+            `${left}px`;
+
+        menu.style.top =
+            `${top}px`;
+
+
+        if (
+            window.lucide &&
+            typeof window.lucide.createIcons ===
+                "function"
+        ) {
+            window.lucide.createIcons();
+        }
+    };
+
+
+    // =========================================================
+    // ЗАКРЫТИЕ КОНТЕКСТНОГО МЕНЮ
+    // =========================================================
+
+    window.closeContextMenu = function() {
+        const menu = document.getElementById(
+            "context-menu"
+        );
+
+        if (menu) {
+            menu.classList.add(
+                "hidden"
+            );
+        }
+
+        contextMenuData = null;
+    };
+
+
+    // =========================================================
+    // УДАЛЕНИЕ ОТМЕТКИ
+    // =========================================================
+
+    window.cancelAttendance =
+        async function() {
+
+            if (!contextMenuData) {
+                console.warn(
+                    "cancelAttendance: contextMenuData отсутствует"
+                );
+
+                return;
+            }
+
+
+            /*
+             * Копируем значения СЕЙЧАС.
+             *
+             * Иначе closeContextMenu()
+             * обнулит contextMenuData.
+             */
+            const childId =
+                contextMenuData.childId;
+
+            const date =
+                contextMenuData.date;
+
+
+            if (!childId || !date) {
+                console.error(
+                    "Некорректные данные отмены:",
+                    {
+                        childId,
+                        date
+                    }
+                );
+
+                alert(
+                    "Не удалось определить ребёнка или дату."
+                );
+
+                return;
+            }
+
+
+            try {
+                const body =
+                    new URLSearchParams();
+
+                body.append(
+                    "child_id",
+                    childId
+                );
+
+                body.append(
+                    "date",
+                    date
+                );
+
+
+                const response =
+                    await fetch(
+                        CANCEL_URL,
+                        {
+                            method: "POST",
+
+                            credentials:
+                                "same-origin",
+
+                            headers: {
+                                "Content-Type":
+                                    "application/x-www-form-urlencoded;charset=UTF-8",
+
+                                "X-CSRFToken":
+                                    getCsrfToken(),
+
+                                "X-Requested-With":
+                                    "XMLHttpRequest"
+                            },
+
+                            body:
+                                body.toString()
+                        }
+                    );
+
+
+                let data = null;
+
+                try {
+                    data =
+                        await response.json();
+                } catch (error) {
+                    console.error(
+                        "Ответ cancelAttendance не JSON:",
+                        error
+                    );
+                }
+
+
+                if (!response.ok) {
+                    const message =
+                        data?.message ||
+                        `HTTP ${response.status}`;
+
+                    throw new Error(
+                        message
+                    );
+                }
+
+
+                if (
+                    data &&
+                    data.status !== "ok"
+                ) {
+                    throw new Error(
+                        data.message ||
+                        "Не удалось удалить отметку"
+                    );
+                }
+
+
+                /*
+                 * Находим конкретную ячейку
+                 * этого ребёнка и этой даты.
+                 */
+                const selector =
+                    `[data-attendance]` +
+                    `[data-child-id="${CSS.escape(childId)}"]` +
+                    `[data-date="${CSS.escape(date)}"]`;
+
+
+                const button =
+                    document.querySelector(
+                        selector
+                    );
+
+
+                if (button) {
+                    paintAttendanceButton(
+                        button,
+                        0
+                    );
+                }
+
+
+                closeContextMenu();
+
+            } catch (error) {
+                console.error(
+                    "Ошибка cancelAttendance:",
+                    error
+                );
+
+                alert(
+                    "Не удалось отменить отметку:\n" +
+                    error.message
+                );
+            }
+        };
+
+
+    // =========================================================
+    // КЛИК ВНЕ МЕНЮ
+    // =========================================================
+
+    document.addEventListener(
+        "click",
+        function(event) {
+            const menu =
+                document.getElementById(
+                    "context-menu"
+                );
+
+            if (!menu) {
+                return;
+            }
+
+            if (
+                menu.classList.contains(
+                    "hidden"
+                )
+            ) {
+                return;
+            }
+
+            if (
+                !menu.contains(
+                    event.target
+                )
+            ) {
+                closeContextMenu();
+            }
+        }
+    );
+
+
+    // =========================================================
+    // ESC ЗАКРЫВАЕТ МЕНЮ
+    // =========================================================
+
+    document.addEventListener(
+        "keydown",
+        function(event) {
+            if (
+                event.key ===
+                "Escape"
+            ) {
+                closeContextMenu();
+            }
+        }
+    );
+
+
+    // =========================================================
+    // ПРИ СКРОЛЛЕ УБИРАЕМ МЕНЮ
+    // =========================================================
+
+    window.addEventListener(
+        "scroll",
+        function() {
+            const menu =
+                document.getElementById(
+                    "context-menu"
+                );
+
+            if (
+                menu &&
+                !menu.classList.contains(
+                    "hidden"
+                )
+            ) {
+                closeContextMenu();
+            }
+        },
+        true
+    );
+
+
+    console.log(
+        "Attendance JS initialized",
+        {
+            markUrl: MARK_URL,
+            cancelUrl: CANCEL_URL,
+            cells:
+                document.querySelectorAll(
+                    "[data-attendance]"
+                ).length
+        }
+    );
+})();
 </script>
-{% endblock %}
+{% endblock content %}

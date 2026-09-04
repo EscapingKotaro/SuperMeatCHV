@@ -22,6 +22,19 @@ urlpatterns = [
     # =========================================================
     # В attendance_view у тебя нет @login_required,
     # поэтому защищаем view прямо здесь.
+    
+    path(
+        "attendance/mark/",
+        views.mark_attendance_view,
+        name="mark_attendance",
+    ),
+
+    path(
+        "attendance/cancel/",
+        views.cancel_attendance_view,
+        name="cancel_attendance",
+    ),
+    
     path(
         "",
         login_required(views.attendance_view, login_url="login"),
@@ -34,6 +47,18 @@ urlpatterns = [
     ),
 
     # Работа с посещаемостью
+    path(
+        "attendance/cancel/",
+        views.cancel_attendance_view,
+        name="cancel_attendance",
+    ),
+
+    path(
+        "attendance/mark/",
+        views.mark_attendance_view,
+        name="mark_attendance",
+    ),
+
     path(
         "attendance/cancel/",
         views.cancel_attendance_view,
