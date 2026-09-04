@@ -47,28 +47,12 @@
 <a class="nav-pill {% if page == 'groups' %}active{% endif %}" href="{% url 'group_list' %}">
     <i data-lucide="users"></i>Группы
 </a>
-                <div class="relative group/nav shrink-0">
-    <a class="nav-pill {% if page == 'statistics' or page == 'payments_table' or page == 'expenses_table' or page == 'salaries' %}active{% endif %}" href="{% url 'statistics' %}">
-        <i data-lucide="chart-no-axes-combined"></i>Статистика
-        <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
-    </a>
-    <div class="invisible absolute left-0 top-full z-40 pt-1 opacity-0 transition-all group-hover/nav:visible group-hover/nav:opacity-100">
-        <div class="w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-            <a href="{% url 'statistics' %}" class="menu-item {% if page == 'statistics' %}bg-slate-100{% endif %}">
-                <i data-lucide="chart-no-axes-combined"></i>Статистика
-            </a>
-            <a href="{% url 'payments_table' %}" class="menu-item {% if page == 'payments_table' %}bg-slate-100{% endif %}">
-                <i data-lucide="wallet-cards"></i>Предварительные оплаты
-            </a>
-            <a href="{% url 'expenses_table' %}" class="menu-item {% if page == 'expenses_table' %}bg-slate-100{% endif %}">
-                <i data-lucide="receipt-text"></i>Расходы
-            </a>
-            <a href="{% url 'salaries' %}" class="menu-item {% if page == 'salaries' %}bg-slate-100{% endif %}">
-                <i data-lucide="banknote"></i>ЗП тренеров
-            </a>
-        </div>
-    </div>
-</div>
+                <!-- Кнопка с выпадающим меню (без ссылки!) -->
+<button type="button" data-stats-toggle
+        class="nav-pill cursor-pointer {% if page == 'statistics' or page == 'payments_table' or page == 'expenses_table' or page == 'salaries' %}active{% endif %}">
+    <i data-lucide="chart-no-axes-combined"></i>Статистика
+    <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
+</button>
                 <a class="nav-pill {% if page == 'payments' %}active{% endif %}" href="/test/payments/">
                     <i data-lucide="wallet-cards"></i>Продления
                 </a>
@@ -133,6 +117,22 @@
         {% block content %}{% endblock %}
     </main>
 
+    <!-- Выпадающее меню статистики (вне шапки, чтобы не резалось) -->
+<div id="stats-menu" class="hidden fixed z-50 w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+    <a href="{% url 'statistics' %}" class="menu-item {% if page == 'statistics' %}bg-slate-100{% endif %}">
+        <i data-lucide="chart-no-axes-combined"></i>Статистика
+    </a>
+    <a href="{% url 'payments_table' %}" class="menu-item {% if page == 'payments_table' %}bg-slate-100{% endif %}">
+        <i data-lucide="wallet-cards"></i>Предварительные оплаты
+    </a>
+    <a href="{% url 'expenses_table' %}" class="menu-item {% if page == 'expenses_table' %}bg-slate-100{% endif %}">
+        <i data-lucide="receipt-text"></i>Расходы
+    </a>
+    <a href="{% url 'salaries' %}" class="menu-item {% if page == 'salaries' %}bg-slate-100{% endif %}">
+        <i data-lucide="banknote"></i>ЗП тренеров
+    </a>
+</div>
+
     <!-- Модальные окна (фон) -->
     <div data-modal-backdrop class="fixed inset-0 z-40 hidden bg-slate-950/35 backdrop-blur-sm"></div>
     {% block modals %}{% endblock %}
@@ -144,5 +144,37 @@
     </div>
 
     <script src="{% static 'crm/app.js' %}"></script>
+    <script>
+(function() {
+    const toggle = document.querySelector('[data-stats-toggle]');
+    const menu = document.getElementById('stats-menu');
+    if (!toggle || !menu) return;
+
+    // Открытие/закрытие по клику на кнопку
+    toggle.addEventListener('click', function(e) {
+        e.stopPropagation();
+        if (menu.classList.contains('hidden')) {
+            // Ставим меню ровно под кнопку
+            const rect = toggle.getBoundingClientRect();
+            menu.style.top = (rect.bottom + 10) + 'px';
+            menu.style.left = Math.max(8, rect.left) + 'px';
+            menu.classList.remove('hidden');
+        } else {
+            menu.classList.add('hidden');
+        }
+    });
+
+    // Закрытие при клике в любое другое место
+    document.addEventListener('click', function(e) {
+        if (!menu.contains(e.target) && !toggle.contains(e.target)) {
+            menu.classList.add('hidden');
+        }
+    });
+
+    // Закрытие при скролле и ресайзе, чтобы не висело в воздухе
+    window.addEventListener('scroll', function() { menu.classList.add('hidden'); }, true);
+    window.addEventListener('resize', function() { menu.classList.add('hidden'); });
+})();
+</script>
 </body>
 </html>
