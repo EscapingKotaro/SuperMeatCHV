@@ -1,213 +1,307 @@
 {% extends 'crm/base.html' %}
 {% block actions %}
-<button data-modal="child-modal" class="btn btn-primary">
-  <i data-lucide="user-plus">
-  </i>Добавить спортсмена</button>
-{% endblock %}
-{% block content %}
-<section class="card mb-4 p-3">
-  <form method="get" class="flex flex-wrap items-center gap-2">
-    <select name="group" class="field max-w-72 font-bold" onchange="this.form.submit()">
-      {% for group in groups %}
-      <option value="{{ group.pk }}" {% if group == selected_group %}selected{% endif %}>{{ group.name }} · {{ group.trainer.full_name }}</option>
-      {% empty %}
-      <option>Сначала создайте группу</option>
-      {% endfor %}
-    </select>
-    <input name="q" value="{{ request.GET.q }}" class="field max-w-56" placeholder="Имя или телефон">
-    <button class="btn btn-soft">
-      <i data-lucide="search">
-      </i>Найти</button>
-    <a class="btn btn-dark" href="?group={{ selected_group.pk }}&week={{ prev_week|date:'Y-m-d' }}">
-      <i data-lucide="chevron-left">
-      </i>
+<div class="flex gap-2 flex-wrap">
+    <!-- Сортировка -->
+    <div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+        <span class="text-[10px] text-slate-500 px-2 font-bold">Сорт:</span>
+        
+        <!-- Сортировка по имени (А-Я) -->
+        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=name{% if show_archived %}&show_archived=1{% endif %}" 
+           class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'name' or not sort_by %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+            А-Я
+        </a>
+        
+        <!-- Сортировка по занятиям -->
+        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=sessions{% if show_archived %}&show_archived=1{% endif %}" 
+           class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'sessions' %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+            Занятия
+        </a>
+        
+        <!-- Сортировка по долгу -->
+        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=debt{% if show_archived %}&show_archived=1{% endif %}" 
+           class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'debt' %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">
+            Долг
+        </a>
+    </div>
+
+    <!-- Переключатель Архива -->
+    {% if show_archived %}
+        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort={{ sort_by }}" class="btn btn-soft text-xs bg-amber-100 text-amber-800 border-amber-200">
+            <i data-lucide="eye"></i> Показывать активных
+        </a>
+    {% else %}
+        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort={{ sort_by }}&show_archived=1" class="btn btn-soft text-xs">
+            <i data-lucide="archive"></i> Архив
+        </a>
+    {% endif %}
+
+    <!-- Добавить на пробное -->
+    <button onclick="document.getElementById('trial-modal').classList.remove('hidden'); document.querySelector('[data-modal-backdrop]').classList.remove('hidden');" class="btn btn-soft text-xs">
+        <i data-lucide="user-plus"></i> Пробное
+    </button>
+
+    <!-- Добавить ребёнка -->
+    <a href="{% url 'child_create' %}" class="btn btn-primary text-xs">
+        <i data-lucide="user-plus"></i> Добавить
     </a>
-    <span class="btn btn-soft">{{ week_dates.0|date:"d.m" }}–{{ week_dates.13|date:"d.m" }}</span>
-    <a class="btn btn-dark" href="?group={{ selected_group.pk }}&week={{ next_week|date:'Y-m-d' }}">
-      <i data-lucide="chevron-right">
-      </i>
-    </a>
-    <a class="btn btn-soft" href="?group={{ selected_group.pk }}&week={{ week_start|date:'Y-m-d' }}&sort=remaining">По остатку</a>
-  </form>
-</section>
-<section class="card overflow-hidden">
-  <div class="table-wrap">
-    <table class="data-table min-w-[1720px] table-fixed">
-      <colgroup>
-        <col class="w-[260px]">
-        <col class="w-[150px]">
-        {% for day in week_dates %}
-        <col class="w-[74px]">
-        {% endfor %}
-        <col class="w-[130px]">
-      </colgroup>
-      <thead>
-        <tr>
-          <th class="sticky left-0 z-10 bg-[#FAFBFC]">Спортсмен</th>
-          <th>Абонемент</th>
-          {% for day in week_dates %}
-          <th class="text-center {% if day == today %}bg-orange-50 text-[#FF5C35]{% elif forloop.counter > 7 %}bg-slate-50{% endif %}">{{ day|date:"D" }}<br>
-            <b>{{ day|date:"d" }}</b>
-          </th>
-          {% endfor %}
-          <th>Окончание</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for row in children %}
-        <tr>
-          <td class="sticky left-0 bg-white">
-            <button type="button" data-modal="child-{{ row.child.pk }}" class="flex items-center gap-3 text-left">
-              <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-100 font-extrabold text-violet-700">{{ row.child.last_name|slice:":1" }}{{ row.child.first_name|slice:":1" }}</span>
-              <span>
-                <b class="block">{{ row.child }}</b>
-                <small class="text-slate-500">{{ row.child.age_display }}{% if row.child.status == 'trial' %} · Пробное{% endif %}
-                </small>
-              </span>
-            </button>
-          </td>
-          <td>
-            {% if row.subscription %}
-            <b>{{ row.left }} из {{ row.subscription.sessions_total }}</b>
-            {% else %}
-            <span class="text-slate-400">Нет абонемента</span>
-            {% endif %}
-            {% if row.debt > 0 %}
-            <small class="block text-red-600">Долг {{ row.debt }} ₽</small>
-            {% endif %}
-          </td>
-          {% for mark in row.marks %}
-          <td class="p-2 text-center align-middle {% if mark.week_number == 2 %}bg-slate-50/60{% endif %} {% if mark.is_expiry %}border-r-2 border-red-500{% endif %}">
-            <button type="button" data-attendance data-child="{{ row.child.pk }}" data-date="{{ mark.date|date:'Y-m-d' }}" data-status="{{ mark.status }}" class="attendance-cell mx-auto {{ mark.css }}">{{ mark.symbol }}</button>
-          </td>
-          {% endfor %}
-          <td>
-            {% if row.expiry %}{{ row.expiry|date:"d.m.Y" }}{% else %}—{% endif %}
-          </td>
-        </tr>
-        {% empty %}
-        <tr>
-          <td colspan="18" class="py-12 text-center text-slate-500">В группе пока нет спортсменов</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  <div class="flex flex-wrap justify-between gap-2 border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-    <span>Показаны текущая и следующая недели</span>
-    <span>Красная граница — окончание абонемента. Нажмите на ячейку и выберите отметку.</span>
-  </div>
-</section>
-<div id="attendance-picker" class="fixed z-[70] hidden w-52 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl">
-  <button class="menu-item" data-mark="present">
-    <span class="text-emerald-600">+</span>Пришёл</button>
-  <button class="menu-item" data-mark="absent">
-    <span class="text-red-600">×</span>Пропуск</button>
-  <button class="menu-item" data-mark="excused">
-    <span class="text-purple-600">У</span>Уважительная</button>
-  <button class="menu-item" data-mark="frozen">
-    <span class="text-blue-600">❄</span>Заморозка</button>
-  <button class="menu-item" data-mark="vacation">
-    <span class="text-amber-600">О</span>Отпуск</button>
-  <hr class="my-1">
-  <button class="menu-item text-slate-500" data-mark="">Очистить отметку</button>
 </div>
 {% endblock %}
-{% block modals %}
-<section id="child-modal" class="modal">
-  <form method="post">
-    {% csrf_token %}
-    <input type="hidden" name="action" value="create_child">
-    <div class="modal-head">
-      <div>
-        <b>Новый спортсмен</b>
-        <p class="text-xs text-slate-500">Добавление в группу</p>
-      </div>
-      <button type="button" data-close>
-        <i data-lucide="x">
-        </i>
-      </button>
+{% block content %}
+<section class="card mb-3 p-2">
+    <div class="flex flex-wrap items-center gap-2">
+        {% if selected_group %}
+            <select id="group-select" class="field max-w-48 font-bold text-sm" onchange="location.href='?group_id='+this.value+'&ref_date={{ ref_date|date:'Y-m-d' }}'+'&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}'">
+                {% for g in groups %}
+                    <option value="{{ g.id }}" {% if g.id == selected_group.id %}selected{% endif %}>{{ g.name }}</option>
+                {% endfor %}
+            </select>
+
+            <div class="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5">
+                <a href="?group_id={{ selected_group.id }}&ref_date={{ prev_ref }}&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}" class="grid h-7 w-7 place-items-center rounded-md hover:bg-white hover:shadow-sm transition">
+                    <i data-lucide="chevron-left" class="h-3.5 w-3.5"></i>
+                </a>
+
+                <form method="get" class="flex items-center gap-1">
+                    <input type="hidden" name="group_id" value="{{ selected_group.id }}">
+                    <input type="hidden" name="sort" value="{{ sort_by }}">
+                    {% if show_archived %}<input type="hidden" name="show_archived" value="1">{% endif %}
+                    <input type="date" name="ref_date" value="{{ ref_date|date:'Y-m-d' }}"
+                           class="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer hover:text-[#FF5C35] px-1"
+                           onchange="this.form.submit()">
+                </form>
+
+                <a href="?group_id={{ selected_group.id }}&ref_date={{ next_ref }}&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}" class="grid h-7 w-7 place-items-center rounded-md hover:bg-white hover:shadow-sm transition">
+                    <i data-lucide="chevron-right" class="h-3.5 w-3.5"></i>
+                </a>
+            </div>
+
+            <span class="text-[10px] text-slate-400">
+                {{ week_data|length }} занятий
+            </span>
+
+        {% else %}
+            <span class="text-slate-500 text-sm">Нет групп</span>
+        {% endif %}
+
+        <div class="ml-auto flex flex-wrap gap-1.5 text-[9px] font-bold text-slate-600">
+            <span class="badge bg-emerald-100 text-emerald-700 px-1.5 py-0.5">+ Пришёл</span>
+            <span class="badge bg-red-100 text-red-700 px-1.5 py-0.5">× Пропуск</span>
+            <span class="badge bg-blue-100 text-blue-700 px-1.5 py-0.5">❄ Заморозка</span>
+            <span class="badge bg-amber-100 text-amber-700 px-1.5 py-0.5">О Отпуск</span>
+        </div>
     </div>
-    <div class="modal-body grid gap-4 sm:grid-cols-2">
-      <label class="sm:col-span-2">
-        <span class="label">ФИО</span>
-        <input name="full_name" class="field" required placeholder="Иванова Алиса Сергеевна">
-      </label>
-      <label>
-        <span class="label">Год рождения</span>
-        <input name="birth_year" type="number" class="field" required>
-      </label>
-      <label>
-        <span class="label">Группа</span>
-        <select name="group_id" class="field">
-          {% for group in groups %}
-          <option value="{{ group.pk }}">{{ group.name }}</option>
-          {% endfor %}
-        </select>
-      </label>
-      <label>
-        <span class="label">Родитель</span>
-        <input name="parent_name" class="field">
-      </label>
-      <label>
-        <span class="label">Телефон родителя</span>
-        <input name="parent_phone" class="field">
-      </label>
-      <label class="sm:col-span-2 flex items-center gap-2 rounded-xl bg-fuchsia-50 p-3 text-xs">
-        <input name="trial" type="checkbox"> Пробное занятие</label>
-    </div>
-    <div class="modal-foot">
-      <button type="button" data-close class="btn btn-soft">Отмена</button>
-      <button class="btn btn-primary">Добавить</button>
-    </div>
-  </form>
 </section>
-{% for row in children %}
-<section id="child-{{ row.child.pk }}" class="modal">
-  <form method="post" enctype="multipart/form-data" action="{% url 'child_edit' row.child.pk %}">
-    {% csrf_token %}
-    <input type="hidden" name="next" value="{{ request.get_full_path }}">
-    <div class="modal-head">
-      <div>
-        <b class="text-lg">{{ row.child }}</b>
-        <p class="text-xs text-slate-500">Полная карточка спортсмена</p>
-      </div>
-      <button type="button" data-close>
-        <i data-lucide="x">
-        </i>
-      </button>
+<section class="card overflow-hidden">
+    <div class="table-wrap">
+        <table class="data-table min-w-[1200px]">
+            <thead>
+                <tr>
+                    <th class="sticky left-0 z-10 bg-[#FAFBFC] text-center w-[200px]">
+                        {% if trainer %}
+                            <div class="text-[9px] text-slate-400 font-normal uppercase tracking-wider">Преподаватель</div>
+                            <div class="font-extrabold text-slate-900 text-xs">{{ trainer.full_name }}</div>
+                        {% else %}
+                            Спортсмен
+                        {% endif %}
+                    </th>
+                    {% for entry in week_data %}
+                        <th class="text-center {% if entry.is_today %}bg-orange-50 text-[#FF5C35]{% endif %} w-[60px]">
+                            <div class="text-[10px] font-medium">{{ entry.date|date:"D" }}</div>
+                            <b class="text-xs {% if entry.is_today %}text-[#FF5C35]{% else %}text-slate-900{% endif %}">
+                                {{ entry.date|date:"d.m" }}
+                            </b>
+                            {% if entry.start_time %}
+                                <div class="text-[8px] font-normal text-slate-400">{{ entry.start_time|date:"H:i" }}</div>
+                            {% endif %}
+                        </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in children_data %}
+                    <tr class="{% if item.is_archived %}bg-slate-100 opacity-70{% elif item.is_trial %}bg-purple-50/30{% endif %}">
+                        <td class="sticky left-0 {% if item.is_archived %}bg-slate-100{% else %}bg-white{% endif %}">
+                            <a href="{% url 'child_card' item.child.id %}" class="block hover:bg-slate-50 px-1.5 py-1 rounded transition relative">
+                                {% if item.is_trial %}
+                                <span class="absolute -top-1 -right-1 px-1.5 py-0.5 text-[8px] font-bold bg-purple-100 text-purple-700 rounded-full">ПРОБ</span>
+                                {% endif %}
+                                {% if item.is_archived %}
+                                <span class="absolute -top-1 -right-1 px-1.5 py-0.5 text-[8px] font-bold bg-slate-200 text-slate-600 rounded-full">АРХИВ</span>
+                                {% endif %}
+
+                                <div class="flex items-baseline justify-between gap-1">
+                                    <b class="text-xs truncate {% if item.is_archived %}text-slate-500 line-through{% endif %}">{{ item.child.last_name }} {{ item.child.first_name }}</b>
+                                    <span class="text-[9px] text-slate-400 whitespace-nowrap font-medium">{{ item.age }}</span>
+                                </div>
+
+                                <div class="flex items-center justify-between gap-1 mt-0.5">
+                                    <div class="flex items-center gap-1">
+                                        <span class="text-[10px] font-bold text-slate-700">{{ item.sessions_left }}/{{ item.sessions_total }}</span>
+                                        {% if item.debt > 0 %}
+                                        <span class="inline-flex items-center text-red-600" title="Долг {{ item.debt|floatformat:0 }} ₽">
+                                            <i data-lucide="coins" class="h-2.5 w-2.5"></i>
+                                        </span>
+                                        {% endif %}
+                                        {% if item.has_certificate %}
+                                        <span class="inline-flex items-center text-blue-600" title="Справка есть"><i data-lucide="file-text" class="h-2.5 w-2.5"></i></span>
+                                        {% endif %}
+                                        {% if item.discount_percent > 0 %}
+                                        <span class="inline-flex items-center text-emerald-600" title="Скидка {{ item.discount_percent }}%"><i data-lucide="percent" class="h-2.5 w-2.5"></i></span>
+                                        {% endif %}
+                                    </div>
+                                    {% if item.subscription_end %}
+                                    <span class="text-[9px] {% if item.subscription_ending_soon %}text-red-600 font-bold{% else %}text-slate-400{% endif %} whitespace-nowrap">
+                                        до {{ item.subscription_end|date:"d.m" }}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                            </a>
+
+                            {% if not item.is_archived %}
+                            <form method="post" action="{% url 'archive_child' item.child.id %}" class="mt-1" onsubmit="return confirm('Архивировать {{ item.child.last_name }}? Он исчезнет из активного табеля.')">
+                                {% csrf_token %}
+                                <button type="submit" class="text-[9px] text-slate-400 hover:text-red-600 flex items-center gap-0.5">
+                                    <i data-lucide="archive" class="h-2.5 w-2.5"></i>В архив
+                                </button>
+                            </form>
+                            {% else %}
+                            <form method="post" action="{% url 'restore_child' item.child.id %}" class="mt-1">
+                                {% csrf_token %}
+                                <button type="submit" class="text-[9px] text-emerald-600 hover:text-emerald-800 flex items-center gap-0.5">
+                                    <i data-lucide="rotate-ccw" class="h-2.5 w-2.5"></i>Вернуть
+                                </button>
+                            </form>
+                            {% endif %}
+                        </td>
+
+                        {% for entry in item.attendance_entries %}
+                            <td class="text-center {% if entry.date == today %}bg-orange-50/40{% endif %} {% if forloop.counter0 == item.subscription_end_index %}border-r-2 border-red-500{% endif %}">
+                                <button data-attendance
+                                        data-child-id="{{ item.child.id }}"
+                                        data-date="{{ entry.date|date:'Y-m-d' }}"
+                                        data-state="{% if entry.status == 'present' %}1{% elif entry.status == 'absent' %}2{% elif entry.status == 'frozen' %}3{% elif entry.status == 'vacation' %}4{% elif entry.status == 'excused' %}5{% else %}0{% endif %}"
+                                        class="attendance-cell w-8 h-8 text-xs {% if entry.status == 'present' %}bg-emerald-100 text-emerald-700{% elif entry.status == 'absent' %}bg-red-100 text-red-700{% elif entry.status == 'frozen' %}bg-blue-100 text-blue-700{% elif entry.status == 'vacation' %}bg-amber-100 text-amber-700{% elif entry.status == 'excused' %}bg-yellow-100 text-yellow-700{% else %}bg-slate-100 text-slate-400{% endif %}"
+                                        oncontextmenu="showCancelMenu(event, '{{ item.child.id }}', '{{ entry.date|date:'Y-m-d' }}'); return false;">
+                                    {% if entry.status == 'present' %}+{% elif entry.status == 'absent' %}×{% elif entry.status == 'frozen' %}❄{% elif entry.status == 'vacation' %}О{% elif entry.status == 'excused' %}У{% endif %}
+                                </button>
+                            </td>
+                        {% endfor %}
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="100" class="text-center py-6 text-slate-500 text-sm">
+                        {% if show_archived %}В архиве никого нет{% else %}Нет детей в этой группе{% endif %}
+                    </td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
     </div>
-    <div class="modal-body grid max-h-[65vh] gap-4 overflow-y-auto sm:grid-cols-2">
-      {% for field in row.form %}
-      <label class="{% if field.name == 'note' or field.name == 'address' %}sm:col-span-2{% endif %}">
-        <span class="label">{{ field.label }}</span>{{ field }}</label>
-      {% endfor %}
-      <div class="sm:col-span-2 rounded-xl bg-slate-50 p-3">
-        <b class="text-sm">Последние посещения</b>
-        <p class="mt-2 text-xs text-slate-600">
-          {% for item in row.attendance_history %}{{ item.date|date:"d.m.Y" }} — {{ item.get_status_display }}{% if not forloop.last %}; {% endif %}
-          {% empty %}Истории пока нет{% endfor %}
-        </p>
-      </div>
-      <div class="sm:col-span-2 rounded-xl bg-slate-50 p-3">
-        <b class="text-sm">Соревнования</b>
-        <p class="mt-2 text-xs text-slate-600">
-          {% for item in row.competition_history %}{{ item.competition.name }} — {{ item.place|default:"без места" }}{% if not forloop.last %}; {% endif %}
-          {% empty %}Выступлений пока нет{% endfor %}
-        </p>
-      </div>
-    </div>
-    <div class="modal-foot justify-between">
-      <button name="action" value="archive" class="btn btn-soft text-red-600" onclick="return confirm('Переместить спортсмена в архив?')">В архив</button>
-      <div class="flex gap-2">
-        <button type="button" data-close class="btn btn-soft">Отмена</button>
-        <button name="action" value="save" class="btn btn-primary">Сохранить</button>
-      </div>
-    </div>
-  </form>
 </section>
-{% endfor %}
-{% endblock %}
-{% block scripts %}
-<script>window.attendanceUrl = "{% url 'attendance' %}";</script>
+
+<!-- МОДАЛКА ПРОБНОГО (Исправленная, по центру экрана) -->
+<div id="trial-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+    <!-- Затемнение фона -->
+    <div class="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" onclick="document.getElementById('trial-modal').classList.add('hidden')"></div>
+    
+    <!-- Само окно -->
+    <div class="relative bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl transform transition-all">
+        <button onclick="document.getElementById('trial-modal').classList.add('hidden')" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+            <i data-lucide="x" class="h-5 w-5"></i>
+        </button>
+        
+        <h3 class="text-lg font-extrabold mb-1">Добавить на пробное</h3>
+        <p class="text-xs text-slate-500 mb-4">Ребенок будет автоматически удален через 14 дней, если не купить абонемент.</p>
+        
+        <form method="post" action="{% url 'add_trial_child' selected_group.id %}">
+            {% csrf_token %}
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Фамилия</label>
+                    <input type="text" name="last_name" required class="field w-full">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Имя</label>
+                    <input type="text" name="first_name" required class="field w-full">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Телефон родителя</label>
+                    <input type="tel" name="parent_phone" class="field w-full" placeholder="+7 (___) ___-__-__">
+                </div>
+            </div>
+            <div class="flex gap-2 mt-6">
+                <button type="submit" class="btn btn-primary flex-1">Добавить</button>
+                <button type="button" onclick="document.getElementById('trial-modal').classList.add('hidden')" class="btn btn-soft flex-1">Отмена</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Контекстное меню правого клика -->
+<div id="context-menu" class="hidden fixed z-[60] bg-white border border-slate-200 rounded-lg shadow-xl py-1 min-w-[180px]">
+    <button onclick="cancelAttendance()" class="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 flex items-center gap-2 text-red-600">
+        <i data-lucide="x" class="h-4 w-4"></i>
+        Отменить отметку
+    </button>
+    <button onclick="closeContextMenu()" class="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 text-slate-500 border-t border-slate-100 mt-1">
+        Закрыть
+    </button>
+</div>
+
+<script>
+let contextMenuData = null;
+
+function showCancelMenu(event, childId, date) {
+    event.preventDefault();
+    contextMenuData = { childId, date };
+    
+    const menu = document.getElementById('context-menu');
+    // Ограничиваем, чтобы меню не улетало за правый край экрана
+    let left = event.pageX;
+    let top = event.pageY;
+    if (left + 180 > window.innerWidth) left -= 180;
+    
+    menu.style.left = left + 'px';
+    menu.style.top = top + 'px';
+    menu.classList.remove('hidden');
+    lucide.createIcons();
+}
+
+function closeContextMenu() {
+    document.getElementById('context-menu').classList.add('hidden');
+    contextMenuData = null;
+}
+
+function cancelAttendance() {
+    if (!contextMenuData) return;
+    
+    fetch('{% url "cancel_attendance" %}', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'X-CSRFToken': '{{ csrf_token }}'
+        },
+        body: `child_id=${contextMenuData.childId}&date=${contextMenuData.date}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'ok') {
+            location.reload();
+        } else {
+            alert('Ошибка: ' + data.message);
+        }
+    })
+    .catch(error => {
+        alert('Ошибка сети');
+    });
+    
+    closeContextMenu();
+}
+
+// Закрытие контекстного меню при клике вне его
+document.addEventListener('click', function(e) {
+    const menu = document.getElementById('context-menu');
+    if (!menu.contains(e.target)) {
+        closeContextMenu();
+    }
+});
+</script>
 {% endblock %}

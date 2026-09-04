@@ -1,0 +1,63 @@
+{% extends "crm/base.html" %}
+
+{% block actions %}
+<a href="{% url 'group_create' %}" class="btn btn-primary">
+    <i data-lucide="plus"></i>Добавить группу
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for group in groups %}
+    <div class="card p-5 {% if not group.is_active %}opacity-60{% endif %}">
+        <div class="flex items-start justify-between mb-3">
+            <div>
+                <h3 class="font-extrabold text-slate-900 text-lg">{{ group.name }}</h3>
+                <p class="text-xs text-slate-500 mt-1">
+                    <i data-lucide="user" class="inline h-3 w-3 mr-1"></i>{{ group.trainer.full_name }}
+                </p>
+            </div>
+            {% if not group.is_active %}
+            <span class="px-2 py-1 text-[10px] font-bold bg-slate-100 text-slate-600 rounded-lg">Неактивна</span>
+            {% endif %}
+        </div>
+
+        <!-- Расписание -->
+        <div class="mb-4">
+            <span class="text-[10px] font-bold uppercase text-slate-400">Расписание</span>
+            <div class="flex flex-wrap gap-1 mt-1">
+                {% for slot in group.schedule.all %}
+                <span class="px-2 py-1 text-xs font-semibold bg-slate-100 text-slate-700 rounded-lg">
+                    {{ slot.get_weekday_display }} {{ slot.start_time|time:"H:i" }}
+                </span>
+                {% empty %}
+                <span class="text-xs text-slate-400 italic">Нет расписания</span>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Дети -->
+        <div class="mb-4">
+            <span class="text-[10px] font-bold uppercase text-slate-400">Дети</span>
+            <p class="text-sm font-bold text-slate-700 mt-1">
+                {{ group.children.count }} спортсменов
+            </p>
+        </div>
+
+        <div class="flex gap-2 pt-3 border-t border-slate-100">
+            <a href="{% url 'group_edit' group.id %}" class="flex-1 text-center py-2 text-xs font-bold text-slate-600 bg-slate-50 rounded-lg hover:bg-slate-100">
+                <i data-lucide="edit-3" class="inline h-3 w-3 mr-1"></i>Изменить
+            </a>
+            <a href="{% url 'group_delete' group.id %}" class="flex-1 text-center py-2 text-xs font-bold text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
+                <i data-lucide="trash-2" class="inline h-3 w-3 mr-1"></i>Удалить
+            </a>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-span-full text-center py-12 text-slate-500">
+        <i data-lucide="users" class="h-12 w-12 mx-auto mb-3 text-slate-300"></i>
+        <p>Группы ещё не созданы</p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

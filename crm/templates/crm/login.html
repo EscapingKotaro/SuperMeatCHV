@@ -3,79 +3,254 @@
 <html lang="ru">
 
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Вход · ВЫСОТА CRM</title>
-  <script src="https://cdn.tailwindcss.com">
-  </script>
-  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js">
-  </script>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'crm/app.css' %}">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>Вход · Гимнастический клуб "Спартак"</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet"
+    >
+
+    <link rel="stylesheet" href="{% static 'crm/app.css' %}">
 </head>
 
 <body class="min-h-screen bg-[#F6F7F9] text-[#17202A]">
-  <main class="grid min-h-screen lg:grid-cols-2">
-    <section class="hidden bg-[#17202A] p-12 text-white lg:flex lg:flex-col lg:justify-between">
-      <div class="flex items-center gap-3">
-        <span class="grid h-11 w-11 place-items-center rounded-xl bg-[#FF5C35]">
-          <i data-lucide="sparkles">
-          </i>
-        </span>
-        <b class="text-xl">ВЫСОТА CRM</b>
-      </div>
-      <div>
-        <p class="max-w-xl text-4xl font-extrabold leading-tight">Вся работа клуба — в одном понятном месте.</p>
-        <p class="mt-4 max-w-lg text-sm leading-6 text-slate-400">Посещения, абонементы, соревнования и показатели команды без лишних таблиц и хаоса.</p>
-      </div>
-      <small class="text-slate-500">Спортивный клуб «Высота»</small>
-    </section>
-    <section class="flex items-center justify-center p-6">
-      <div class="w-full max-w-sm">
-        <div class="mb-8 flex items-center gap-3 lg:hidden">
-          <span class="grid h-10 w-10 place-items-center rounded-xl bg-[#FF5C35] text-white">
-            <i data-lucide="sparkles">
-            </i>
-          </span>
-          <b>ВЫСОТА CRM</b>
-        </div>
-        <p class="eyebrow">Добро пожаловать</p>
-        <h1 class="text-3xl font-extrabold">Вход в систему</h1>
-        <p class="mt-2 text-sm text-slate-500">Введите данные рабочего аккаунта</p>
-        {% if messages %}
-        {% for message in messages %}
-        <div class="mt-5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{{ message }}</div>
-        {% endfor %}
-        {% endif %}
-        <form class="mt-8 space-y-4" method="post">
-          {% csrf_token %}
-          <label>
-            <span class="label">Логин</span>
-            <input name="username" class="field" autocomplete="username" autofocus required>
-          </label>
-          <label>
-            <span class="label">Пароль</span>
-            <input name="password" type="password" class="field" autocomplete="current-password" required>
-          </label>
-          <label class="flex items-center gap-2 text-xs text-slate-600">
-            <input name="remember_me" type="checkbox" checked> Запомнить меня на две недели
-          </label>
-          <button class="btn btn-primary mt-2 w-full py-3">Войти <i data-lucide="arrow-right">
-            </i>
-          </button>
-        </form>
-        <div class="mt-6 rounded-xl bg-white p-4 text-xs text-slate-500">
-          <b class="mb-2 block text-slate-700">Тестовые аккаунты после команды seed_demo:</b>
-          <p>
-            <code>boss</code> · <code>senior</code> · <code>admin</code>
-          </p>
-          <p>Пароль для всех: <code>Demo12345!</code>
-          </p>
-        </div>
-      </div>
-    </section>
-  </main>
-  <script>lucide.createIcons()</script>
-</body>
 
+    <!-- Скрытое определение логотипа -->
+    <svg
+        aria-hidden="true"
+        class="absolute h-0 w-0 overflow-hidden"
+        width="0"
+        height="0"
+    >
+        <symbol id="spartak-logo" viewBox="0 0 200 100">
+
+            <path
+                d="M99.9284 99.9907L0.0522469 50.0212C0.0366063 50.0138 0.0233991 50.0021 0.0141532 49.9874C0.00490734 49.9728 0 49.9559 0 49.9386C0 49.9213 0.00490734 49.9043 0.0141532 49.8897C0.0233991 49.8751 0.0366063 49.8634 0.0522469 49.8559L99.991 0.00929829C100.004 0.00318028 100.017 0 100.031 0C100.045 0 100.059 0.00318028 100.072 0.00929829L199.948 49.9788C199.963 49.9862 199.977 49.9979 199.986 50.0126C199.995 50.0272 200 50.0441 200 50.0614C200 50.0787 199.995 50.0957 199.986 50.1103C199.977 50.1249 199.963 50.1366 199.948 50.1441L100.009 99.9907C99.9964 99.9968 99.9826 100 99.9687 100C99.9547 100 99.9409 99.9968 99.9284 99.9907Z"
+                fill="#F62E2E"
+            />
+
+            <path
+                d="M28 50L100 14L172 50L100 86L28 50Z"
+                fill="#F62E2E"
+            />
+
+            <path
+                d="M69.5 51.5C70 60.5 75.2 67.9 82.9 72.3L78.1 74.9L99.8 85.9L172 50.1L150.2 39.1L98 64.9C90 63 85.3 55.9 86.3 48.1C86.6 46.1 87.2 44.2 88.1 42.4L102.3 34.9C107.8 35.8 111.3 38.8 113.8 43H120.6V25.8L122 25L100.3 14.1L28.1 49.9L49.7 60.9L69.3 51.4C69.4 51.3 69.5 51.4 69.5 51.5Z"
+                fill="white"
+            />
+
+            <path
+                d="M74.8 59.6C77.1 64.1 80.7 67.6 85.4 70C91 72.9 96.9 73.8 103.2 72.8C108.8 71.9 113.8 69.5 118.1 65.6L118.1 59.9H116.4C112.4 65.1 107 68.6 100.6 68.5C95.5 68.4 90.8 66.1 87.5 62.3C84.4 58.8 83 54.7 83.1 49.9C83.2 44.7 85.3 39.4 89.3 35.8C93.6 31.9 99.7 30.4 105.4 32.1C109.6 33.4 112.9 36.1 115.5 39.9H117.5V27.5L112.3 29.9C106.2 27.3 100.4 26.3 94.6 27.1C84.6 28.3 75.2 35 73.1 45.2C72.1 50.1 72.6 55.2 74.8 59.6Z"
+                fill="white"
+            />
+
+        </symbol>
+    </svg>
+
+
+    <main class="grid min-h-screen lg:grid-cols-2">
+
+        <!-- =========================
+             ЛЕВАЯ ЧАСТЬ
+        ========================== -->
+        <section
+            class="hidden overflow-hidden bg-[#17202A] p-12 text-white lg:flex lg:flex-col lg:justify-between"
+        >
+
+            <!-- Логотип -->
+            <div class="flex items-center gap-3">
+
+                <svg
+                    width="44"
+                    height="44"
+                    viewBox="0 0 200 100"
+                    class="h-11 w-11"
+                    aria-hidden="true"
+                >
+                    <use href="#spartak-logo"></use>
+                </svg>
+
+                <b class="text-xl">
+                    Гимнастический клуб "Спартак"
+                </b>
+
+            </div>
+
+
+            <!-- Описание -->
+            <div>
+
+                <p class="max-w-xl text-4xl font-extrabold leading-tight">
+                    Вся работа клуба — в одном понятном месте.
+                </p>
+
+                <p class="mt-4 max-w-lg text-sm leading-6 text-slate-400">
+                    Посещения, абонементы, соревнования и показатели команды
+                    без лишних таблиц и хаоса.
+                </p>
+
+            </div>
+
+
+            <small class="text-slate-500">
+                Гимнастический клуб "Спартак" · 2026
+            </small>
+
+        </section>
+
+
+        <!-- =========================
+             ФОРМА ВХОДА
+        ========================== -->
+        <section class="flex items-center justify-center p-6">
+
+            <div class="w-full max-w-sm">
+
+                <!-- Мобильный логотип -->
+                <div class="mb-8 flex items-center gap-3 lg:hidden">
+
+                    <svg
+                        width="40"
+                        height="40"
+                        viewBox="0 0 200 100"
+                        class="h-10 w-10"
+                        aria-hidden="true"
+                    >
+                        <use href="#spartak-logo"></use>
+                    </svg>
+
+                    <b>
+                        Гимнастический клуб "Спартак"
+                    </b>
+
+                </div>
+
+
+                <p class="eyebrow">
+                    Добро пожаловать
+                </p>
+
+                <h1 class="text-3xl font-extrabold">
+                    Вход в систему
+                </h1>
+
+                <p class="mt-2 text-sm text-slate-500">
+                    Введите данные рабочего аккаунта
+                </p>
+
+
+                <!-- Ошибки / сообщения Django -->
+                {% if messages %}
+                    <div class="mt-5 space-y-2">
+
+                        {% for message in messages %}
+                            <div
+                                class="rounded-xl border px-4 py-3 text-sm
+                                {% if message.tags == 'error' %}
+                                    border-red-200 bg-red-50 text-red-700
+                                {% else %}
+                                    border-emerald-200 bg-emerald-50 text-emerald-700
+                                {% endif %}"
+                            >
+                                {{ message }}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+                {% endif %}
+
+
+                <!-- Форма -->
+                <form
+                    class="mt-8 space-y-4"
+                    method="post"
+                    action="{% url 'login' %}"
+                >
+
+                    {% csrf_token %}
+
+                    <label class="block">
+
+                        <span class="label">
+                            Логин
+                        </span>
+
+                        <input
+                            name="username"
+                            class="field"
+                            autocomplete="username"
+                            autofocus
+                            required
+                        >
+
+                    </label>
+
+
+                    <label class="block">
+
+                        <span class="label">
+                            Пароль
+                        </span>
+
+                        <input
+                            name="password"
+                            type="password"
+                            class="field"
+                            autocomplete="current-password"
+                            required
+                        >
+
+                    </label>
+
+
+                    <label class="flex items-center gap-2 text-xs text-slate-600">
+
+                        <input
+                            name="remember_me"
+                            type="checkbox"
+                            checked
+                        >
+
+                        Запомнить меня на две недели
+
+                    </label>
+
+
+                    <button
+                        class="btn btn-primary mt-2 w-full py-3"
+                        type="submit"
+                    >
+                        Войти
+
+                        <i data-lucide="arrow-right"></i>
+                    </button>
+
+                </form>
+
+
+                <p class="mt-6 text-center text-xs text-slate-400">
+                    Нет доступа? Обратитесь к главному администратору
+                </p>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <script>
+        lucide.createIcons();
+    </script>
+
+</body>
 </html>

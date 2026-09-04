@@ -1,0 +1,20 @@
+{% extends "crm/base.html" %}
+
+{% block content %}
+<div class="max-w-lg mx-auto">
+    <div class="card p-6 border-red-200">
+        <h2 class="text-2xl font-extrabold mb-4 text-red-600">Удаление ребенка</h2>
+        <p class="mb-6">Вы уверены, что хотите удалить <b>{{ child.last_name }} {{ child.first_name }}</b>? Это действие необратимо.</p>
+
+        <form method="post">
+            {% csrf_token %}
+            <div class="flex gap-3">
+                <button type="submit" class="btn bg-red-600 text-white hover:bg-red-700">
+                    <i data-lucide="trash-2"></i>Удалить
+                </button>
+                <a href="{% url 'child_card' child.id %}" class="btn btn-soft">Отмена</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

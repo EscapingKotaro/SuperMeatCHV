@@ -1,65 +1,382 @@
 {% extends 'crm/base.html' %}
+
+
+{% block actions %}
+<form method="get" class="flex items-center gap-2">
+    <input
+        type="date"
+        name="month"
+        value="{{ month_start|date:'Y-m-d' }}"
+        class="field text-sm"
+        onchange="this.form.submit()"
+    >
+</form>
+{% endblock %}
+
+
 {% block content %}
-<div class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-    <div class="card metric">
-        <p class="metric-label">Всего спортсменов</p>
-        <p class="metric-value">{{ total }}</p>
+
+<!-- =========================
+     ОСНОВНЫЕ МЕТРИКИ
+========================== -->
+<div class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+
+    <div class="card p-4">
+        <div class="text-[10px] font-bold uppercase text-slate-400">
+            Всего спортсменов
+        </div>
+
+        <div class="mt-1 text-2xl font-extrabold">
+            {{ total_children }}
+        </div>
     </div>
-    <div class="card metric">
-        <p class="metric-label">Активные</p>
-        <p class="metric-value">{{ active_count }}</p>
+
+
+    <div class="card p-4">
+        <div class="text-[10px] font-bold uppercase text-slate-400">
+            Активных
+        </div>
+
+        <div class="mt-1 text-2xl font-extrabold text-emerald-600">
+            {{ active_children }}
+        </div>
     </div>
-    <div class="card metric">
-        <p class="metric-label">Новые за месяц</p>
-        <p class="metric-value">{{ new_count }}</p>
+
+
+    <div class="card p-4">
+        <div class="text-[10px] font-bold uppercase text-slate-400">
+            Новых за месяц
+        </div>
+
+        <div class="mt-1 text-2xl font-extrabold text-blue-600">
+            {{ new_count }}
+        </div>
+
+        <small class="text-[10px] text-slate-500">
+            осталось {{ new_kept }}
+        </small>
     </div>
-    <div class="card metric">
-        <p class="metric-label">Ушедшие</p>
-        <p class="metric-value">{{ lost_count }}</p>
+
+
+    <div class="card p-4">
+        <div class="text-[10px] font-bold uppercase text-slate-400">
+            Ушедших
+        </div>
+
+        <div class="mt-1 text-2xl font-extrabold text-red-600">
+            {{ left_count }}
+        </div>
     </div>
-    <div class="card metric">
-        <p class="metric-label">Выручка за месяц</p>
-        <p class="metric-value text-xl">{{ revenue }} ₽</p>
+
+
+    <div class="card p-4">
+        <div class="text-[10px] font-bold uppercase text-slate-400">
+            Выручка сегодня
+        </div>
+
+        <div class="mt-1 text-2xl font-extrabold">
+            {{ revenue_today|floatformat:0 }} ₽
+        </div>
     </div>
+
+
+    <div class="card p-4">
+        <div class="text-[10px] font-bold uppercase text-slate-400">
+            Выручка за месяц
+        </div>
+
+        <div class="mt-1 text-2xl font-extrabold">
+            {{ revenue_month|floatformat:0 }} ₽
+        </div>
+    </div>
+
 </div>
-<section class="card overflow-hidden">
-    <div class="p-5">
-        <h2 class="font-extrabold">Показатели групп</h2>
-        <p class="text-xs text-slate-500">Состав и фактическая посещаемость текущего месяца</p>
+
+
+<!-- =========================
+     ЦЕЛЬ И ПРОГНОЗ
+========================== -->
+<div class="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
+
+    <!-- Цель -->
+    <div class="card p-5">
+
+        <div class="mb-2 flex items-center justify-between">
+
+            <div class="text-[10px] font-bold uppercase text-slate-400">
+                Цель по выручке
+            </div>
+
+            {% if target %}
+                <b class="text-lg">
+                    {{ target.amount|floatformat:0 }} ₽
+                </b>
+            {% else %}
+                <span class="text-xs text-slate-400">
+                    не установлена
+                </span>
+            {% endif %}
+
+        </div>
+
+
+        {% if target %}
+
+            <div class="h-3 overflow-hidden rounded-full bg-slate-100">
+                <div
+                    class="h-full rounded-full bg-[#F62E2E]"
+                    style="width: {% widthratio revenue_month target.amount 100 %}%"
+                ></div>
+            </div>
+
+            <div class="mt-2 text-xs text-slate-500">
+                Выполнено
+                {{ revenue_month|floatformat:0 }} ₽
+                из
+                {{ target.amount|floatformat:0 }} ₽
+            </div>
+
+        {% endif %}
+
     </div>
-    <div class="table-wrap">
-        <table class="data-table">
-            <thead>
-                <tr>
-                    <th>Группа</th>
-                    <th>Тренер</th>
-                    <th>Спортсменов</th>
-                    <th>Посещений</th>
-                    <th>Всего отметок</th>
-                    <th>Посещаемость</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for group in group_stats %}
-                <tr>
-                    <td>
-                        <b>{{ group.name }}</b>
-                    </td>
-                    <td>{{ group.trainer.full_name }}</td>
-                    <td>{{ group.children_count }}</td>
-                    <td>{{ group.attended }}</td>
-                    <td>{{ group.marked }}</td>
-                    <td>
-                        <span class="badge {% if group.attendance_percent >= 80 %}bg-emerald-50 text-emerald-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ group.attendance_percent }}%</span>
-                    </td>
-                </tr>
-                {% empty %}
-                <tr>
-                    <td colspan="6">Нет данных</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+
+
+    <!-- Прогноз -->
+    <div class="card p-5">
+
+        <div class="mb-2 text-[10px] font-bold uppercase text-slate-400">
+            Прогноз выручки за месяц
+        </div>
+
+        <b class="text-2xl font-extrabold text-emerald-600">
+            {{ potential|floatformat:0 }} ₽
+        </b>
+
+        <div class="mt-1 text-xs text-slate-500">
+            Факт {{ revenue_month|floatformat:0 }} ₽ + ожидаемые продления
+        </div>
+
     </div>
-</section>
+
+</div>
+
+
+<!-- =========================
+     ГРУППЫ + ТРЕНЕРЫ
+========================== -->
+<div class="grid grid-cols-1 gap-6 xl:grid-cols-2">
+
+    <!-- =========================
+         ГРУППЫ
+    ========================== -->
+    <section class="card overflow-hidden">
+
+        <div class="border-b border-slate-100 p-4">
+            <h3 class="font-extrabold">
+                Показатели групп
+            </h3>
+
+            <p class="mt-1 text-xs text-slate-500">
+                Состав и посещаемость выбранного месяца
+            </p>
+        </div>
+
+
+        <div class="table-wrap">
+
+            <table class="data-table w-full">
+
+                <thead>
+                    <tr>
+                        <th>Группа</th>
+                        <th>Спортсменов</th>
+                        <th>Пришли</th>
+                        <th>Пропуски</th>
+                        <th>Отметок</th>
+                        <th>Посещаемость</th>
+                    </tr>
+                </thead>
+
+
+                <tbody>
+
+                    {% for gs in groups_stats %}
+
+                        <tr>
+
+                            <td>
+                                <b>
+                                    {{ gs.group.name }}
+                                </b>
+
+                                {% if gs.group.trainer %}
+                                    <small class="block text-slate-400">
+                                        {{ gs.group.trainer.full_name }}
+                                    </small>
+                                {% endif %}
+                            </td>
+
+
+                            <td>
+                                <b>{{ gs.kids }}</b>
+                            </td>
+
+
+                            <td class="text-emerald-700">
+                                {{ gs.present }}
+                            </td>
+
+
+                            <td class="text-red-600">
+                                {{ gs.absent }}
+                            </td>
+
+
+                            <td>
+                                {{ gs.present|add:gs.absent }}
+                            </td>
+
+
+                            <td>
+
+                                <span
+                                    class="badge
+                                    {% if gs.attendance_pct >= 70 %}
+                                        bg-emerald-100 text-emerald-700
+                                    {% elif gs.attendance_pct >= 40 %}
+                                        bg-amber-100 text-amber-700
+                                    {% else %}
+                                        bg-red-100 text-red-700
+                                    {% endif %}"
+                                >
+                                    {{ gs.attendance_pct }}%
+                                </span>
+
+                            </td>
+
+                        </tr>
+
+                    {% empty %}
+
+                        <tr>
+                            <td
+                                colspan="6"
+                                class="py-8 text-center text-slate-500"
+                            >
+                                Нет данных по группам
+                            </td>
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </section>
+
+
+    <!-- =========================
+         ТРЕНЕРЫ
+    ========================== -->
+    <section class="card overflow-hidden">
+
+        <div class="border-b border-slate-100 p-4">
+            <h3 class="font-extrabold">
+                Показатели тренеров
+            </h3>
+
+            <p class="mt-1 text-xs text-slate-500">
+                Посещаемость групп и количество ушедших спортсменов
+            </p>
+        </div>
+
+
+        <div class="table-wrap">
+
+            <table class="data-table w-full">
+
+                <thead>
+                    <tr>
+                        <th>Тренер</th>
+                        <th>Посещений</th>
+                        <th>Посещаемость</th>
+                        <th>Ушедших</th>
+                    </tr>
+                </thead>
+
+
+                <tbody>
+
+                    {% for ts in trainers_stats %}
+
+                        <tr>
+
+                            <td>
+                                <b>
+                                    {{ ts.trainer.full_name }}
+                                </b>
+                            </td>
+
+
+                            <td>
+                                {{ ts.present }}
+                            </td>
+
+
+                            <td>
+
+                                <span
+                                    class="badge
+                                    {% if ts.attendance_pct >= 70 %}
+                                        bg-emerald-100 text-emerald-700
+                                    {% elif ts.attendance_pct >= 40 %}
+                                        bg-amber-100 text-amber-700
+                                    {% else %}
+                                        bg-red-100 text-red-700
+                                    {% endif %}"
+                                >
+                                    {{ ts.attendance_pct }}%
+                                </span>
+
+                            </td>
+
+
+                            <td
+                                class="
+                                {% if ts.left %}
+                                    font-bold text-red-600
+                                {% endif %}
+                                "
+                            >
+                                {{ ts.left }}
+                            </td>
+
+                        </tr>
+
+                    {% empty %}
+
+                        <tr>
+                            <td
+                                colspan="4"
+                                class="py-8 text-center text-slate-500"
+                            >
+                                Нет данных по тренерам
+                            </td>
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    </section>
+
+</div>
+
 {% endblock %}

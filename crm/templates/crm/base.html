@@ -3,136 +3,504 @@
 <html lang="ru">
 
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>{{ title }} · ВЫСОТА CRM</title>
-  <script src="https://cdn.tailwindcss.com">
-  </script>
-  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js">
-  </script>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="{% static 'crm/app.css' %}">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <title>{% if title %}{{ title }} · {% endif %}Гимнастический клуб "Спартак"</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+
+    <!-- Favicon -->
+    <link
+        rel="icon"
+        type="image/svg+xml"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cpath d='M50 0L100 50L50 100L0 50Z' fill='%23F62E2E'/%3E%3Cpath d='M50 18L82 50L50 82L18 50Z' fill='white'/%3E%3C/svg%3E"
+    >
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+    <link
+        href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+        rel="stylesheet"
+    >
+
+    <link rel="stylesheet" href="{% static 'crm/app.css' %}">
 </head>
 
 <body class="bg-[#F6F7F9] text-[#17202A] antialiased">
-  <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-    <div class="mx-auto flex max-w-[1500px] items-center gap-4 px-4 py-3 lg:px-7">
-      <a href="{% url 'attendance' %}" class="mr-2 flex shrink-0 items-center gap-2.5">
-        <span class="grid h-9 w-9 place-items-center rounded-xl bg-[#FF5C35] text-white">
-          <i data-lucide="sparkles" class="h-5 w-5">
-          </i>
-        </span>
-        <span class="hidden font-extrabold sm:block">ВЫСОТА <span class="text-[#FF5C35]">CRM</span>
-        </span>
-      </a>
-      <nav class="scrollbar-none flex min-w-0 flex-1 gap-1 overflow-x-auto">
-        <a class="nav-pill {% if page == 'attendance' %}active{% endif %}" href="{% url 'attendance' %}">
-          <i data-lucide="calendar-check">
-          </i>Табель</a>
-        <a class="nav-pill {% if page == 'applications' %}active{% endif %}" href="{% url 'applications' %}">
-          <i data-lucide="inbox">
-          </i>Заявки</a>
-        <a class="nav-pill {% if page == 'newcomers' %}active{% endif %}" href="{% url 'newcomers' %}">
-          <i data-lucide="user-round-plus">
-          </i>Новички</a>
-        <a class="nav-pill {% if page == 'calendar' %}active{% endif %}" href="{% url 'calendar' %}">
-          <i data-lucide="calendar-days">
-          </i>Календарь</a>
-        <a class="nav-pill {% if page == 'statistics' %}active{% endif %}" href="{% url 'statistics' %}">
-          <i data-lucide="chart-no-axes-combined">
-          </i>Статистика</a>
-        <a class="nav-pill {% if page == 'payments' %}active{% endif %}" href="{% url 'payments' %}">
-          <i data-lucide="wallet-cards">
-          </i>Продления</a>
-        <a class="nav-pill {% if page == 'expenses' %}active{% endif %}" href="{% url 'expenses' %}">
-          <i data-lucide="receipt-text">
-          </i>Расходы</a>
-        <a class="nav-pill {% if page == 'competitions' %}active{% endif %}" href="{% url 'competitions' %}">
-          <i data-lucide="trophy">
-          </i>Соревнования</a>
-        {% if is_boss %}
-        <a class="nav-pill {% if page == 'boss' %}active{% endif %}" href="{% url 'boss' %}">
-          <i data-lucide="briefcase-business">
-          </i>Руководителю</a>
+
+    <!-- =========================
+         ШАПКА
+    ========================== -->
+    <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+
+        <div class="mx-auto flex max-w-[1500px] items-center gap-4 px-4 py-3 lg:px-7">
+
+            <!-- Логотип -->
+            <a
+                href="{% url 'attendance' %}"
+                class="mr-2 flex shrink-0 items-center gap-2.5"
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="40"
+                    height="40"
+                    viewBox="0 0 200 100"
+                    fill="none"
+                    class="h-9 w-9"
+                    aria-hidden="true"
+                >
+                    <path
+                        d="M99.9284 99.9907L0.0522469 50.0212C0.0366063 50.0138 0.0233991 50.0021 0.0141532 49.9874C0.00490734 49.9728 0 49.9559 0 49.9386C0 49.9213 0.00490734 49.9043 0.0141532 49.8897C0.0233991 49.8751 0.0366063 49.8634 0.0522469 49.8559L99.991 0.00929829C100.004 0.00318028 100.017 0 100.031 0C100.045 0 100.059 0.00318028 100.072 0.00929829L199.948 49.9788C199.963 49.9862 199.977 49.9979 199.986 50.0126C199.995 50.0272 200 50.0441 200 50.0614C200 50.0787 199.995 50.0957 199.986 50.1103C199.977 50.1249 199.963 50.1366 199.948 50.1441L100.009 99.9907C99.9964 99.9968 99.9826 100 99.9687 100C99.9547 100 99.9409 99.9968 99.9284 99.9907Z"
+                        fill="#F62E2E"
+                    />
+
+                    <path
+                        d="M28 50L100 14L172 50L100 86L28 50Z"
+                        fill="#F62E2E"
+                    />
+
+                    <path
+                        d="M69.5 51.5C70 60.5 75.2 67.9 82.9 72.3L78.1 74.9L99.8 85.9L172 50.1L150.2 39.1L98 64.9C90 63 85.3 55.9 86.3 48.1C86.6 46.1 87.2 44.2 88.1 42.4L102.3 34.9C107.8 35.8 111.3 38.8 113.8 43H120.6V25.8L122 25L100.3 14.1L28.1 49.9L49.7 60.9L69.3 51.4C69.4 51.3 69.5 51.4 69.5 51.5Z"
+                        fill="white"
+                    />
+
+                    <path
+                        d="M74.8 59.6C77.1 64.1 80.7 67.6 85.4 70C91 72.9 96.9 73.8 103.2 72.8C108.8 71.9 113.8 69.5 118.1 65.6L118.1 59.9H116.4C112.4 65.1 107 68.6 100.6 68.5C95.5 68.4 90.8 66.1 87.5 62.3C84.4 58.8 83 54.7 83.1 49.9C83.2 44.7 85.3 39.4 89.3 35.8C93.6 31.9 99.7 30.4 105.4 32.1C109.6 33.4 112.9 36.1 115.5 39.9H117.5V27.5L112.3 29.9C106.2 27.3 100.4 26.3 94.6 27.1C84.6 28.3 75.2 35 73.1 45.2C72.1 50.1 72.6 55.2 74.8 59.6Z"
+                        fill="white"
+                    />
+                </svg>
+
+                <span class="hidden text-sm font-extrabold leading-tight tracking-tight sm:block">
+                    Гимнастический клуб<br>
+                    <span class="text-[#F62E2E]">"Спартак"</span>
+                </span>
+            </a>
+
+
+            <!-- =========================
+                 ОСНОВНАЯ НАВИГАЦИЯ
+            ========================== -->
+            <nav class="scrollbar-none flex min-w-0 flex-1 gap-1 overflow-x-auto">
+
+                <a
+                    class="nav-pill {% if page == 'attendance' %}active{% endif %}"
+                    href="{% url 'attendance' %}"
+                >
+                    <i data-lucide="calendar-check"></i>
+                    Табель
+                </a>
+
+                <a
+                    class="nav-pill {% if page == 'applications' %}active{% endif %}"
+                    href="{% url 'applications' %}"
+                >
+                    <i data-lucide="inbox"></i>
+                    Заявки
+                </a>
+
+                <a
+                    class="nav-pill {% if page == 'newcomers' %}active{% endif %}"
+                    href="{% url 'newcomers' %}"
+                >
+                    <i data-lucide="user-round-plus"></i>
+                    Новички
+                </a>
+
+                <a
+                    class="nav-pill {% if page == 'calendar' %}active{% endif %}"
+                    href="{% url 'calendar' %}"
+                >
+                    <i data-lucide="calendar-days"></i>
+                    Календарь
+                </a>
+
+                <a
+                    class="nav-pill {% if page == 'revenue_forecast' %}active{% endif %}"
+                    href="{% url 'revenue_forecast' %}"
+                >
+                    <i data-lucide="trending-up"></i>
+                    Прогноз
+                </a>
+
+                <a
+                    class="nav-pill {% if page == 'trainers' %}active{% endif %}"
+                    href="{% url 'trainer_list' %}"
+                >
+                    <i data-lucide="user-check"></i>
+                    Тренеры
+                </a>
+
+                <a
+                    class="nav-pill {% if page == 'groups' %}active{% endif %}"
+                    href="{% url 'group_list' %}"
+                >
+                    <i data-lucide="users"></i>
+                    Группы
+                </a>
+
+
+                <!-- Статистика -->
+                <button
+                    type="button"
+                    data-stats-toggle
+                    class="nav-pill cursor-pointer {% if page == 'statistics' or page == 'payments_table' or page == 'expenses_table' or page == 'salaries' %}active{% endif %}"
+                >
+                    <i data-lucide="chart-no-axes-combined"></i>
+                    Статистика
+                    <i
+                        data-lucide="chevron-down"
+                        class="h-3 w-3 opacity-60"
+                    ></i>
+                </button>
+
+
+                <a
+                    class="nav-pill {% if page == 'payments' %}active{% endif %}"
+                    href="{% url 'payments' %}"
+                >
+                    <i data-lucide="wallet-cards"></i>
+                    Продления
+                </a>
+
+                <a
+                    class="nav-pill {% if page == 'expenses' %}active{% endif %}"
+                    href="{% url 'expenses' %}"
+                >
+                    <i data-lucide="receipt-text"></i>
+                    Расходы
+                </a>
+
+                <a
+                    class="nav-pill {% if page == 'competitions' %}active{% endif %}"
+                    href="{% url 'competitions' %}"
+                >
+                    <i data-lucide="trophy"></i>
+                    Соревнования
+                </a>
+
+                {% if is_boss %}
+                    <a
+                        class="nav-pill {% if page == 'boss' %}active{% endif %}"
+                        href="{% url 'boss' %}"
+                    >
+                        <i data-lucide="briefcase-business"></i>
+                        Руководителю
+                    </a>
+                {% endif %}
+
+            </nav>
+
+
+            <!-- =========================
+                 ПРАВАЯ ЧАСТЬ ШАПКИ
+            ========================== -->
+            <div class="flex shrink-0 items-center gap-2 border-l border-slate-200 pl-3">
+
+                <a
+                    href="{% url 'search' %}"
+                    class="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"
+                    aria-label="Поиск"
+                >
+                    <i
+                        data-lucide="search"
+                        class="h-5 w-5"
+                    ></i>
+                </a>
+
+                <a
+                    href="{% url 'notifications' %}"
+                    class="relative grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"
+                    aria-label="Уведомления"
+                >
+                    <i
+                        data-lucide="bell"
+                        class="h-5 w-5"
+                    ></i>
+                </a>
+
+
+                <!-- Пользователь -->
+                <button
+                    type="button"
+                    data-menu-toggle
+                    class="flex items-center gap-2 rounded-xl p-1.5 hover:bg-slate-100"
+                >
+                    <span class="grid h-8 w-8 place-items-center rounded-lg bg-[#E8F0FF] text-xs font-extrabold text-[#315EBC]">
+                        {{ request.user.username|slice:":2"|upper }}
+                    </span>
+
+                    <span class="hidden text-left lg:block">
+
+                        <b class="block text-xs">
+                            {{ request.user.get_full_name|default:request.user.username }}
+                        </b>
+
+                        <small class="block text-[10px] text-slate-500">
+                            {{ request.user.profile.get_role_display|default:"Администратор" }}
+                        </small>
+
+                    </span>
+
+                    <i
+                        data-lucide="chevron-down"
+                        class="h-4 w-4 text-slate-400"
+                    ></i>
+                </button>
+
+            </div>
+        </div>
+
+
+        <!-- =========================
+             МЕНЮ ПОЛЬЗОВАТЕЛЯ
+        ========================== -->
+        <div
+            data-user-menu
+            class="absolute right-6 top-16 hidden w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl"
+        >
+
+            <a
+                href="{% url 'profile' %}"
+                class="menu-item"
+            >
+                <i data-lucide="user-round"></i>
+                Мой профиль
+            </a>
+
+            {% if is_senior %}
+
+                <a
+                    href="{% url 'users' %}"
+                    class="menu-item"
+                >
+                    <i data-lucide="users-round"></i>
+                    Пользователи
+                </a>
+
+                <a
+                    href="{% url 'backup_export' %}"
+                    class="menu-item"
+                >
+                    <i data-lucide="download"></i>
+                    Резервная копия
+                </a>
+
+            {% endif %}
+
+            <hr class="my-2">
+
+            <a
+                href="{% url 'logout' %}"
+                class="menu-item text-red-600"
+            >
+                <i data-lucide="log-out"></i>
+                Выйти
+            </a>
+
+        </div>
+
+    </header>
+
+
+    <!-- =========================
+         ОСНОВНОЙ КОНТЕНТ
+    ========================== -->
+    <main class="mx-auto max-w-[1500px] px-4 py-7 lg:px-7">
+
+        <!-- Django messages -->
+        {% if messages %}
+            <div class="mb-4 space-y-2">
+
+                {% for message in messages %}
+                    <div
+                        class="rounded-xl border px-4 py-3 text-sm font-semibold
+                        {% if message.tags == 'error' %}
+                            border-red-200 bg-red-50 text-red-700
+                        {% else %}
+                            border-emerald-200 bg-emerald-50 text-emerald-700
+                        {% endif %}"
+                    >
+                        {{ message }}
+                    </div>
+                {% endfor %}
+
+            </div>
         {% endif %}
-      </nav>
-      <div class="flex shrink-0 items-center gap-2 border-l border-slate-200 pl-3">
-        <a href="{% url 'search' %}" class="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100" aria-label="Поиск">
-          <i data-lucide="search" class="h-5 w-5">
-          </i>
+
+
+        <!-- Заголовок страницы -->
+        <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
+
+            <div>
+
+                <p class="eyebrow">
+                    {% now "j E Y · l" %}
+                </p>
+
+                {% if title %}
+                    <h1 class="text-2xl font-extrabold tracking-tight md:text-3xl">
+                        {{ title }}
+                    </h1>
+                {% endif %}
+
+                {% if subtitle %}
+                    <p class="mt-1 text-sm text-slate-500">
+                        {{ subtitle }}
+                    </p>
+                {% endif %}
+
+            </div>
+
+
+            {% block actions %}
+            {% endblock %}
+
+        </div>
+
+
+        {% block content %}
+        {% endblock %}
+
+    </main>
+
+
+    <!-- =========================
+         МЕНЮ СТАТИСТИКИ
+    ========================== -->
+    <div
+        id="stats-menu"
+        class="fixed z-50 hidden w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl"
+    >
+
+        <a
+            href="{% url 'statistics' %}"
+            class="menu-item {% if page == 'statistics' %}bg-slate-100{% endif %}"
+        >
+            <i data-lucide="chart-no-axes-combined"></i>
+            Статистика
         </a>
-        <a href="{% url 'notifications' %}" class="relative grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100" aria-label="Уведомления">
-          <i data-lucide="bell" class="h-5 w-5">
-          </i>
+
+        <a
+            href="{% url 'payments_table' %}"
+            class="menu-item {% if page == 'payments_table' %}bg-slate-100{% endif %}"
+        >
+            <i data-lucide="wallet-cards"></i>
+            Предварительные оплаты
         </a>
-        <button data-menu-toggle class="flex items-center gap-2 rounded-xl p-1.5 hover:bg-slate-100">
-          <span class="grid h-8 w-8 place-items-center rounded-lg bg-[#E8F0FF] text-xs font-extrabold text-[#315EBC]">{{ request.user.username|slice:":2"|upper }}</span>
-          <span class="hidden text-left lg:block">
-            <b class="block text-xs">{{ request.user.get_full_name|default:request.user.username }}</b>
-            <small class="block text-[10px] text-slate-500">{{ request.user.profile.get_role_display|default:"Администратор" }}</small>
-          </span>
-          <i data-lucide="chevron-down" class="h-4 w-4 text-slate-400">
-          </i>
-        </button>
-      </div>
+
+        <a
+            href="{% url 'expenses_table' %}"
+            class="menu-item {% if page == 'expenses_table' %}bg-slate-100{% endif %}"
+        >
+            <i data-lucide="receipt-text"></i>
+            Расходы
+        </a>
+
+        <a
+            href="{% url 'salaries' %}"
+            class="menu-item {% if page == 'salaries' %}bg-slate-100{% endif %}"
+        >
+            <i data-lucide="banknote"></i>
+            ЗП тренеров
+        </a>
+
     </div>
-    <div data-user-menu class="absolute right-6 top-16 hidden w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-      <a href="{% url 'profile' %}" class="menu-item">
-        <i data-lucide="user-round">
-        </i>Мой профиль</a>
-      {% if is_senior %}
-      <a href="{% url 'users' %}" class="menu-item">
-        <i data-lucide="users-round">
-        </i>Пользователи</a>
-      {% endif %}
-      {% if is_senior %}
-      <a href="{% url 'backup_export' %}" class="menu-item">
-        <i data-lucide="download">
-        </i>Резервная копия</a>
-      {% endif %}
-      <hr class="my-2">
-      <a href="{% url 'logout' %}" class="menu-item text-red-600">
-        <i data-lucide="log-out">
-        </i>Выйти</a>
-    </div>
-  </header>
-  <main class="mx-auto max-w-[1500px] px-4 py-7 lg:px-7">
-    {% if messages %}
-    <div class="mb-4 space-y-2">
-      {% for message in messages %}
-      <div class="rounded-xl border px-4 py-3 text-sm font-semibold {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">{{ message }}</div>
-      {% endfor %}
-    </div>
-    {% endif %}
-    <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
-      <div>
-        <p class="eyebrow">
-          {% now "j E Y · l" %}
-        </p>
-        <h1 class="text-2xl font-extrabold tracking-tight md:text-3xl">{{ title }}</h1>
-        <p class="mt-1 text-sm text-slate-500">{{ subtitle }}</p>
-      </div>
-      {% block actions %}
-      {% endblock %}
-    </div>
-    {% block content %}
+
+
+    <!-- =========================
+         МОДАЛЬНЫЕ ОКНА
+    ========================== -->
+    <div
+        data-modal-backdrop
+        class="fixed inset-0 z-40 hidden bg-slate-950/35 backdrop-blur-sm"
+    ></div>
+
+    {% block modals %}
     {% endblock %}
-  </main>
-  <div data-modal-backdrop class="fixed inset-0 z-40 hidden bg-slate-950/35 backdrop-blur-sm">
-  </div>
-  {% block modals %}
-  {% endblock %}
-  <div id="toast" class="fixed bottom-5 right-5 z-[60] hidden items-center gap-3 rounded-2xl bg-[#17202A] px-4 py-3 text-sm font-semibold text-white shadow-2xl">
-    <i data-lucide="circle-check" class="h-5 w-5 text-emerald-400">
-    </i>
-    <span>Изменения сохранены</span>
-  </div>
-  <script src="{% static 'crm/app.js' %}">
-  </script>
-  {% block scripts %}
-  {% endblock %}
+
+
+    <!-- =========================
+         TOAST
+    ========================== -->
+    <div
+        id="toast"
+        class="fixed bottom-5 right-5 z-[60] hidden items-center gap-3 rounded-2xl bg-[#17202A] px-4 py-3 text-sm font-semibold text-white shadow-2xl"
+    >
+        <i
+            data-lucide="circle-check"
+            class="h-5 w-5 text-emerald-400"
+        ></i>
+
+        <span>
+            Изменения сохранены
+        </span>
+    </div>
+
+
+    <!-- =========================
+         ОБЩИЙ JS
+    ========================== -->
+    <script src="{% static 'crm/app.js' %}"></script>
+
+
+    <!-- Выпадающее меню статистики -->
+    <script>
+        (function () {
+            const toggle = document.querySelector("[data-stats-toggle]");
+            const menu = document.getElementById("stats-menu");
+
+            if (!toggle || !menu) {
+                return;
+            }
+
+            toggle.addEventListener("click", function (event) {
+                event.stopPropagation();
+
+                if (menu.classList.contains("hidden")) {
+                    const rect = toggle.getBoundingClientRect();
+
+                    menu.style.top = (rect.bottom + 10) + "px";
+                    menu.style.left = Math.max(8, rect.left) + "px";
+
+                    menu.classList.remove("hidden");
+                } else {
+                    menu.classList.add("hidden");
+                }
+            });
+
+
+            document.addEventListener("click", function (event) {
+                if (
+                    !menu.contains(event.target) &&
+                    !toggle.contains(event.target)
+                ) {
+                    menu.classList.add("hidden");
+                }
+            });
+
+
+            window.addEventListener(
+                "scroll",
+                function () {
+                    menu.classList.add("hidden");
+                },
+                true
+            );
+
+
+            window.addEventListener("resize", function () {
+                menu.classList.add("hidden");
+            });
+        })();
+    </script>
+
+
+    {% block scripts %}
+    {% endblock %}
+
 </body>
 
 </html>

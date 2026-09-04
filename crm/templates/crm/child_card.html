@@ -1,0 +1,414 @@
+{% extends "crm/base.html" %}
+
+{% block actions %}
+<div class="flex gap-2">
+    <a href="{% url 'child_edit' child.id %}" class="btn btn-soft">
+        <i data-lucide="edit-3"></i>Редактировать
+    </a>
+    <a href="{% url 'add_subscription' child.id %}" class="btn btn-primary">
+        <i data-lucide="plus"></i>Добавить абонемент
+    </a>
+</div>
+{% endblock %}
+
+{% block content %}
+<!-- Шапка карточки -->
+<div class="card p-5 mb-6">
+    <div class="flex flex-wrap items-center gap-5">
+        <div class="grid h-16 w-16 place-items-center rounded-2xl bg-violet-100 text-2xl font-extrabold text-violet-700 shrink-0">
+            {{ child.last_name|slice:":1" }}{{ child.first_name|slice:":1" }}
+        </div>
+        <div class="flex-1 min-w-0">
+            <h1 class="text-2xl font-extrabold text-slate-900">{{ child.last_name }} {{ child.first_name }}{% if child.patronymic %} {{ child.patronymic }}{% endif %}</h1>
+            <div class="flex flex-wrap items-center gap-3 mt-1 text-sm text-slate-500">
+                <span>{{ child.age_display }}</span>
+                <span class="h-1 w-1 rounded-full bg-slate-300"></span>
+                <span>Гр. {{ child.birth_date|date:"Y" }}</span>
+                <span class="h-1 w-1 rounded-full bg-slate-300"></span>
+                <span class="inline-flex px-2 py-0.5 text-xs font-bold rounded-lg
+                    {% if child.status == 'active' %}bg-emerald-100 text-emerald-700
+                    {% elif child.status == 'trial' %}bg-amber-100 text-amber-700
+                    {% elif child.status == 'archived' %}bg-slate-100 text-slate-700
+                    {% else %}bg-red-100 text-red-700{% endif %}">
+                    {{ child.get_status_display }}
+                </span>
+            </div>
+        </div>
+        <!-- Быстрые метрики -->
+        <div class="flex gap-4">
+            <div class="text-center px-4 py-2 bg-slate-50 rounded-xl">
+                <div class="text-[10px] font-bold uppercase text-slate-400">Осталось</div>
+                <div class="text-xl font-extrabold text-slate-900">{{ sessions_left }}</div>
+            </div>
+            <div class="text-center px-4 py-2 bg-slate-50 rounded-xl">
+                <div class="text-[10px] font-bold uppercase text-slate-400">Пропуски</div>
+                <div class="text-xl font-extrabold {% if missed_percent > 20 %}text-red-600{% else %}text-slate-900{% endif %}">{{ missed_percent }}%</div>
+            </div>
+            <div class="text-center px-4 py-2 bg-slate-50 rounded-xl">
+                <div class="text-[10px] font-bold uppercase text-slate-400">Баланс</div>
+                <div class="text-xl font-extrabold {% if balance < 0 %}text-red-600{% elif balance > 0 %}text-emerald-600{% else %}text-slate-900{% endif %}">{{ balance|floatformat:0 }}₽</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- ЛЕВАЯ КОЛОНКА -->
+    <div class="space-y-5">
+        <!-- Контактная информация -->
+        <div class="card p-5">
+            <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
+                <i data-lucide="user" class="h-4 w-4 text-slate-400"></i>Контактная информация
+            </h3>
+            <div class="space-y-3 text-sm">
+                {% if child.parent_name %}
+                <div>
+                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Родитель</div>
+                    <div class="font-semibold">{{ child.parent_name }}</div>
+                </div>
+                {% endif %}
+                {% if child.parent_phone %}
+                <div>
+                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Телефон</div>
+                    <a href="tel:{{ child.parent_phone }}" class="font-semibold text-[#FF5C35] hover:underline">
+                        {{ child.parent_phone }}
+                    </a>
+                </div>
+                {% endif %}
+                {% if child.address %}
+                <div>
+                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Адрес прописки</div>
+                    <div class="text-slate-700">{{ child.address }}</div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Справка -->
+        <div class="card p-5">
+            <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
+                <i data-lucide="file-text" class="h-4 w-4 text-slate-400"></i>Справка для занятий
+            </h3>
+            {% if child.certificate %}
+                <img src="{{ child.certificate.url }}" alt="Справка" class="w-full rounded-lg border border-slate-200">
+                {% if child.certificate_note %}
+                <p class="mt-3 text-xs text-slate-600 bg-slate-50 p-2 rounded-lg">{{ child.certificate_note }}</p>
+                {% endif %}
+            {% else %}
+                <p class="text-xs text-slate-400 italic">Справка не прикреплена</p>
+            {% endif %}
+        </div>
+
+        <!-- Разряды -->
+        <div class="card p-5">
+            <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
+                <i data-lucide="award" class="h-4 w-4 text-slate-400"></i>Спортивные разряды
+            </h3>
+            {% if ranks %}
+            <div class="space-y-2">
+                {% for rank in ranks %}
+                <div class="flex justify-between items-center text-sm bg-slate-50 px-3 py-2 rounded-lg">
+                    <span class="text-slate-500 text-xs">{{ rank.year }} г.</span>
+                    <b class="text-slate-900">{{ rank.rank }}</b>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-xs text-slate-400 italic">Разряды не присвоены</p>
+            {% endif %}
+        </div>
+
+        <!-- Акции -->
+        {% if promos %}
+        <div class="card p-5">
+            <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
+                <i data-lucide="gift" class="h-4 w-4 text-slate-400"></i>Акции
+            </h3>
+            <div class="space-y-2">
+                {% for promo_name, promo_end in promos %}
+                <div class="bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
+                    <div class="text-sm font-bold text-amber-900">{{ promo_name }}</div>
+                    <div class="text-[10px] text-amber-700">до {{ promo_end|date:"d.m.Y" }}</div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ЦЕНТРАЛЬНАЯ КОЛОНКА -->
+    <div class="space-y-5">
+        <!-- Группа и тренер (с возможностью смены) -->
+        <div class="card p-5">
+            <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
+                <i data-lucide="users" class="h-4 w-4 text-slate-400"></i>Группа и тренер
+            </h3>
+
+            <div class="mb-4 p-3 bg-violet-50 rounded-xl">
+                <div class="text-[10px] font-bold uppercase text-violet-600 mb-1">Текущая группа</div>
+                {% if child.group %}
+                    <div class="font-extrabold text-violet-900">{{ child.group.name }}</div>
+                    {% if child.trainer %}
+                    <div class="text-xs text-violet-700 mt-1">
+                        <i data-lucide="user-check" class="inline h-3 w-3 mr-1"></i>{{ child.trainer.full_name }}
+                    </div>
+                    {% endif %}
+                {% else %}
+                    <div class="text-sm text-slate-500 italic">Группа не назначена</div>
+                {% endif %}
+            </div>
+
+            <!-- Форма смены группы -->
+            <form method="post" class="flex gap-2">
+                {% csrf_token %}
+                <input type="hidden" name="change_group" value="1">
+                <select name="new_group" class="field flex-1 text-sm">
+                    <option value="">— Выбрать группу —</option>
+                    {% for g in groups_list %}
+                        <option value="{{ g.id }}" {% if child.group and child.group.id == g.id %}selected{% endif %}>
+                            {{ g.name }} ({{ g.trainer.full_name }})
+                        </option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="btn btn-soft text-xs px-3">
+                    <i data-lucide="arrow-right"></i>
+                </button>
+            </form>
+        </div>
+
+        <!-- Абонементы -->
+        <div class="card p-5">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-extrabold text-sm flex items-center gap-2">
+                    <i data-lucide="ticket" class="h-4 w-4 text-slate-400"></i>Абонементы
+                </h3>
+                <a href="{% url 'add_subscription' child.id %}" class="text-xs font-bold text-[#FF5C35] hover:underline">
+                    + Добавить
+                </a>
+            </div>
+
+            {% if subscriptions %}
+            <div class="space-y-2">
+                {% for sub in subscriptions %}
+                <div class="border border-slate-200 rounded-xl p-3 {% if sub == active_sub %}bg-emerald-50 border-emerald-200{% endif %}">
+                    <div class="flex items-center justify-between mb-1">
+                        <div class="flex items-center gap-2">
+                            <b class="text-sm">{{ sub.start_date|date:"d.m" }} — {{ sub.end_date|date:"d.m" }}</b>
+                            {% if sub == active_sub %}
+                            <span class="px-1.5 py-0.5 text-[9px] font-bold bg-emerald-100 text-emerald-700 rounded">Активный</span>
+                            {% endif %}
+                        </div>
+                        <b class="text-sm">{{ sub.price }} ₽</b>
+                    </div>
+                    <div class="flex items-center gap-3 text-[10px] text-slate-500">
+                        <span>{{ sub.sessions_total }} занятий</span>
+                        {% if sub.promo %}
+                        <span class="text-[#FF5C35] font-bold">{{ sub.promo }}</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-xs text-slate-400 italic">Нет абонементов</p>
+            {% endif %}
+
+            <!-- Ближайшее окончание -->
+            {% if nearest_expiry %}
+            <div class="mt-4 pt-3 border-t border-slate-100">
+                <div class="text-[10px] font-bold uppercase text-slate-400 mb-1">Ближайшее окончание</div>
+                <div class="text-sm font-extrabold {% if nearest_expiry < today %}text-red-600{% else %}text-slate-900{% endif %}">
+                    {{ nearest_expiry|date:"d E Y" }}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Финансы -->
+        <div class="card p-5">
+            <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
+                <i data-lucide="wallet" class="h-4 w-4 text-slate-400"></i>Финансы
+            </h3>
+            <div class="grid grid-cols-2 gap-3">
+                <div class="bg-slate-50 p-3 rounded-xl">
+                    <div class="text-[10px] font-bold uppercase text-slate-400">Оплачено</div>
+                    <div class="text-lg font-extrabold text-emerald-600">{{ child.total_paid|floatformat:0 }} ₽</div>
+                </div>
+                <div class="bg-slate-50 p-3 rounded-xl">
+                    <div class="text-[10px] font-bold uppercase text-slate-400">Абонементы</div>
+                    <div class="text-lg font-extrabold text-slate-900">{{ child.total_spent|floatformat:0 }} ₽</div>
+                </div>
+            </div>
+            {% if debt > 0 %}
+            <div class="mt-3 p-3 bg-red-50 border border-red-200 rounded-xl">
+                <div class="text-[10px] font-bold uppercase text-red-600">Долг</div>
+                <div class="text-lg font-extrabold text-red-700">{{ debt|floatformat:0 }} ₽</div>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Комментарий -->
+        {% if child.note %}
+        <div class="card p-5">
+            <h3 class="font-extrabold text-sm mb-3 flex items-center gap-2">
+                <i data-lucide="message-square" class="h-4 w-4 text-slate-400"></i>Комментарий
+            </h3>
+            <p class="text-sm text-slate-600 whitespace-pre-wrap">{{ child.note }}</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ПРАВАЯ КОЛОНКА -->
+    <div class="space-y-5">
+<!-- История посещений (heat-map) -->
+<div class="card p-5">
+    <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
+        <i data-lucide="calendar-check" class="h-4 w-4 text-slate-400"></i>
+        Посещения за 6 месяцев
+    </h3>
+
+    <!-- Сетка как в GitHub -->
+    <div class="overflow-x-auto pb-2">
+        <div class="flex gap-[2px] min-w-fit">
+            <!-- Подписи дней недели (выровнены по строкам) -->
+            <div class="flex flex-col gap-[2px] mr-1.5 pt-0">
+                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Пн</div>
+                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Вт</div>
+                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Ср</div>
+                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Чт</div>
+                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Пт</div>
+                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Сб</div>
+                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Вс</div>
+            </div>
+
+            <!-- Столбцы недель -->
+            {% for week in weeks %}
+            <div class="flex flex-col gap-[2px]">
+                {% for day in week.days %}
+                    {% if day %}
+                        <div
+                            class="h-2.5 w-2.5 rounded-[2px] cursor-pointer transition-transform hover:scale-[2] hover:z-10
+                                {% if day.is_future %}bg-slate-100
+                                {% elif day.status == 'present' %}bg-emerald-400
+                                {% elif day.status == 'absent' %}bg-red-400
+                                {% elif day.status == 'frozen' %}bg-blue-400
+                                {% elif day.status == 'vacation' %}bg-amber-400
+                                {% elif day.status == 'excused' %}bg-yellow-400
+                                {% else %}bg-slate-200{% endif %}"
+                            title="{{ day.date|date:'d.m.Y' }}{% if day.status %}: {{ day.get_status_display }}{% else %}{% endif %}"
+                        ></div>
+                    {% else %}
+                        <div class="h-2.5 w-2.5"></div>
+                    {% endif %}
+                {% endfor %}
+
+                <!-- Подпись даты под каждым 5-м столбцом -->
+                {% if week.show_label %}
+                <div class="text-[8px] text-slate-400 font-medium mt-0.5 text-center whitespace-nowrap">
+                    {{ week.week_start|date:"d.m" }}
+                </div>
+                {% else %}
+                <div class="h-3"></div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Статистика за период -->
+    <div class="grid grid-cols-3 gap-2 mt-4">
+        <div class="bg-emerald-50 p-2 rounded-lg text-center">
+            <div class="text-lg font-extrabold text-emerald-700">{{ period_stats.present }}</div>
+            <div class="text-[9px] font-bold text-emerald-600 uppercase">Пришёл</div>
+        </div>
+        <div class="bg-red-50 p-2 rounded-lg text-center">
+            <div class="text-lg font-extrabold text-red-700">{{ period_stats.absent }}</div>
+            <div class="text-[9px] font-bold text-red-600 uppercase">Пропуск</div>
+        </div>
+        <div class="bg-blue-50 p-2 rounded-lg text-center">
+            <div class="text-lg font-extrabold text-blue-700">{{ period_stats.frozen }}</div>
+            <div class="text-[9px] font-bold text-blue-600 uppercase">Заморозка</div>
+        </div>
+    </div>
+</div>
+
+        <!-- История соревнований -->
+        <div class="card p-5">
+            <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
+                <i data-lucide="trophy" class="h-4 w-4 text-slate-400"></i>Соревнования
+            </h3>
+            {% if competitions %}
+            <div class="space-y-2">
+                {% for entry in competitions %}
+                <div class="border border-slate-200 rounded-xl p-3">
+                    <div class="flex items-center justify-between mb-1">
+                        <b class="text-sm">{{ entry.competition.name }}</b>
+                        {% if entry.place %}
+                        <span class="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 rounded">
+                            {{ entry.place }} место
+                        </span>
+                        {% endif %}
+                    </div>
+                    <div class="flex items-center gap-2 text-[10px] text-slate-500">
+                        <span>{{ entry.competition.date|date:"d.m.Y" }}</span>
+                        {% if entry.competition.city %}
+                        <span>· {{ entry.competition.city }}</span>
+                        {% endif %}
+                        {% if entry.category %}
+                        <span>· {{ entry.category }}</span>
+                        {% endif %}
+                    </div>
+                    {% if entry.rank %}
+                    <div class="mt-1 text-[10px] text-violet-700 font-bold">Разряд: {{ entry.rank }}</div>
+                    {% endif %}
+                    {% if entry.total_points %}
+                    <div class="mt-1 text-[10px] text-slate-600">Баллы: {{ entry.total_points }}</div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-xs text-slate-400 italic">Нет соревнований</p>
+            {% endif %}
+        </div>
+
+        <!-- Лагеря -->
+        <div class="card p-5">
+            <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
+                <i data-lucide="tent" class="h-4 w-4 text-slate-400"></i>Лагеря
+            </h3>
+            {% if camps %}
+            <div class="space-y-2">
+                {% for stay in camps %}
+                <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
+                    <b class="text-sm text-emerald-900">{{ stay.camp.name }}</b>
+                    <div class="text-[10px] text-emerald-700 mt-1">
+                        {{ stay.start_date|date:"d.m" }} — {{ stay.end_date|date:"d.m.Y" }}
+                    </div>
+                    <div class="text-[10px] text-emerald-600 mt-0.5">
+                        {{ stay.end_date|timeuntil:stay.start_date }} дней
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <p class="text-xs text-slate-400 italic">Нет поездок в лагеря</p>
+            {% endif %}
+        </div>
+
+        <!-- Удаление -->
+        <div class="card p-5 border-red-200">
+            <h3 class="font-extrabold text-sm mb-3 text-red-600 flex items-center gap-2">
+                <i data-lucide="alert-triangle" class="h-4 w-4"></i>Опасная зона
+            </h3>
+            <p class="text-xs text-slate-600 mb-3">Удаление необратимо. Все данные будут удалены.</p>
+            <form method="post" action="{% url 'child_delete' child.id %}" onsubmit="return confirm('Удалить {{ child.last_name }} {{ child.first_name }}?')">
+                {% csrf_token %}
+                <button type="submit" class="btn bg-red-600 text-white hover:bg-red-700 text-xs w-full">
+                    <i data-lucide="trash-2" class="h-3 w-3 mr-1"></i>Удалить ребенка
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

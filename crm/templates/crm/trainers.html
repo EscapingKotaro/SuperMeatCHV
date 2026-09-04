@@ -1,0 +1,66 @@
+{% extends "crm/base.html" %}
+
+{% block actions %}
+<a href="{% url 'trainer_create' %}" class="btn btn-primary">
+    <i data-lucide="user-plus"></i>Добавить тренера
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+    {% for trainer in trainers %}
+    <div class="card p-5 {% if not trainer.is_active %}opacity-60{% endif %}">
+        <div class="flex items-start justify-between mb-3">
+            <div class="flex items-center gap-3">
+                <div class="grid h-12 w-12 place-items-center rounded-xl bg-emerald-100 text-lg font-extrabold text-emerald-700">
+                    {{ trainer.full_name|slice:":1" }}
+                </div>
+                <div>
+                    <h3 class="font-extrabold text-slate-900">{{ trainer.full_name }}</h3>
+                    {% if trainer.phone %}
+                    <a href="tel:{{ trainer.phone }}" class="text-xs text-slate-500 hover:text-[#FF5C35]">
+                        {{ trainer.phone }}
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+            {% if not trainer.is_active %}
+            <span class="px-2 py-1 text-[10px] font-bold bg-slate-100 text-slate-600 rounded-lg">Неактивен</span>
+            {% endif %}
+        </div>
+
+        {% if trainer.note %}
+        <p class="text-xs text-slate-500 mb-4 line-clamp-2">{{ trainer.note }}</p>
+        {% endif %}
+
+        <!-- Группы тренера -->
+        <div class="mb-4">
+            <span class="text-[10px] font-bold uppercase text-slate-400">Группы</span>
+            <div class="flex flex-wrap gap-1 mt-1">
+                {% for group in trainer.groups.all %}
+                <a href="{% url 'group_edit' group.id %}" class="px-2 py-1 text-xs font-semibold bg-violet-50 text-violet-700 rounded-lg hover:bg-violet-100">
+                    {{ group.name }}
+                </a>
+                {% empty %}
+                <span class="text-xs text-slate-400 italic">Нет групп</span>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="flex gap-2 pt-3 border-t border-slate-100">
+            <a href="{% url 'trainer_edit' trainer.id %}" class="flex-1 text-center py-2 text-xs font-bold text-slate-600 bg-slate-50 rounded-lg hover:bg-slate-100">
+                <i data-lucide="edit-3" class="inline h-3 w-3 mr-1"></i>Изменить
+            </a>
+            <a href="{% url 'trainer_delete' trainer.id %}" class="flex-1 text-center py-2 text-xs font-bold text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
+                <i data-lucide="trash-2" class="inline h-3 w-3 mr-1"></i>Удалить
+            </a>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-span-full text-center py-12 text-slate-500">
+        <i data-lucide="users" class="h-12 w-12 mx-auto mb-3 text-slate-300"></i>
+        <p>Тренеры ещё не добавлены</p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

@@ -1,5 +1,6 @@
 from datetime import timedelta
 
+from django.forms import inlineformset_factory
 from django import forms
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordChangeForm, UserCreationForm
@@ -19,6 +20,9 @@ from .models import (
     StaffProfile,
     Subscription,
     Tariff,
+    Group,
+    Trainer,
+    ScheduleSlot,
 )
 
 
@@ -275,3 +279,64 @@ class NewcomerForm(StyledFormMixin, forms.ModelForm):
         self.fields["birth_date"].input_formats = ["%Y-%m-%d"]
         self.fields["trial_at"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.apply_styles()
+
+class TrainerForm(StyledFormMixin, forms.ModelForm):
+    class Meta:
+        model = Trainer
+        fields = (
+            "full_name",
+            "phone",
+            "is_active",
+            "note",
+        )
+        widgets = {
+            "note": forms.Textarea(attrs={"rows": 3}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.apply_styles()
+
+
+class GroupForm(StyledFormMixin, forms.ModelForm):
+    class Meta:
+        model = Group
+        fields = (
+            "name",
+            "trainer",
+            "is_active",
+        )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.apply_styles()
+
+
+ScheduleSlotFormSet = inlineformset_factory(
+    Group,
+    ScheduleSlot,
+    fields=(
+        "weekday",
+        "start_time",
+        "duration_minutes",
+    ),
+    extra=1,
+    can_delete=True,
+    widgets={
+        "weekday": forms.Select(attrs={"class": "field"}),
+        "start_time": forms.TimeInput(
+            attrs={
+                "class": "field",
+                "type": "time",
+            }
+        ),
+        "duration_minutes": forms.NumberInput(
+            attrs={
+                "class": "field",
+                "min": "15",
+                "max": "180",
+                "step": "15",
+            }
+        ),
+    },
+)

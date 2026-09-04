@@ -3,6 +3,7 @@ from django.contrib.admin.models import LogEntry
 from django.contrib.auth import get_user_model, admin as auth_admin
 from django.http import HttpResponse
 from django.db.models import Count, Q, Sum
+from django.utils import timezone
 from openpyxl import Workbook
 
 from .models import *
@@ -94,16 +95,108 @@ class CampStayInline(admin.TabularInline):
 
 @admin.register(Child)
 class ChildAdmin(admin.ModelAdmin):
-    list_display = ("full", "group", "trainer", "status", "left", "debt_col",
-                    "expiry_col", "discount_percent", "tags")
+    list_display = (
+        "full",
+        "birth_date",
+        "group",
+        "trainer",
+        "status",
+        "left",
+        "debt_col",
+        "expiry_col",
+        "discount_percent",
+        "tags",
+    )
     list_display_links = ("full",)
-    list_filter = ("status", "group", "group__trainer")
-    search_fields = ("last_name", "first_name", "parent_name", "parent_phone")  # адекватный поиск
-    actions = ("to_archive", "to_lost", "to_active")
+
+    list_filter = (
+        "status",
+        "group",
+        "group__trainer",
+        "trial_from",
+    )
+
+    search_fields = (
+        "last_name",
+        "first_name",
+        "patronymic",
+        "parent_name",
+        "parent_phone",
+    )
+
+    autocomplete_fields = ["group"]
+    ordering = ("last_name", "first_name")
+
+    actions = (
+        "to_archive",
+        "to_lost",
+        "to_active",
+    )
+
+    inlines = [
+    SubscriptionInline,
+    PaymentInline,
+    AttendanceInline,
+    RankInline,
+    CompetitionEntryInline,
+    CampStayInline,
+]
+
+    fieldsets = (
+        (
+            "Основное",
+            {
+                "fields": (
+                    "last_name",
+                    "first_name",
+                    "patronymic",
+                    "birth_date",
+                    "status",
+                    "group",
+                )
+            },
+        ),
+        (
+            "Контакты",
+            {
+                "fields": (
+                    "parent_name",
+                    "parent_phone",
+                    "address",
+                )
+            },
+        ),
+        (
+            "Справка",
+            {
+                "fields": (
+                    "certificate",
+                    "certificate_note",
+                )
+            },
+        ),
+        (
+            "Прочее",
+            {
+                "fields": (
+                    "trial_from",
+                    "discount_percent",
+                    "note",
+                    "schedule",
+                )
+            },
+        ),
+    )
+
+    filter_horizontal = ("schedule",)
 
     def get_queryset(self, request):
         return super().get_queryset(request).annotate(
-            attended=Count("attendances", filter=Q(attendances__status="present")))
+            attended=Count(
+                "attendances",
+                filter=Q(attendances__status="present"),
+            )
+        )
 
     @admin.display(description="Ребёнок")
     def full(self, obj):
@@ -114,28 +207,37 @@ class ChildAdmin(admin.ModelAdmin):
         sub = obj.active_subscription()
         if not sub:
             return "—"
+
         return f"{obj.sessions_left()} из {sub.sessions_total} осталось"
 
     @admin.display(description="Долг")
     def debt_col(self, obj):
-        d = obj.debt()
-        return f"💰 {d}" if d > 0 else "—"
+        debt = obj.debt()
+        return f"💰 {debt}" if debt > 0 else "—"
 
     @admin.display(description="Окончание абонемента")
     def expiry_col(self, obj):
-        d = obj.nearest_expiry()
-        if not d:
+        expiry = obj.nearest_expiry()
+
+        if not expiry:
             return "—"
-        days = (d - timezone.localdate()).days
-        flag = "🟥" if days <= 7 else "🟩"   # за неделю — красный разделитель
-        return f"{flag} {d:%d.%m} ({days} дн)"
+
+        days = (expiry - timezone.localdate()).days
+        flag = "🟥" if days <= 7 else "🟩"
+
+        return f"{flag} {expiry:%d.%m} ({days} дн)"
 
     @admin.display(description="Метки")
     def tags(self, obj):
-        t = []
-        if obj.certificate: t.append("📄 справка")
-        if obj.status == Child.Status.TRIAL: t.append("🟪 пробное")
-        return " ".join(t)
+        tags = []
+
+        if obj.certificate:
+            tags.append("📄 справка")
+
+        if obj.status == Child.Status.TRIAL:
+            tags.append("🟪 пробное")
+
+        return " ".join(tags)
 
     @admin.action(description="🗄 В архив")
     def to_archive(self, request, queryset):
@@ -386,3 +488,6 @@ class CampStayAdmin(admin.ModelAdmin):
 class ManagerTaskAdmin(admin.ModelAdmin):
     list_display = ("title", "assignee", "due_date", "is_done", "created_by")
     list_filter = ("is_done", "assignee", "due_date")
+    search_fields = ("title", "description", "assignee__username", "created_by__username")
+    autocomplete_fields = ["assignee", "created_by"]
+    ordering = ("-created_at",)

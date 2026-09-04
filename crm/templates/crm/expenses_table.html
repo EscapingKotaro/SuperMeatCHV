@@ -1,0 +1,40 @@
+{% extends 'crm/base.html' %}
+{% block actions %}
+<form method="get"><input type="date" name="month" value="{{ month_start|date:'Y-m-d' }}" class="field text-sm" onchange="this.form.submit()"></form>
+{% endblock %}
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <section class="lg:col-span-2 card overflow-hidden">
+        <table class="w-full text-sm">
+            <thead><tr class="bg-slate-50 text-left text-xs font-bold">
+                <th class="px-4 py-2">Дата</th><th class="px-2 py-2">Назначение</th>
+                <th class="px-2 py-2">Создал</th><th class="px-2 py-2 text-right">Сумма</th>
+            </tr></thead>
+            <tbody>
+            {% for e in expenses %}
+                <tr class="border-b border-slate-100">
+                    <td class="px-4 py-2">{{ e.date|date:"d.m.Y" }}</td>
+                    <td class="px-2 py-2 font-semibold">{{ e.title }}</td>
+                    <td class="px-2 py-2 text-slate-500">{{ e.created_by|default:"—" }}</td>
+                    <td class="px-2 py-2 text-right font-bold">{{ e.amount|floatformat:0 }} ₽</td>
+                </tr>
+            {% empty %}
+                <tr><td colspan="4" class="text-center py-8 text-slate-400">Нет расходов за период</td></tr>
+            {% endfor %}
+            <tr class="bg-slate-50 font-extrabold"><td colspan="3" class="px-4 py-2">Итого</td>
+                <td class="px-2 py-2 text-right">{{ total|floatformat:0 }} ₽</td></tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section class="card p-5 h-fit">
+        <h3 class="font-extrabold mb-4">Добавить расход</h3>
+        <form method="post" class="space-y-3">
+            {% csrf_token %}
+            <input type="text" name="title" placeholder="Назначение (вода и т.п.)" class="field w-full" required>
+            <input type="number" name="amount" step="0.01" placeholder="Сумма, ₽" class="field w-full" required>
+            <button class="btn btn-primary w-full"><i data-lucide="plus"></i>Добавить</button>
+        </form>
+    </section>
+</div>
+{% endblock %}
