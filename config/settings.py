@@ -129,4 +129,4 @@ LOGIN_URL = 'login'
 LOGIN_REDIRECT_URL = 'attendance'
 
 
-#AUTH_USER_MODEL = 'crm.User'
+AUTH_USER_MODEL = 'crm.User'
