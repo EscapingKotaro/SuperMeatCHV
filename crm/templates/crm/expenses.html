@@ -1,114 +1,114 @@
 {% extends 'crm/base.html' %}
 {% block actions %}
 <button data-modal="expense-modal" class="btn btn-primary">
-<i data-lucide="plus">
-</i>Добавить расход</button>
+    <i data-lucide="plus">
+    </i>Добавить расход</button>
 {% endblock %}
 {% block content %}
 <div class="mb-4 grid gap-3 sm:grid-cols-3">
-<div class="card metric">
-<p class="metric-label">Расходы в этом месяце</p>
-<p class="metric-value">{{ total }} ₽</p>
-<p class="text-xs text-slate-500">{{ operations }} операций</p>
-</div>
-<div class="card metric">
-<p class="metric-label">Бытовые товары</p>
-<p class="metric-value">{{ household }} ₽</p>
-</div>
-<div class="card metric">
-<p class="metric-label">Всего записей</p>
-<p class="metric-value">{{ expenses.count }}</p>
-</div>
+    <div class="card metric">
+        <p class="metric-label">Расходы в этом месяце</p>
+        <p class="metric-value">{{ total }} ₽</p>
+        <p class="text-xs text-slate-500">{{ operations }} операций</p>
+    </div>
+    <div class="card metric">
+        <p class="metric-label">Бытовые товары</p>
+        <p class="metric-value">{{ household }} ₽</p>
+    </div>
+    <div class="card metric">
+        <p class="metric-label">Всего записей</p>
+        <p class="metric-value">{{ expenses.count }}</p>
+    </div>
 </div>
 <section class="card overflow-hidden">
-<div class="table-wrap">
-<table class="data-table">
-<thead>
-<tr>
-<th>Дата</th>
-<th>Назначение</th>
-<th>Категория</th>
-<th>Сумма</th>
-<th>Добавил</th>
-<th>Чек</th>
-<th>
-</th>
-</tr>
-</thead>
-<tbody>
-{% for expense in expenses %}
-<tr>
-<td>{{ expense.date|date:"d.m.Y" }}</td>
-<td>
-<b>{{ expense.title }}</b>
-</td>
-<td>
-<span class="badge bg-blue-50 text-blue-700">{{ expense.get_category_display }}</span>
-</td>
-<td>
-<b>{{ expense.amount }} ₽</b>
-</td>
-<td>{{ expense.created_by.get_full_name|default:expense.created_by.username|default:"—" }}</td>
-<td>
-{% if expense.receipt %}
-<a class="text-[#315EBC]" href="{{ expense.receipt.url }}" target="_blank">
-<i data-lucide="paperclip" class="h-4 w-4">
-</i>
-</a>
-{% else %}—{% endif %}
-</td>
-<td>
-<div class="flex gap-2">
-<a class="btn btn-soft" href="?edit={{ expense.pk }}">Изменить</a>
-<form method="post" onsubmit="return confirm('Удалить расход?')">
-{% csrf_token %}
-<input type="hidden" name="action" value="delete">
-<input type="hidden" name="expense_id" value="{{ expense.pk }}">
-<button class="btn btn-soft text-red-600">Удалить</button>
-</form>
-</div>
-</td>
-</tr>
-{% empty %}
-<tr>
-<td colspan="7" class="py-12 text-center text-slate-500">Расходов пока нет</td>
-</tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Дата</th>
+                    <th>Назначение</th>
+                    <th>Категория</th>
+                    <th>Сумма</th>
+                    <th>Добавил</th>
+                    <th>Чек</th>
+                    <th>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for expense in expenses %}
+                <tr>
+                    <td>{{ expense.date|date:"d.m.Y" }}</td>
+                    <td>
+                        <b>{{ expense.title }}</b>
+                    </td>
+                    <td>
+                        <span class="badge bg-blue-50 text-blue-700">{{ expense.get_category_display }}</span>
+                    </td>
+                    <td>
+                        <b>{{ expense.amount }} ₽</b>
+                    </td>
+                    <td>{{ expense.created_by.get_full_name|default:expense.created_by.username|default:"—" }}</td>
+                    <td>
+                        {% if expense.receipt %}
+                        <a class="text-[#315EBC]" href="{{ expense.receipt.url }}" target="_blank">
+                            <i data-lucide="paperclip" class="h-4 w-4">
+                            </i>
+                        </a>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>
+                        <div class="flex gap-2">
+                            <a class="btn btn-soft" href="?edit={{ expense.pk }}">Изменить</a>
+                            <form method="post" onsubmit="return confirm('Удалить расход?')">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="expense_id" value="{{ expense.pk }}">
+                                <button class="btn btn-soft text-red-600">Удалить</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="py-12 text-center text-slate-500">Расходов пока нет</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </section>
 {% endblock %}
 {% block modals %}
 <section id="expense-modal" class="modal {% if editing or form.errors %}open{% endif %}">
-<form method="post" enctype="multipart/form-data">
-{% csrf_token %}
-<div class="modal-head">
-<div>
-<b>
-{% if editing %}Редактировать расход{% else %}Новый расход{% endif %}
-</b>
-<p class="text-xs text-slate-500">Покупка и подтверждающий чек</p>
-</div>
-<a href="{% url 'expenses' %}" data-close>
-<i data-lucide="x">
-</i>
-</a>
-</div>
-<div class="modal-body grid gap-4 sm:grid-cols-2">
-{% for field in form %}
-<label class="{% if field.name == 'title' or field.name == 'receipt' %}sm:col-span-2{% endif %}">
-<span class="label">{{ field.label }}</span>{{ field }}{% if field.errors %}
-<small class="text-red-600">{{ field.errors|join:", " }}</small>
-{% endif %}
-</label>
-{% endfor %}
-</div>
-<div class="modal-foot">
-<a href="{% url 'expenses' %}" class="btn btn-soft">Отмена</a>
-<button class="btn btn-primary">Сохранить</button>
-</div>
-</form>
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <div class="modal-head">
+            <div>
+                <b>
+                    {% if editing %}Редактировать расход{% else %}Новый расход{% endif %}
+                </b>
+                <p class="text-xs text-slate-500">Покупка и подтверждающий чек</p>
+            </div>
+            <a href="{% url 'expenses' %}" data-close>
+                <i data-lucide="x">
+                </i>
+            </a>
+        </div>
+        <div class="modal-body grid gap-4 sm:grid-cols-2">
+            {% for field in form %}
+            <label class="{% if field.name == 'title' or field.name == 'receipt' %}sm:col-span-2{% endif %}">
+                <span class="label">{{ field.label }}</span>{{ field }}{% if field.errors %}
+                <small class="text-red-600">{{ field.errors|join:", " }}</small>
+                {% endif %}
+            </label>
+            {% endfor %}
+        </div>
+        <div class="modal-foot">
+            <a href="{% url 'expenses' %}" class="btn btn-soft">Отмена</a>
+            <button class="btn btn-primary">Сохранить</button>
+        </div>
+    </form>
 </section>
 {% endblock %}
 {% block scripts %}

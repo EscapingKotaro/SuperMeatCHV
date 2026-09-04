@@ -1,65 +1,65 @@
 {% extends 'crm/base.html' %}
 {% block content %}
 <div class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-<div class="card metric">
-<p class="metric-label">Всего спортсменов</p>
-<p class="metric-value">{{ total }}</p>
-</div>
-<div class="card metric">
-<p class="metric-label">Активные</p>
-<p class="metric-value">{{ active_count }}</p>
-</div>
-<div class="card metric">
-<p class="metric-label">Новые за месяц</p>
-<p class="metric-value">{{ new_count }}</p>
-</div>
-<div class="card metric">
-<p class="metric-label">Ушедшие</p>
-<p class="metric-value">{{ lost_count }}</p>
-</div>
-<div class="card metric">
-<p class="metric-label">Выручка за месяц</p>
-<p class="metric-value text-xl">{{ revenue }} ₽</p>
-</div>
+    <div class="card metric">
+        <p class="metric-label">Всего спортсменов</p>
+        <p class="metric-value">{{ total }}</p>
+    </div>
+    <div class="card metric">
+        <p class="metric-label">Активные</p>
+        <p class="metric-value">{{ active_count }}</p>
+    </div>
+    <div class="card metric">
+        <p class="metric-label">Новые за месяц</p>
+        <p class="metric-value">{{ new_count }}</p>
+    </div>
+    <div class="card metric">
+        <p class="metric-label">Ушедшие</p>
+        <p class="metric-value">{{ lost_count }}</p>
+    </div>
+    <div class="card metric">
+        <p class="metric-label">Выручка за месяц</p>
+        <p class="metric-value text-xl">{{ revenue }} ₽</p>
+    </div>
 </div>
 <section class="card overflow-hidden">
-<div class="p-5">
-<h2 class="font-extrabold">Показатели групп</h2>
-<p class="text-xs text-slate-500">Состав и фактическая посещаемость текущего месяца</p>
-</div>
-<div class="table-wrap">
-<table class="data-table">
-<thead>
-<tr>
-<th>Группа</th>
-<th>Тренер</th>
-<th>Спортсменов</th>
-<th>Посещений</th>
-<th>Всего отметок</th>
-<th>Посещаемость</th>
-</tr>
-</thead>
-<tbody>
-{% for group in group_stats %}
-<tr>
-<td>
-<b>{{ group.name }}</b>
-</td>
-<td>{{ group.trainer.full_name }}</td>
-<td>{{ group.children_count }}</td>
-<td>{{ group.attended }}</td>
-<td>{{ group.marked }}</td>
-<td>
-<span class="badge {% if group.attendance_percent >= 80 %}bg-emerald-50 text-emerald-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ group.attendance_percent }}%</span>
-</td>
-</tr>
-{% empty %}
-<tr>
-<td colspan="6">Нет данных</td>
-</tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
+    <div class="p-5">
+        <h2 class="font-extrabold">Показатели групп</h2>
+        <p class="text-xs text-slate-500">Состав и фактическая посещаемость текущего месяца</p>
+    </div>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Группа</th>
+                    <th>Тренер</th>
+                    <th>Спортсменов</th>
+                    <th>Посещений</th>
+                    <th>Всего отметок</th>
+                    <th>Посещаемость</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for group in group_stats %}
+                <tr>
+                    <td>
+                        <b>{{ group.name }}</b>
+                    </td>
+                    <td>{{ group.trainer.full_name }}</td>
+                    <td>{{ group.children_count }}</td>
+                    <td>{{ group.attended }}</td>
+                    <td>{{ group.marked }}</td>
+                    <td>
+                        <span class="badge {% if group.attendance_percent >= 80 %}bg-emerald-50 text-emerald-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ group.attendance_percent }}%</span>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="6">Нет данных</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </section>
 {% endblock %}

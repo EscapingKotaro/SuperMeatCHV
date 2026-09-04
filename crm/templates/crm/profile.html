@@ -1,47 +1,47 @@
 {% extends 'crm/base.html' %}
 {% block content %}
 <div class="grid max-w-4xl gap-4 md:grid-cols-[280px_1fr]">
-<section class="card h-fit p-5 text-center">
-<span class="mx-auto grid h-20 w-20 place-items-center rounded-2xl bg-[#E8F0FF] text-2xl font-extrabold text-[#315EBC]">{{ request.user.username|slice:":2"|upper }}</span>
-<h2 class="mt-4 font-extrabold">{{ request.user.get_full_name|default:request.user.username }}</h2>
-<p class="text-xs text-slate-500">{{ request.user.profile.get_role_display|default:"Администратор" }}</p>
-<span class="badge mt-4 bg-emerald-50 text-emerald-700">Аккаунт активен</span>
-</section>
-<section class="space-y-4">
-<form method="post" class="card p-5">
-{% csrf_token %}
-<input type="hidden" name="action" value="profile">
-<h2 class="font-extrabold">Личные данные</h2>
-<div class="mt-4 grid gap-4 sm:grid-cols-2">
-{% for field in profile_form %}
-<label>
-<span class="label">{{ field.label }}</span>{{ field }}{% if field.errors %}
-<small class="text-red-600">{{ field.errors|join:", " }}</small>
-{% endif %}
-</label>
-{% endfor %}
-</div>
-<div class="mt-4 flex justify-end">
-<button class="btn btn-primary">Сохранить</button>
-</div>
-</form>
-<form method="post" class="card p-5">
-{% csrf_token %}
-<input type="hidden" name="action" value="password">
-<h2 class="font-extrabold">Смена пароля</h2>
-<div class="mt-4 grid gap-4">
-{% for field in password_form %}
-<label>
-<span class="label">{{ field.label }}</span>{{ field }}{% if field.errors %}
-<small class="text-red-600">{{ field.errors|join:", " }}</small>
-{% endif %}
-</label>
-{% endfor %}
-</div>
-<div class="mt-4 flex justify-end">
-<button class="btn btn-dark">Обновить пароль</button>
-</div>
-</form>
-</section>
+    <section class="card h-fit p-5 text-center">
+        <span class="mx-auto grid h-20 w-20 place-items-center rounded-2xl bg-[#E8F0FF] text-2xl font-extrabold text-[#315EBC]">{{ request.user.username|slice:":2"|upper }}</span>
+        <h2 class="mt-4 font-extrabold">{{ request.user.get_full_name|default:request.user.username }}</h2>
+        <p class="text-xs text-slate-500">{{ request.user.profile.get_role_display|default:"Администратор" }}</p>
+        <span class="badge mt-4 bg-emerald-50 text-emerald-700">Аккаунт активен</span>
+    </section>
+    <section class="space-y-4">
+        <form method="post" class="card p-5">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="profile">
+            <h2 class="font-extrabold">Личные данные</h2>
+            <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                {% for field in profile_form %}
+                <label>
+                    <span class="label">{{ field.label }}</span>{{ field }}{% if field.errors %}
+                    <small class="text-red-600">{{ field.errors|join:", " }}</small>
+                    {% endif %}
+                </label>
+                {% endfor %}
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button class="btn btn-primary">Сохранить</button>
+            </div>
+        </form>
+        <form method="post" class="card p-5">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="password">
+            <h2 class="font-extrabold">Смена пароля</h2>
+            <div class="mt-4 grid gap-4">
+                {% for field in password_form %}
+                <label>
+                    <span class="label">{{ field.label }}</span>{{ field }}{% if field.errors %}
+                    <small class="text-red-600">{{ field.errors|join:", " }}</small>
+                    {% endif %}
+                </label>
+                {% endfor %}
+            </div>
+            <div class="mt-4 flex justify-end">
+                <button class="btn btn-dark">Обновить пароль</button>
+            </div>
+        </form>
+    </section>
 </div>
 {% endblock %}

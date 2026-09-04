@@ -1,106 +1,106 @@
 {% extends 'crm/base.html' %}
 {% block content %}
 <div class="grid gap-4 lg:grid-cols-[240px_1fr]">
-<aside class="card h-fit p-4">
-<p class="text-xs font-bold text-slate-500">ТРЕБУЕТ ВНИМАНИЯ</p>
-<p class="mt-2 text-4xl font-extrabold">{{ open_count }}</p>
-<p class="mt-1 text-xs text-slate-500">открытых событий</p>
-<div class="mt-5 space-y-2 text-xs">
-<div class="flex justify-between">
-<span>Задачи</span>
-<b>{{ tasks.count }}</b>
-</div>
-<div class="flex justify-between">
-<span>Абонементы</span>
-<b>{{ alerts|length }}</b>
-</div>
-<div class="flex justify-between">
-<span>Пробные</span>
-<b>{{ trials.count }}</b>
-</div>
-</div>
-</aside>
-<section class="space-y-3">
-{% for task in tasks %}
-<article class="card flex gap-4 border-l-4 {% if task.is_done %}border-l-emerald-400 opacity-60{% elif task.due_date and task.due_date < today %}border-l-red-500{% else %}border-l-blue-500{% endif %} p-4">
-<span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600">
-<i data-lucide="clipboard-check">
-</i>
-</span>
-<div class="flex-1">
-<div class="flex justify-between gap-4">
-<b class="text-sm">{{ task.title }}</b>
-<small class="text-slate-400">
-{% if task.due_date %}до {{ task.due_date|date:"d.m" }}{% endif %}
-</small>
-</div>
-<p class="mt-1 text-xs text-slate-500">{{ task.description|default:"Без описания" }} · от {{ task.created_by.get_full_name|default:task.created_by.username|default:"системы" }}</p>
-<form method="post" class="mt-3">
-{% csrf_token %}
-<input type="hidden" name="task_id" value="{{ task.pk }}">
-<button class="btn {% if task.is_done %}btn-soft{% else %}btn-dark{% endif %}">
-{% if task.is_done %}Вернуть в работу{% else %}Выполнено{% endif %}
-</button>
-</form>
-</div>
-</article>
-{% endfor %}
-{% for alert in alerts %}
-<article class="card flex gap-4 border-l-4 border-l-red-500 p-4">
-<span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-red-50 text-red-600">
-<i data-lucide="circle-alert">
-</i>
-</span>
-<div>
-<b class="text-sm">Заканчивается абонемент: {{ alert.child }}</b>
-<p class="mt-1 text-xs text-slate-500">До {{ alert.expiry|date:"d.m.Y" }}{% if alert.debt > 0 %} · долг {{ alert.debt }} ₽{% endif %}
-</p>
-<a href="{% url 'payments' %}" class="btn btn-soft mt-3">Открыть продления</a>
-</div>
-</article>
-{% endfor %}
-{% for child in trials %}
-<article class="card flex gap-4 border-l-4 border-l-fuchsia-500 p-4">
-<span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-fuchsia-50 text-fuchsia-600">
-<i data-lucide="user-check">
-</i>
-</span>
-<div>
-<b class="text-sm">Пробное занятие: {{ child }}</b>
-<p class="mt-1 text-xs text-slate-500">{{ child.group }} · {{ child.parent_phone|default:"телефон не указан" }}</p>
-</div>
-</article>
-{% endfor %}
-{% for reminder in reminders %}
-<article class="card flex gap-4 border-l-4 border-l-blue-500 p-4">
-<i data-lucide="calendar-clock" class="text-blue-600">
-</i>
-<div>
-<b>{{ reminder.title }}</b>
-<p class="text-xs text-slate-500">{{ reminder.remind_at|date:"d.m.Y H:i" }} · {{ reminder.assignee.get_full_name|default:reminder.assignee.username }}</p>
-<a href="{% url 'calendar' %}?edit={{ reminder.pk }}" class="btn btn-soft mt-2">Открыть календарь</a>
-</div>
-</article>
-{% endfor %}
-{% for lead in imported_leads %}
-<article class="card flex gap-4 border-l-4 border-l-cyan-500 p-4">
-<i data-lucide="inbox" class="text-cyan-600">
-</i>
-<div>
-<b>Новая заявка из рекламы: {{ lead.full_name }}</b>
-<p class="text-xs text-slate-500">{{ lead.phone }} · {{ lead.source }}</p>
-<a href="{% url 'applications' %}?edit={{ lead.pk }}" class="btn btn-soft mt-2">Обработать</a>
-</div>
-</article>
-{% endfor %}
-{% if not tasks and not alerts and not trials and not reminders and not imported_leads %}
-<div class="card p-12 text-center">
-<i data-lucide="circle-check-big" class="mx-auto h-10 w-10 text-emerald-500">
-</i>
-<b class="mt-3 block">Всё спокойно</b>
-<p class="text-xs text-slate-500">Нет задач и срочных уведомлений</p>
-</div>
-{% endif %}
-</section>
+    <aside class="card h-fit p-4">
+        <p class="text-xs font-bold text-slate-500">ТРЕБУЕТ ВНИМАНИЯ</p>
+        <p class="mt-2 text-4xl font-extrabold">{{ open_count }}</p>
+        <p class="mt-1 text-xs text-slate-500">открытых событий</p>
+        <div class="mt-5 space-y-2 text-xs">
+            <div class="flex justify-between">
+                <span>Задачи</span>
+                <b>{{ tasks.count }}</b>
+            </div>
+            <div class="flex justify-between">
+                <span>Абонементы</span>
+                <b>{{ alerts|length }}</b>
+            </div>
+            <div class="flex justify-between">
+                <span>Пробные</span>
+                <b>{{ trials.count }}</b>
+            </div>
+        </div>
+    </aside>
+    <section class="space-y-3">
+        {% for task in tasks %}
+        <article class="card flex gap-4 border-l-4 {% if task.is_done %}border-l-emerald-400 opacity-60{% elif task.due_date and task.due_date < today %}border-l-red-500{% else %}border-l-blue-500{% endif %} p-4">
+            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600">
+                <i data-lucide="clipboard-check">
+                </i>
+            </span>
+            <div class="flex-1">
+                <div class="flex justify-between gap-4">
+                    <b class="text-sm">{{ task.title }}</b>
+                    <small class="text-slate-400">
+                        {% if task.due_date %}до {{ task.due_date|date:"d.m" }}{% endif %}
+                    </small>
+                </div>
+                <p class="mt-1 text-xs text-slate-500">{{ task.description|default:"Без описания" }} · от {{ task.created_by.get_full_name|default:task.created_by.username|default:"системы" }}</p>
+                <form method="post" class="mt-3">
+                    {% csrf_token %}
+                    <input type="hidden" name="task_id" value="{{ task.pk }}">
+                    <button class="btn {% if task.is_done %}btn-soft{% else %}btn-dark{% endif %}">
+                        {% if task.is_done %}Вернуть в работу{% else %}Выполнено{% endif %}
+                    </button>
+                </form>
+            </div>
+        </article>
+        {% endfor %}
+        {% for alert in alerts %}
+        <article class="card flex gap-4 border-l-4 border-l-red-500 p-4">
+            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-red-50 text-red-600">
+                <i data-lucide="circle-alert">
+                </i>
+            </span>
+            <div>
+                <b class="text-sm">Заканчивается абонемент: {{ alert.child }}</b>
+                <p class="mt-1 text-xs text-slate-500">До {{ alert.expiry|date:"d.m.Y" }}{% if alert.debt > 0 %} · долг {{ alert.debt }} ₽{% endif %}
+                </p>
+                <a href="{% url 'payments' %}" class="btn btn-soft mt-3">Открыть продления</a>
+            </div>
+        </article>
+        {% endfor %}
+        {% for child in trials %}
+        <article class="card flex gap-4 border-l-4 border-l-fuchsia-500 p-4">
+            <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-fuchsia-50 text-fuchsia-600">
+                <i data-lucide="user-check">
+                </i>
+            </span>
+            <div>
+                <b class="text-sm">Пробное занятие: {{ child }}</b>
+                <p class="mt-1 text-xs text-slate-500">{{ child.group }} · {{ child.parent_phone|default:"телефон не указан" }}</p>
+            </div>
+        </article>
+        {% endfor %}
+        {% for reminder in reminders %}
+        <article class="card flex gap-4 border-l-4 border-l-blue-500 p-4">
+            <i data-lucide="calendar-clock" class="text-blue-600">
+            </i>
+            <div>
+                <b>{{ reminder.title }}</b>
+                <p class="text-xs text-slate-500">{{ reminder.remind_at|date:"d.m.Y H:i" }} · {{ reminder.assignee.get_full_name|default:reminder.assignee.username }}</p>
+                <a href="{% url 'calendar' %}?edit={{ reminder.pk }}" class="btn btn-soft mt-2">Открыть календарь</a>
+            </div>
+        </article>
+        {% endfor %}
+        {% for lead in imported_leads %}
+        <article class="card flex gap-4 border-l-4 border-l-cyan-500 p-4">
+            <i data-lucide="inbox" class="text-cyan-600">
+            </i>
+            <div>
+                <b>Новая заявка из рекламы: {{ lead.full_name }}</b>
+                <p class="text-xs text-slate-500">{{ lead.phone }} · {{ lead.source }}</p>
+                <a href="{% url 'applications' %}?edit={{ lead.pk }}" class="btn btn-soft mt-2">Обработать</a>
+            </div>
+        </article>
+        {% endfor %}
+        {% if not tasks and not alerts and not trials and not reminders and not imported_leads %}
+        <div class="card p-12 text-center">
+            <i data-lucide="circle-check-big" class="mx-auto h-10 w-10 text-emerald-500">
+            </i>
+            <b class="mt-3 block">Всё спокойно</b>
+            <p class="text-xs text-slate-500">Нет задач и срочных уведомлений</p>
+        </div>
+        {% endif %}
+    </section>
 </div>
 {% endblock %}

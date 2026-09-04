@@ -1,135 +1,138 @@
 {% load static %}
 <!doctype html>
 <html lang="ru">
+
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{{ title }} · ВЫСОТА CRM</title>
   <script src="https://cdn.tailwindcss.com">
-</script>
+  </script>
   <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js">
-</script>
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{% static 'crm/app.css' %}">
 </head>
+
 <body class="bg-[#F6F7F9] text-[#17202A] antialiased">
   <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
     <div class="mx-auto flex max-w-[1500px] items-center gap-4 px-4 py-3 lg:px-7">
       <a href="{% url 'attendance' %}" class="mr-2 flex shrink-0 items-center gap-2.5">
         <span class="grid h-9 w-9 place-items-center rounded-xl bg-[#FF5C35] text-white">
-<i data-lucide="sparkles" class="h-5 w-5">
-</i>
-</span>
+          <i data-lucide="sparkles" class="h-5 w-5">
+          </i>
+        </span>
         <span class="hidden font-extrabold sm:block">ВЫСОТА <span class="text-[#FF5C35]">CRM</span>
-</span>
+        </span>
       </a>
       <nav class="scrollbar-none flex min-w-0 flex-1 gap-1 overflow-x-auto">
         <a class="nav-pill {% if page == 'attendance' %}active{% endif %}" href="{% url 'attendance' %}">
-<i data-lucide="calendar-check">
-</i>Табель</a>
+          <i data-lucide="calendar-check">
+          </i>Табель</a>
         <a class="nav-pill {% if page == 'applications' %}active{% endif %}" href="{% url 'applications' %}">
-<i data-lucide="inbox">
-</i>Заявки</a>
+          <i data-lucide="inbox">
+          </i>Заявки</a>
         <a class="nav-pill {% if page == 'newcomers' %}active{% endif %}" href="{% url 'newcomers' %}">
-<i data-lucide="user-round-plus">
-</i>Новички</a>
+          <i data-lucide="user-round-plus">
+          </i>Новички</a>
         <a class="nav-pill {% if page == 'calendar' %}active{% endif %}" href="{% url 'calendar' %}">
-<i data-lucide="calendar-days">
-</i>Календарь</a>
+          <i data-lucide="calendar-days">
+          </i>Календарь</a>
         <a class="nav-pill {% if page == 'statistics' %}active{% endif %}" href="{% url 'statistics' %}">
-<i data-lucide="chart-no-axes-combined">
-</i>Статистика</a>
+          <i data-lucide="chart-no-axes-combined">
+          </i>Статистика</a>
         <a class="nav-pill {% if page == 'payments' %}active{% endif %}" href="{% url 'payments' %}">
-<i data-lucide="wallet-cards">
-</i>Продления</a>
+          <i data-lucide="wallet-cards">
+          </i>Продления</a>
         <a class="nav-pill {% if page == 'expenses' %}active{% endif %}" href="{% url 'expenses' %}">
-<i data-lucide="receipt-text">
-</i>Расходы</a>
+          <i data-lucide="receipt-text">
+          </i>Расходы</a>
         <a class="nav-pill {% if page == 'competitions' %}active{% endif %}" href="{% url 'competitions' %}">
-<i data-lucide="trophy">
-</i>Соревнования</a>
+          <i data-lucide="trophy">
+          </i>Соревнования</a>
         {% if is_boss %}
-<a class="nav-pill {% if page == 'boss' %}active{% endif %}" href="{% url 'boss' %}">
-<i data-lucide="briefcase-business">
-</i>Руководителю</a>
-{% endif %}
+        <a class="nav-pill {% if page == 'boss' %}active{% endif %}" href="{% url 'boss' %}">
+          <i data-lucide="briefcase-business">
+          </i>Руководителю</a>
+        {% endif %}
       </nav>
       <div class="flex shrink-0 items-center gap-2 border-l border-slate-200 pl-3">
         <a href="{% url 'search' %}" class="grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100" aria-label="Поиск">
-<i data-lucide="search" class="h-5 w-5">
-</i>
-</a>
+          <i data-lucide="search" class="h-5 w-5">
+          </i>
+        </a>
         <a href="{% url 'notifications' %}" class="relative grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100" aria-label="Уведомления">
-<i data-lucide="bell" class="h-5 w-5">
-</i>
-</a>
+          <i data-lucide="bell" class="h-5 w-5">
+          </i>
+        </a>
         <button data-menu-toggle class="flex items-center gap-2 rounded-xl p-1.5 hover:bg-slate-100">
           <span class="grid h-8 w-8 place-items-center rounded-lg bg-[#E8F0FF] text-xs font-extrabold text-[#315EBC]">{{ request.user.username|slice:":2"|upper }}</span>
           <span class="hidden text-left lg:block">
-<b class="block text-xs">{{ request.user.get_full_name|default:request.user.username }}</b>
-<small class="block text-[10px] text-slate-500">{{ request.user.profile.get_role_display|default:"Администратор" }}</small>
-</span>
+            <b class="block text-xs">{{ request.user.get_full_name|default:request.user.username }}</b>
+            <small class="block text-[10px] text-slate-500">{{ request.user.profile.get_role_display|default:"Администратор" }}</small>
+          </span>
           <i data-lucide="chevron-down" class="h-4 w-4 text-slate-400">
-</i>
+          </i>
         </button>
       </div>
     </div>
     <div data-user-menu class="absolute right-6 top-16 hidden w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
       <a href="{% url 'profile' %}" class="menu-item">
-<i data-lucide="user-round">
-</i>Мой профиль</a>
+        <i data-lucide="user-round">
+        </i>Мой профиль</a>
       {% if is_senior %}
-<a href="{% url 'users' %}" class="menu-item">
-<i data-lucide="users-round">
-</i>Пользователи</a>
-{% endif %}
+      <a href="{% url 'users' %}" class="menu-item">
+        <i data-lucide="users-round">
+        </i>Пользователи</a>
+      {% endif %}
       {% if is_senior %}
-<a href="{% url 'backup_export' %}" class="menu-item">
-<i data-lucide="download">
-</i>Резервная копия</a>
-{% endif %}
+      <a href="{% url 'backup_export' %}" class="menu-item">
+        <i data-lucide="download">
+        </i>Резервная копия</a>
+      {% endif %}
       <hr class="my-2">
-<a href="{% url 'logout' %}" class="menu-item text-red-600">
-<i data-lucide="log-out">
-</i>Выйти</a>
+      <a href="{% url 'logout' %}" class="menu-item text-red-600">
+        <i data-lucide="log-out">
+        </i>Выйти</a>
     </div>
   </header>
   <main class="mx-auto max-w-[1500px] px-4 py-7 lg:px-7">
     {% if messages %}
-<div class="mb-4 space-y-2">
-{% for message in messages %}
-<div class="rounded-xl border px-4 py-3 text-sm font-semibold {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">{{ message }}</div>
-{% endfor %}
-</div>
-{% endif %}
+    <div class="mb-4 space-y-2">
+      {% for message in messages %}
+      <div class="rounded-xl border px-4 py-3 text-sm font-semibold {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
     <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div>
-<p class="eyebrow">
-{% now "j E Y · l" %}
-</p>
-<h1 class="text-2xl font-extrabold tracking-tight md:text-3xl">{{ title }}</h1>
-<p class="mt-1 text-sm text-slate-500">{{ subtitle }}</p>
-</div>
+        <p class="eyebrow">
+          {% now "j E Y · l" %}
+        </p>
+        <h1 class="text-2xl font-extrabold tracking-tight md:text-3xl">{{ title }}</h1>
+        <p class="mt-1 text-sm text-slate-500">{{ subtitle }}</p>
+      </div>
       {% block actions %}
-{% endblock %}
+      {% endblock %}
     </div>
     {% block content %}
-{% endblock %}
+    {% endblock %}
   </main>
   <div data-modal-backdrop class="fixed inset-0 z-40 hidden bg-slate-950/35 backdrop-blur-sm">
-</div>
+  </div>
   {% block modals %}
-{% endblock %}
+  {% endblock %}
   <div id="toast" class="fixed bottom-5 right-5 z-[60] hidden items-center gap-3 rounded-2xl bg-[#17202A] px-4 py-3 text-sm font-semibold text-white shadow-2xl">
-<i data-lucide="circle-check" class="h-5 w-5 text-emerald-400">
-</i>
-<span>Изменения сохранены</span>
-</div>
+    <i data-lucide="circle-check" class="h-5 w-5 text-emerald-400">
+    </i>
+    <span>Изменения сохранены</span>
+  </div>
   <script src="{% static 'crm/app.js' %}">
-</script>
+  </script>
   {% block scripts %}
-{% endblock %}
+  {% endblock %}
 </body>
+
 </html>

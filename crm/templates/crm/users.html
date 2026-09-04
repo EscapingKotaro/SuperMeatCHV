@@ -1,90 +1,90 @@
 {% extends 'crm/base.html' %}
 {% block actions %}
 <button data-modal="user-modal" class="btn btn-primary">
-<i data-lucide="user-plus">
-</i>Добавить пользователя</button>
+    <i data-lucide="user-plus">
+    </i>Добавить пользователя</button>
 {% endblock %}
 {% block content %}
 <section class="card overflow-hidden">
-<div class="table-wrap">
-<table class="data-table">
-<thead>
-<tr>
-<th>Сотрудник</th>
-<th>Логин</th>
-<th>Роль</th>
-<th>Последний вход</th>
-<th>Статус</th>
-<th>
-</th>
-</tr>
-</thead>
-<tbody>
-{% for item in users %}
-<tr>
-<td>
-<b>{{ item.get_full_name|default:item.username }}</b>
-<small class="block text-slate-500">{{ item.email|default:"Email не указан" }}</small>
-</td>
-<td>{{ item.username }}</td>
-<td>
-<span class="badge bg-blue-50 text-blue-700">{{ item.profile.get_role_display|default:"Администратор" }}</span>
-</td>
-<td>{{ item.last_login|date:"d.m.Y H:i"|default:"Ещё не входил" }}</td>
-<td>
-<span class="badge {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-red-50 text-red-700{% endif %}">
-{% if item.is_active %}Активен{% else %}Отключён{% endif %}
-</span>
-</td>
-<td>
-<form method="post">
-{% csrf_token %}
-<input type="hidden" name="action" value="toggle">
-<input type="hidden" name="user_id" value="{{ item.pk }}">
-<button class="btn btn-soft" {% if item == request.user %}disabled{% endif %}>
-{% if item.is_active %}Отключить{% else %}Включить{% endif %}
-</button>
-</form>
-</td>
-</tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
+    <div class="table-wrap">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Сотрудник</th>
+                    <th>Логин</th>
+                    <th>Роль</th>
+                    <th>Последний вход</th>
+                    <th>Статус</th>
+                    <th>
+                    </th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in users %}
+                <tr>
+                    <td>
+                        <b>{{ item.get_full_name|default:item.username }}</b>
+                        <small class="block text-slate-500">{{ item.email|default:"Email не указан" }}</small>
+                    </td>
+                    <td>{{ item.username }}</td>
+                    <td>
+                        <span class="badge bg-blue-50 text-blue-700">{{ item.profile.get_role_display|default:"Администратор" }}</span>
+                    </td>
+                    <td>{{ item.last_login|date:"d.m.Y H:i"|default:"Ещё не входил" }}</td>
+                    <td>
+                        <span class="badge {% if item.is_active %}bg-emerald-50 text-emerald-700{% else %}bg-red-50 text-red-700{% endif %}">
+                            {% if item.is_active %}Активен{% else %}Отключён{% endif %}
+                        </span>
+                    </td>
+                    <td>
+                        <form method="post">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="toggle">
+                            <input type="hidden" name="user_id" value="{{ item.pk }}">
+                            <button class="btn btn-soft" {% if item==request.user %}disabled{% endif %}>
+                                {% if item.is_active %}Отключить{% else %}Включить{% endif %}
+                            </button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </section>
 {% endblock %}
 {% block modals %}
 <section id="user-modal" class="modal {% if form.errors %}open{% endif %}">
-<form method="post">
-{% csrf_token %}
-<input type="hidden" name="action" value="create">
-<div class="modal-head">
-<div>
-<b>Новый пользователь</b>
-<p class="text-xs text-slate-500">Создание реального рабочего аккаунта</p>
-</div>
-<button type="button" data-close>
-<i data-lucide="x">
-</i>
-</button>
-</div>
-<div class="modal-body grid gap-4 sm:grid-cols-2">
-{% for field in form %}
-<label class="{% if field.name == 'password1' or field.name == 'password2' %}sm:col-span-2{% endif %}">
-<span class="label">{{ field.label }}</span>{{ field }}{% if field.help_text %}
-<small class="mt-1 block text-[10px] text-slate-400">{{ field.help_text|safe }}</small>
-{% endif %}
-{% if field.errors %}
-<small class="text-red-600">{{ field.errors|join:", " }}</small>
-{% endif %}
-</label>
-{% endfor %}
-</div>
-<div class="modal-foot">
-<button type="button" data-close class="btn btn-soft">Отмена</button>
-<button class="btn btn-primary">Создать аккаунт</button>
-</div>
-</form>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create">
+        <div class="modal-head">
+            <div>
+                <b>Новый пользователь</b>
+                <p class="text-xs text-slate-500">Создание реального рабочего аккаунта</p>
+            </div>
+            <button type="button" data-close>
+                <i data-lucide="x">
+                </i>
+            </button>
+        </div>
+        <div class="modal-body grid gap-4 sm:grid-cols-2">
+            {% for field in form %}
+            <label class="{% if field.name == 'password1' or field.name == 'password2' %}sm:col-span-2{% endif %}">
+                <span class="label">{{ field.label }}</span>{{ field }}{% if field.help_text %}
+                <small class="mt-1 block text-[10px] text-slate-400">{{ field.help_text|safe }}</small>
+                {% endif %}
+                {% if field.errors %}
+                <small class="text-red-600">{{ field.errors|join:", " }}</small>
+                {% endif %}
+            </label>
+            {% endfor %}
+        </div>
+        <div class="modal-foot">
+            <button type="button" data-close class="btn btn-soft">Отмена</button>
+            <button class="btn btn-primary">Создать аккаунт</button>
+        </div>
+    </form>
 </section>
 {% endblock %}
 {% block scripts %}

@@ -1,178 +1,178 @@
 {% extends 'crm/base.html' %}
 {% block actions %}
 <div class="flex gap-2">
-<button data-modal="task-modal" class="btn btn-dark">
-<i data-lucide="list-plus">
-</i>Поставить задачу</button>
-<button data-modal="goal-modal" class="btn btn-primary">
-<i data-lucide="target">
-</i>Цель выручки</button>
+    <button data-modal="task-modal" class="btn btn-dark">
+        <i data-lucide="list-plus">
+        </i>Поставить задачу</button>
+    <button data-modal="goal-modal" class="btn btn-primary">
+        <i data-lucide="target">
+        </i>Цель выручки</button>
 </div>
 {% endblock %}
 {% block content %}
 <section class="mb-4 overflow-hidden rounded-[1.25rem] bg-[#17202A] p-6 text-white">
-<div class="grid gap-6 md:grid-cols-[1fr_1.3fr]">
-<div>
-<p class="text-xs font-bold text-slate-400">ВЫРУЧКА ЗА МЕСЯЦ</p>
-<p class="mt-2 text-4xl font-extrabold">{{ revenue }} ₽</p>
-</div>
-<div class="self-center">
-<div class="mb-2 flex justify-between text-xs">
-<span>{{ target_percent }}% от цели</span>
-<b>{{ target_amount }} ₽</b>
-</div>
-<div class="h-3 overflow-hidden rounded-full bg-white/10">
-<div class="h-full rounded-full bg-[#FF5C35]" style="width:{{ target_percent }}%">
-</div>
-</div>
-{% if not target %}
-<p class="mt-2 text-[10px] text-amber-300">Цель на этот месяц ещё не установлена</p>
-{% endif %}
-</div>
-</div>
+    <div class="grid gap-6 md:grid-cols-[1fr_1.3fr]">
+        <div>
+            <p class="text-xs font-bold text-slate-400">ВЫРУЧКА ЗА МЕСЯЦ</p>
+            <p class="mt-2 text-4xl font-extrabold">{{ revenue }} ₽</p>
+        </div>
+        <div class="self-center">
+            <div class="mb-2 flex justify-between text-xs">
+                <span>{{ target_percent }}% от цели</span>
+                <b>{{ target_amount }} ₽</b>
+            </div>
+            <div class="h-3 overflow-hidden rounded-full bg-white/10">
+                <div class="h-full rounded-full bg-[#FF5C35]" style="width:{{ target_percent }}%">
+                </div>
+            </div>
+            {% if not target %}
+            <p class="mt-2 text-[10px] text-amber-300">Цель на этот месяц ещё не установлена</p>
+            {% endif %}
+        </div>
+    </div>
 </section>
 <div class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-<div class="card metric">
-<p class="metric-label">Активные спортсмены</p>
-<p class="metric-value">{{ active_count }}</p>
-</div>
-<div class="card metric">
-<p class="metric-label">Тренеры</p>
-<p class="metric-value">{{ trainer_rows|length }}</p>
-</div>
-<div class="card metric">
-<p class="metric-label">Фонд ЗП</p>
-<p class="metric-value">{{ salaries }} ₽</p>
-</div>
-<div class="card metric">
-<p class="metric-label">Задач просрочено</p>
-<p class="metric-value text-red-600">{{ overdue_tasks }}</p>
-</div>
+    <div class="card metric">
+        <p class="metric-label">Активные спортсмены</p>
+        <p class="metric-value">{{ active_count }}</p>
+    </div>
+    <div class="card metric">
+        <p class="metric-label">Тренеры</p>
+        <p class="metric-value">{{ trainer_rows|length }}</p>
+    </div>
+    <div class="card metric">
+        <p class="metric-label">Фонд ЗП</p>
+        <p class="metric-value">{{ salaries }} ₽</p>
+    </div>
+    <div class="card metric">
+        <p class="metric-label">Задач просрочено</p>
+        <p class="metric-value text-red-600">{{ overdue_tasks }}</p>
+    </div>
 </div>
 <div class="grid gap-4 xl:grid-cols-2">
-<section class="card overflow-hidden">
-<div class="p-5">
-<h2 class="font-extrabold">KPI тренеров</h2>
-<p class="text-xs text-slate-500">Показатели текущего месяца</p>
-</div>
-<div class="table-wrap">
-<table class="data-table">
-<thead>
-<tr>
-<th>#</th>
-<th>Тренер</th>
-<th>Детей</th>
-<th>Пробные</th>
-<th>Ушли</th>
-<th>Посещ.</th>
-</tr>
-</thead>
-<tbody>
-{% for row in trainer_rows %}
-<tr>
-<td>
-<b>{{ forloop.counter }}</b>
-</td>
-<td>
-<b>{{ row.trainer.full_name }}</b>
-</td>
-<td>{{ row.children }}</td>
-<td>{{ row.trial }}</td>
-<td>{{ row.lost }}</td>
-<td>
-<span class="badge {% if row.attendance >= 80 %}bg-emerald-50 text-emerald-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ row.attendance }}%</span>
-</td>
-</tr>
-{% empty %}
-<tr>
-<td colspan="6">Нет данных</td>
-</tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
-</section>
-<section id="logs" class="card p-5">
-<div class="flex justify-between">
-<div>
-<h2 class="font-extrabold">
-{% if all_logs %}Все действия{% else %}Последние действия{% endif %}
-</h2>
-<p class="text-xs text-slate-500">Журнал сотрудников</p>
-</div>
-<a href="{% if all_logs %}
+    <section class="card overflow-hidden">
+        <div class="p-5">
+            <h2 class="font-extrabold">KPI тренеров</h2>
+            <p class="text-xs text-slate-500">Показатели текущего месяца</p>
+        </div>
+        <div class="table-wrap">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Тренер</th>
+                        <th>Детей</th>
+                        <th>Пробные</th>
+                        <th>Ушли</th>
+                        <th>Посещ.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in trainer_rows %}
+                    <tr>
+                        <td>
+                            <b>{{ forloop.counter }}</b>
+                        </td>
+                        <td>
+                            <b>{{ row.trainer.full_name }}</b>
+                        </td>
+                        <td>{{ row.children }}</td>
+                        <td>{{ row.trial }}</td>
+                        <td>{{ row.lost }}</td>
+                        <td>
+                            <span class="badge {% if row.attendance >= 80 %}bg-emerald-50 text-emerald-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ row.attendance }}%</span>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="6">Нет данных</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </section>
+    <section id="logs" class="card p-5">
+        <div class="flex justify-between">
+            <div>
+                <h2 class="font-extrabold">
+                    {% if all_logs %}Все действия{% else %}Последние действия{% endif %}
+                </h2>
+                <p class="text-xs text-slate-500">Журнал сотрудников</p>
+            </div>
+            <a href="{% if all_logs %}
 {% url 'boss' %}
 {% else %}?all_logs=1#logs{% endif %}" class="btn btn-soft">
-{% if all_logs %}Свернуть{% else %}Все логи{% endif %}
-</a>
-</div>
-<div class="mt-4 space-y-4 text-xs">
-{% for event in events %}
-<div class="flex gap-3">
-<span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-50 font-bold text-blue-600">{{ event.actor.username|slice:":2"|upper|default:"СИ" }}</span>
-<div>
-<b>{{ event.description }}</b>
-<p class="text-slate-500">{{ event.actor.get_full_name|default:event.actor.username|default:"Система" }} · {{ event.created_at|timesince }} назад</p>
-</div>
-</div>
-{% empty %}
-<p class="text-slate-500">Действий пока нет</p>
-{% endfor %}
-</div>
-</section>
+                {% if all_logs %}Свернуть{% else %}Все логи{% endif %}
+            </a>
+        </div>
+        <div class="mt-4 space-y-4 text-xs">
+            {% for event in events %}
+            <div class="flex gap-3">
+                <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-50 font-bold text-blue-600">{{ event.actor.username|slice:":2"|upper|default:"СИ" }}</span>
+                <div>
+                    <b>{{ event.description }}</b>
+                    <p class="text-slate-500">{{ event.actor.get_full_name|default:event.actor.username|default:"Система" }} · {{ event.created_at|timesince }} назад</p>
+                </div>
+            </div>
+            {% empty %}
+            <p class="text-slate-500">Действий пока нет</p>
+            {% endfor %}
+        </div>
+    </section>
 </div>
 {% endblock %}
 {% block modals %}
 <section id="task-modal" class="modal">
-<form method="post">
-{% csrf_token %}
-<input type="hidden" name="action" value="create_task">
-<div class="modal-head">
-<div>
-<b>Новая задача</b>
-<p class="text-xs text-slate-500">Назначьте одному сотруднику или всем</p>
-</div>
-<button type="button" data-close>
-<i data-lucide="x">
-</i>
-</button>
-</div>
-<div class="modal-body grid gap-4">
-{% for field in task_form %}
-<label>
-<span class="label">{{ field.label }}</span>{{ field }}{% if field.errors %}
-<small class="text-red-600">{{ field.errors|join:", " }}</small>
-{% endif %}
-</label>
-{% endfor %}
-</div>
-<div class="modal-foot">
-<button type="button" data-close class="btn btn-soft">Отмена</button>
-<button class="btn btn-primary">Поставить задачу</button>
-</div>
-</form>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_task">
+        <div class="modal-head">
+            <div>
+                <b>Новая задача</b>
+                <p class="text-xs text-slate-500">Назначьте одному сотруднику или всем</p>
+            </div>
+            <button type="button" data-close>
+                <i data-lucide="x">
+                </i>
+            </button>
+        </div>
+        <div class="modal-body grid gap-4">
+            {% for field in task_form %}
+            <label>
+                <span class="label">{{ field.label }}</span>{{ field }}{% if field.errors %}
+                <small class="text-red-600">{{ field.errors|join:", " }}</small>
+                {% endif %}
+            </label>
+            {% endfor %}
+        </div>
+        <div class="modal-foot">
+            <button type="button" data-close class="btn btn-soft">Отмена</button>
+            <button class="btn btn-primary">Поставить задачу</button>
+        </div>
+    </form>
 </section>
 <section id="goal-modal" class="modal">
-<form method="post">
-{% csrf_token %}
-<input type="hidden" name="action" value="set_target">
-<div class="modal-head">
-<b>Цель по выручке</b>
-<button type="button" data-close>
-<i data-lucide="x">
-</i>
-</button>
-</div>
-<div class="modal-body grid gap-4">
-{% for field in target_form %}
-<label>
-<span class="label">{{ field.label }}</span>{{ field }}</label>
-{% endfor %}
-</div>
-<div class="modal-foot">
-<button type="button" data-close class="btn btn-soft">Отмена</button>
-<button class="btn btn-primary">Сохранить</button>
-</div>
-</form>
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="set_target">
+        <div class="modal-head">
+            <b>Цель по выручке</b>
+            <button type="button" data-close>
+                <i data-lucide="x">
+                </i>
+            </button>
+        </div>
+        <div class="modal-body grid gap-4">
+            {% for field in target_form %}
+            <label>
+                <span class="label">{{ field.label }}</span>{{ field }}</label>
+            {% endfor %}
+        </div>
+        <div class="modal-foot">
+            <button type="button" data-close class="btn btn-soft">Отмена</button>
+            <button class="btn btn-primary">Сохранить</button>
+        </div>
+    </form>
 </section>
 {% endblock %}

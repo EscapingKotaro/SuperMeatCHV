@@ -1,243 +1,243 @@
 {% extends 'crm/base.html' %}
 {% block actions %}
 <div class="flex flex-wrap gap-2">
-<button data-modal="tariff-modal" class="btn btn-soft">
-<i data-lucide="settings-2">
-</i>Новый тариф</button>
-<button data-modal="subscription-modal" class="btn btn-soft">
-<i data-lucide="ticket-plus">
-</i>Назначить абонемент</button>
-<button data-modal="payment-modal" class="btn btn-primary">
-<i data-lucide="plus">
-</i>Принять оплату</button>
+  <button data-modal="tariff-modal" class="btn btn-soft">
+    <i data-lucide="settings-2">
+    </i>Новый тариф</button>
+  <button data-modal="subscription-modal" class="btn btn-soft">
+    <i data-lucide="ticket-plus">
+    </i>Назначить абонемент</button>
+  <button data-modal="payment-modal" class="btn btn-primary">
+    <i data-lucide="plus">
+    </i>Принять оплату</button>
 </div>
 {% endblock %}
 {% block content %}
 <div class="mb-4 grid gap-3 sm:grid-cols-3">
-<div class="card metric">
-<p class="metric-label">Нужно связаться срочно</p>
-<p class="metric-value">{{ urgent_count }}</p>
-</div>
-<div class="card metric">
-<p class="metric-label">Продления за 14 дней</p>
-<p class="metric-value">{{ renewals|length }}</p>
-</div>
-<div class="card metric">
-<p class="metric-label">Ожидаемая сумма</p>
-<p class="metric-value">{{ expected }} ₽</p>
-</div>
+  <div class="card metric">
+    <p class="metric-label">Нужно связаться срочно</p>
+    <p class="metric-value">{{ urgent_count }}</p>
+  </div>
+  <div class="card metric">
+    <p class="metric-label">Продления за 14 дней</p>
+    <p class="metric-value">{{ renewals|length }}</p>
+  </div>
+  <div class="card metric">
+    <p class="metric-label">Ожидаемая сумма</p>
+    <p class="metric-value">{{ expected }} ₽</p>
+  </div>
 </div>
 <section class="card mb-5 overflow-hidden">
-<div class="border-b p-4">
-<h2 class="font-extrabold">Ближайшие продления</h2>
-</div>
-<div class="table-wrap">
-<table class="data-table">
-<thead>
-<tr>
-<th>Спортсмен</th>
-<th>Окончание</th>
-<th>Осталось</th>
-<th>Долг</th>
-<th>Действия</th>
-</tr>
-</thead>
-<tbody>
-{% for row in renewals %}
-<tr>
-<td>
-<b>{{ row.child }}</b>
-<small class="block text-slate-500">{{ row.child.parent_phone }}</small>
-</td>
-<td>
-<b {% if row.days <= 3 %}class="text-red-600"{% endif %}>{{ row.subscription.end_date|date:"d.m.Y" }}</b>
-</td>
-<td>{{ row.child.sessions_left }} из {{ row.subscription.sessions_total }}</td>
-<td>
-{% if row.debt > 0 %}
-<b class="text-red-600">{{ row.debt }} ₽</b>
-{% else %}—{% endif %}
-</td>
-<td>
-<a class="btn btn-soft" href="?edit_subscription={{ row.subscription.pk }}">Изменить</a>
-</td>
-</tr>
-{% empty %}
-<tr>
-<td colspan="5" class="py-10 text-center text-slate-500">Продлений нет</td>
-</tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
+  <div class="border-b p-4">
+    <h2 class="font-extrabold">Ближайшие продления</h2>
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Спортсмен</th>
+          <th>Окончание</th>
+          <th>Осталось</th>
+          <th>Долг</th>
+          <th>Действия</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in renewals %}
+        <tr>
+          <td>
+            <b>{{ row.child }}</b>
+            <small class="block text-slate-500">{{ row.child.parent_phone }}</small>
+          </td>
+          <td>
+            <b {% if row.days <= 3 %}class="text-red-600" {% endif %}>{{ row.subscription.end_date|date:"d.m.Y" }}</b>
+          </td>
+          <td>{{ row.child.sessions_left }} из {{ row.subscription.sessions_total }}</td>
+          <td>
+            {% if row.debt > 0 %}
+            <b class="text-red-600">{{ row.debt }} ₽</b>
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            <a class="btn btn-soft" href="?edit_subscription={{ row.subscription.pk }}">Изменить</a>
+          </td>
+        </tr>
+        {% empty %}
+        <tr>
+          <td colspan="5" class="py-10 text-center text-slate-500">Продлений нет</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
 </section>
 <div class="grid gap-5 xl:grid-cols-2">
   <section class="card overflow-hidden">
-<div class="border-b p-4">
-<h2 class="font-extrabold">Тарифы</h2>
-<p class="text-xs text-slate-500">Цена, срок и число занятий задаются здесь</p>
-</div>
-<div class="table-wrap">
-<table class="data-table">
-<thead>
-<tr>
-<th>Название</th>
-<th>Цена</th>
-<th>Занятия / срок</th>
-<th>
-</th>
-</tr>
-</thead>
-<tbody>
-{% for tariff in tariffs %}
-<tr>
-<td>
-<b>{{ tariff.name }}</b>
-{% if not tariff.is_active %}
-<small class="block text-red-500">Выключен</small>
-{% endif %}
-</td>
-<td>{{ tariff.price }} ₽</td>
-<td>{{ tariff.sessions_total }} / {{ tariff.duration_days }} дн.</td>
-<td>
-<a class="btn btn-soft" href="?edit_tariff={{ tariff.pk }}">Изменить</a>
-</td>
-</tr>
-{% empty %}
-<tr>
-<td colspan="4">Создайте первый тариф</td>
-</tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
-</section>
+    <div class="border-b p-4">
+      <h2 class="font-extrabold">Тарифы</h2>
+      <p class="text-xs text-slate-500">Цена, срок и число занятий задаются здесь</p>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Название</th>
+            <th>Цена</th>
+            <th>Занятия / срок</th>
+            <th>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tariff in tariffs %}
+          <tr>
+            <td>
+              <b>{{ tariff.name }}</b>
+              {% if not tariff.is_active %}
+              <small class="block text-red-500">Выключен</small>
+              {% endif %}
+            </td>
+            <td>{{ tariff.price }} ₽</td>
+            <td>{{ tariff.sessions_total }} / {{ tariff.duration_days }} дн.</td>
+            <td>
+              <a class="btn btn-soft" href="?edit_tariff={{ tariff.pk }}">Изменить</a>
+            </td>
+          </tr>
+          {% empty %}
+          <tr>
+            <td colspan="4">Создайте первый тариф</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
   <section class="card overflow-hidden">
-<div class="border-b p-4">
-<h2 class="font-extrabold">Все абонементы</h2>
-<p class="text-xs text-slate-500">Повторное редактирование не удаляет историю оплат</p>
-</div>
-<div class="table-wrap">
-<table class="data-table">
-<thead>
-<tr>
-<th>Спортсмен</th>
-<th>Тариф</th>
-<th>Период</th>
-<th>
-</th>
-</tr>
-</thead>
-<tbody>
-{% for item in subscriptions %}
-<tr>
-<td>{{ item.child }}</td>
-<td>{{ item.tariff|default:"Индивидуальный" }}{% if not item.is_active %}
-<small class="block text-red-500">Отменён</small>
-{% endif %}
-</td>
-<td>{{ item.start_date|date:"d.m" }}–{{ item.end_date|date:"d.m.Y" }}</td>
-<td>
-<a class="btn btn-soft" href="?edit_subscription={{ item.pk }}">Изменить</a>
-</td>
-</tr>
-{% endfor %}
-</tbody>
-</table>
-</div>
-</section>
+    <div class="border-b p-4">
+      <h2 class="font-extrabold">Все абонементы</h2>
+      <p class="text-xs text-slate-500">Повторное редактирование не удаляет историю оплат</p>
+    </div>
+    <div class="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Спортсмен</th>
+            <th>Тариф</th>
+            <th>Период</th>
+            <th>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in subscriptions %}
+          <tr>
+            <td>{{ item.child }}</td>
+            <td>{{ item.tariff|default:"Индивидуальный" }}{% if not item.is_active %}
+              <small class="block text-red-500">Отменён</small>
+              {% endif %}
+            </td>
+            <td>{{ item.start_date|date:"d.m" }}–{{ item.end_date|date:"d.m.Y" }}</td>
+            <td>
+              <a class="btn btn-soft" href="?edit_subscription={{ item.pk }}">Изменить</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
 </div>
 {% endblock %}
 {% block modals %}
 <section id="payment-modal" class="modal">
-<form method="post">
-{% csrf_token %}
-<input type="hidden" name="action" value="payment">
-<div class="modal-head">
-<b>Принять оплату</b>
-<button type="button" data-close>
-<i data-lucide="x">
-</i>
-</button>
-</div>
-<div class="modal-body grid gap-4 sm:grid-cols-2">
-<label class="sm:col-span-2">
-<span class="label">Спортсмен</span>
-<select name="child_id" class="field" required>
-{% for child in children %}
-<option value="{{ child.pk }}">{{ child }}</option>
-{% endfor %}
-</select>
-</label>
-<label>
-<span class="label">Сумма, ₽</span>
-<input name="amount" type="number" min="1" step="0.01" class="field" required>
-</label>
-<label>
-<span class="label">Дата</span>
-<input name="date" type="date" class="field" value="{% now 'Y-m-d' %}" required>
-</label>
-</div>
-<div class="modal-foot">
-<button type="button" data-close class="btn btn-soft">Отмена</button>
-<button class="btn btn-primary">Сохранить</button>
-</div>
-</form>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="payment">
+    <div class="modal-head">
+      <b>Принять оплату</b>
+      <button type="button" data-close>
+        <i data-lucide="x">
+        </i>
+      </button>
+    </div>
+    <div class="modal-body grid gap-4 sm:grid-cols-2">
+      <label class="sm:col-span-2">
+        <span class="label">Спортсмен</span>
+        <select name="child_id" class="field" required>
+          {% for child in children %}
+          <option value="{{ child.pk }}">{{ child }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span class="label">Сумма, ₽</span>
+        <input name="amount" type="number" min="1" step="0.01" class="field" required>
+      </label>
+      <label>
+        <span class="label">Дата</span>
+        <input name="date" type="date" class="field" value="{% now 'Y-m-d' %}" required>
+      </label>
+    </div>
+    <div class="modal-foot">
+      <button type="button" data-close class="btn btn-soft">Отмена</button>
+      <button class="btn btn-primary">Сохранить</button>
+    </div>
+  </form>
 </section>
 <section id="tariff-modal" class="modal {% if editing_tariff %}open{% endif %}">
-<form method="post">
-{% csrf_token %}
-<input type="hidden" name="action" value="save_tariff">
-<div class="modal-head">
-<b>
-{% if editing_tariff %}Изменить тариф{% else %}Новый тариф{% endif %}
-</b>
-<button type="button" data-close>
-<i data-lucide="x">
-</i>
-</button>
-</div>
-<div class="modal-body grid gap-4 sm:grid-cols-2">
-{% for field in tariff_form %}
-<label>
-<span class="label">{{ field.label }}</span>{{ field }}</label>
-{% endfor %}
-</div>
-<div class="modal-foot">
-<button type="button" data-close class="btn btn-soft">Отмена</button>
-<button class="btn btn-primary">Сохранить</button>
-</div>
-</form>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save_tariff">
+    <div class="modal-head">
+      <b>
+        {% if editing_tariff %}Изменить тариф{% else %}Новый тариф{% endif %}
+      </b>
+      <button type="button" data-close>
+        <i data-lucide="x">
+        </i>
+      </button>
+    </div>
+    <div class="modal-body grid gap-4 sm:grid-cols-2">
+      {% for field in tariff_form %}
+      <label>
+        <span class="label">{{ field.label }}</span>{{ field }}</label>
+      {% endfor %}
+    </div>
+    <div class="modal-foot">
+      <button type="button" data-close class="btn btn-soft">Отмена</button>
+      <button class="btn btn-primary">Сохранить</button>
+    </div>
+  </form>
 </section>
 <section id="subscription-modal" class="modal {% if editing_subscription %}open{% endif %}">
-<form method="post">
-{% csrf_token %}
-<input type="hidden" name="action" value="save_subscription">
-{% if editing_subscription %}
-<input type="hidden" name="subscription_id" value="{{ editing_subscription.pk }}">
-{% endif %}
-<div class="modal-head">
-<b>
-{% if editing_subscription %}Изменить абонемент{% else %}Назначить абонемент{% endif %}
-</b>
-<button type="button" data-close>
-<i data-lucide="x">
-</i>
-</button>
-</div>
-<div class="modal-body grid max-h-[65vh] gap-4 overflow-y-auto sm:grid-cols-2">
-{% for field in subscription_form %}
-<label>
-<span class="label">{{ field.label }}</span>{{ field }}</label>
-{% endfor %}
-</div>
-<div class="modal-foot">
-{% if editing_subscription %}
-<button name="action" value="cancel_subscription" class="btn btn-soft text-red-600">Отменить абонемент</button>
-{% endif %}
-<button class="btn btn-primary">Сохранить</button>
-</div>
-</form>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="save_subscription">
+    {% if editing_subscription %}
+    <input type="hidden" name="subscription_id" value="{{ editing_subscription.pk }}">
+    {% endif %}
+    <div class="modal-head">
+      <b>
+        {% if editing_subscription %}Изменить абонемент{% else %}Назначить абонемент{% endif %}
+      </b>
+      <button type="button" data-close>
+        <i data-lucide="x">
+        </i>
+      </button>
+    </div>
+    <div class="modal-body grid max-h-[65vh] gap-4 overflow-y-auto sm:grid-cols-2">
+      {% for field in subscription_form %}
+      <label>
+        <span class="label">{{ field.label }}</span>{{ field }}</label>
+      {% endfor %}
+    </div>
+    <div class="modal-foot">
+      {% if editing_subscription %}
+      <button name="action" value="cancel_subscription" class="btn btn-soft text-red-600">Отменить абонемент</button>
+      {% endif %}
+      <button class="btn btn-primary">Сохранить</button>
+    </div>
+  </form>
 </section>
 {% endblock %}
 {% block scripts %}

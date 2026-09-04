@@ -1,52 +1,52 @@
 {% extends 'crm/base.html' %}
 {% block content %}
 <form method="get" class="card mb-5 flex gap-2 p-4">
-<input name="q" value="{{ query }}" autofocus class="field" placeholder="ФИО, телефон, группа или тренер">
-<button class="btn btn-primary">
-<i data-lucide="search">
-</i>Найти</button>
+    <input name="q" value="{{ query }}" autofocus class="field" placeholder="ФИО, телефон, группа или тренер">
+    <button class="btn btn-primary">
+        <i data-lucide="search">
+        </i>Найти</button>
 </form>
 {% if query %}
 <div class="grid gap-5 lg:grid-cols-3">
-<section class="card p-4">
-<h2 class="mb-3 font-extrabold">Спортсмены</h2>
-{% for item in children %}
-<a href="{% url 'attendance' %}?group={{ item.group_id }}&q={{ item.last_name }}" class="menu-item">
-<span>
-<b class="block">{{ item }}</b>
-<small>{{ item.parent_phone }} · {{ item.group }}</small>
-</span>
-</a>
-{% empty %}
-<p class="text-sm text-slate-400">Не найдено</p>
-{% endfor %}
-</section>
-<section class="card p-4">
-<h2 class="mb-3 font-extrabold">Заявки</h2>
-{% for item in leads %}
-<a href="{% url 'applications' %}?edit={{ item.pk }}" class="menu-item">
-<span>
-<b class="block">{{ item.full_name }}</b>
-<small>{{ item.phone }}</small>
-</span>
-</a>
-{% empty %}
-<p class="text-sm text-slate-400">Не найдено</p>
-{% endfor %}
-</section>
-<section class="card p-4">
-<h2 class="mb-3 font-extrabold">Группы</h2>
-{% for item in groups %}
-<a href="{% url 'attendance' %}?group={{ item.pk }}" class="menu-item">
-<span>
-<b class="block">{{ item.name }}</b>
-<small>{{ item.trainer }}</small>
-</span>
-</a>
-{% empty %}
-<p class="text-sm text-slate-400">Не найдено</p>
-{% endfor %}
-</section>
+    <section class="card p-4">
+        <h2 class="mb-3 font-extrabold">Спортсмены</h2>
+        {% for item in children %}
+        <a href="{% url 'attendance' %}?group={{ item.group_id }}&q={{ item.last_name }}" class="menu-item">
+            <span>
+                <b class="block">{{ item }}</b>
+                <small>{{ item.parent_phone }} · {{ item.group }}</small>
+            </span>
+        </a>
+        {% empty %}
+        <p class="text-sm text-slate-400">Не найдено</p>
+        {% endfor %}
+    </section>
+    <section class="card p-4">
+        <h2 class="mb-3 font-extrabold">Заявки</h2>
+        {% for item in leads %}
+        <a href="{% url 'applications' %}?edit={{ item.pk }}" class="menu-item">
+            <span>
+                <b class="block">{{ item.full_name }}</b>
+                <small>{{ item.phone }}</small>
+            </span>
+        </a>
+        {% empty %}
+        <p class="text-sm text-slate-400">Не найдено</p>
+        {% endfor %}
+    </section>
+    <section class="card p-4">
+        <h2 class="mb-3 font-extrabold">Группы</h2>
+        {% for item in groups %}
+        <a href="{% url 'attendance' %}?group={{ item.pk }}" class="menu-item">
+            <span>
+                <b class="block">{{ item.name }}</b>
+                <small>{{ item.trainer }}</small>
+            </span>
+        </a>
+        {% empty %}
+        <p class="text-sm text-slate-400">Не найдено</p>
+        {% endfor %}
+    </section>
 </div>
 {% endif %}
 {% endblock %}

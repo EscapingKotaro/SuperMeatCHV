@@ -1,32 +1,32 @@
 {% extends 'crm/base.html' %}
 {% block actions %}
 <button data-modal="child-modal" class="btn btn-primary">
-<i data-lucide="user-plus">
-</i>Добавить спортсмена</button>
+  <i data-lucide="user-plus">
+  </i>Добавить спортсмена</button>
 {% endblock %}
 {% block content %}
 <section class="card mb-4 p-3">
   <form method="get" class="flex flex-wrap items-center gap-2">
     <select name="group" class="field max-w-72 font-bold" onchange="this.form.submit()">
       {% for group in groups %}
-<option value="{{ group.pk }}" {% if group == selected_group %}selected{% endif %}>{{ group.name }} · {{ group.trainer.full_name }}</option>
-{% empty %}
-<option>Сначала создайте группу</option>
-{% endfor %}
+      <option value="{{ group.pk }}" {% if group == selected_group %}selected{% endif %}>{{ group.name }} · {{ group.trainer.full_name }}</option>
+      {% empty %}
+      <option>Сначала создайте группу</option>
+      {% endfor %}
     </select>
     <input name="q" value="{{ request.GET.q }}" class="field max-w-56" placeholder="Имя или телефон">
     <button class="btn btn-soft">
-<i data-lucide="search">
-</i>Найти</button>
+      <i data-lucide="search">
+      </i>Найти</button>
     <a class="btn btn-dark" href="?group={{ selected_group.pk }}&week={{ prev_week|date:'Y-m-d' }}">
-<i data-lucide="chevron-left">
-</i>
-</a>
+      <i data-lucide="chevron-left">
+      </i>
+    </a>
     <span class="btn btn-soft">{{ week_dates.0|date:"d.m" }}–{{ week_dates.13|date:"d.m" }}</span>
     <a class="btn btn-dark" href="?group={{ selected_group.pk }}&week={{ next_week|date:'Y-m-d' }}">
-<i data-lucide="chevron-right">
-</i>
-</a>
+      <i data-lucide="chevron-right">
+      </i>
+    </a>
     <a class="btn btn-soft" href="?group={{ selected_group.pk }}&week={{ week_start|date:'Y-m-d' }}&sort=remaining">По остатку</a>
   </form>
 </section>
@@ -34,177 +34,177 @@
   <div class="table-wrap">
     <table class="data-table min-w-[1720px] table-fixed">
       <colgroup>
-<col class="w-[260px]">
-<col class="w-[150px]">
-{% for day in week_dates %}
-<col class="w-[74px]">
-{% endfor %}
-<col class="w-[130px]">
-</colgroup>
+        <col class="w-[260px]">
+        <col class="w-[150px]">
+        {% for day in week_dates %}
+        <col class="w-[74px]">
+        {% endfor %}
+        <col class="w-[130px]">
+      </colgroup>
       <thead>
-<tr>
-<th class="sticky left-0 z-10 bg-[#FAFBFC]">Спортсмен</th>
-<th>Абонемент</th>
-{% for day in week_dates %}
-<th class="text-center {% if day == today %}bg-orange-50 text-[#FF5C35]{% elif forloop.counter > 7 %}bg-slate-50{% endif %}">{{ day|date:"D" }}<br>
-<b>{{ day|date:"d" }}</b>
-</th>
-{% endfor %}
-<th>Окончание</th>
-</tr>
-</thead>
+        <tr>
+          <th class="sticky left-0 z-10 bg-[#FAFBFC]">Спортсмен</th>
+          <th>Абонемент</th>
+          {% for day in week_dates %}
+          <th class="text-center {% if day == today %}bg-orange-50 text-[#FF5C35]{% elif forloop.counter > 7 %}bg-slate-50{% endif %}">{{ day|date:"D" }}<br>
+            <b>{{ day|date:"d" }}</b>
+          </th>
+          {% endfor %}
+          <th>Окончание</th>
+        </tr>
+      </thead>
       <tbody>
-      {% for row in children %}
+        {% for row in children %}
         <tr>
           <td class="sticky left-0 bg-white">
-<button type="button" data-modal="child-{{ row.child.pk }}" class="flex items-center gap-3 text-left">
-<span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-100 font-extrabold text-violet-700">{{ row.child.last_name|slice:":1" }}{{ row.child.first_name|slice:":1" }}</span>
-<span>
-<b class="block">{{ row.child }}</b>
-<small class="text-slate-500">{{ row.child.age_display }}{% if row.child.status == 'trial' %} · Пробное{% endif %}
-</small>
-</span>
-</button>
-</td>
+            <button type="button" data-modal="child-{{ row.child.pk }}" class="flex items-center gap-3 text-left">
+              <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-violet-100 font-extrabold text-violet-700">{{ row.child.last_name|slice:":1" }}{{ row.child.first_name|slice:":1" }}</span>
+              <span>
+                <b class="block">{{ row.child }}</b>
+                <small class="text-slate-500">{{ row.child.age_display }}{% if row.child.status == 'trial' %} · Пробное{% endif %}
+                </small>
+              </span>
+            </button>
+          </td>
           <td>
-{% if row.subscription %}
-<b>{{ row.left }} из {{ row.subscription.sessions_total }}</b>
-{% else %}
-<span class="text-slate-400">Нет абонемента</span>
-{% endif %}
-{% if row.debt > 0 %}
-<small class="block text-red-600">Долг {{ row.debt }} ₽</small>
-{% endif %}
-</td>
+            {% if row.subscription %}
+            <b>{{ row.left }} из {{ row.subscription.sessions_total }}</b>
+            {% else %}
+            <span class="text-slate-400">Нет абонемента</span>
+            {% endif %}
+            {% if row.debt > 0 %}
+            <small class="block text-red-600">Долг {{ row.debt }} ₽</small>
+            {% endif %}
+          </td>
           {% for mark in row.marks %}
-<td class="p-2 text-center align-middle {% if mark.week_number == 2 %}bg-slate-50/60{% endif %} {% if mark.is_expiry %}border-r-2 border-red-500{% endif %}">
-<button type="button" data-attendance data-child="{{ row.child.pk }}" data-date="{{ mark.date|date:'Y-m-d' }}" data-status="{{ mark.status }}" class="attendance-cell mx-auto {{ mark.css }}">{{ mark.symbol }}</button>
-</td>
-{% endfor %}
+          <td class="p-2 text-center align-middle {% if mark.week_number == 2 %}bg-slate-50/60{% endif %} {% if mark.is_expiry %}border-r-2 border-red-500{% endif %}">
+            <button type="button" data-attendance data-child="{{ row.child.pk }}" data-date="{{ mark.date|date:'Y-m-d' }}" data-status="{{ mark.status }}" class="attendance-cell mx-auto {{ mark.css }}">{{ mark.symbol }}</button>
+          </td>
+          {% endfor %}
           <td>
-{% if row.expiry %}{{ row.expiry|date:"d.m.Y" }}{% else %}—{% endif %}
-</td>
+            {% if row.expiry %}{{ row.expiry|date:"d.m.Y" }}{% else %}—{% endif %}
+          </td>
         </tr>
-      {% empty %}
-<tr>
-<td colspan="18" class="py-12 text-center text-slate-500">В группе пока нет спортсменов</td>
-</tr>
-{% endfor %}
+        {% empty %}
+        <tr>
+          <td colspan="18" class="py-12 text-center text-slate-500">В группе пока нет спортсменов</td>
+        </tr>
+        {% endfor %}
       </tbody>
     </table>
   </div>
   <div class="flex flex-wrap justify-between gap-2 border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
-<span>Показаны текущая и следующая недели</span>
-<span>Красная граница — окончание абонемента. Нажмите на ячейку и выберите отметку.</span>
-</div>
+    <span>Показаны текущая и следующая недели</span>
+    <span>Красная граница — окончание абонемента. Нажмите на ячейку и выберите отметку.</span>
+  </div>
 </section>
 <div id="attendance-picker" class="fixed z-[70] hidden w-52 rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl">
   <button class="menu-item" data-mark="present">
-<span class="text-emerald-600">+</span>Пришёл</button>
-<button class="menu-item" data-mark="absent">
-<span class="text-red-600">×</span>Пропуск</button>
-<button class="menu-item" data-mark="excused">
-<span class="text-purple-600">У</span>Уважительная</button>
-<button class="menu-item" data-mark="frozen">
-<span class="text-blue-600">❄</span>Заморозка</button>
-<button class="menu-item" data-mark="vacation">
-<span class="text-amber-600">О</span>Отпуск</button>
-<hr class="my-1">
-<button class="menu-item text-slate-500" data-mark="">Очистить отметку</button>
+    <span class="text-emerald-600">+</span>Пришёл</button>
+  <button class="menu-item" data-mark="absent">
+    <span class="text-red-600">×</span>Пропуск</button>
+  <button class="menu-item" data-mark="excused">
+    <span class="text-purple-600">У</span>Уважительная</button>
+  <button class="menu-item" data-mark="frozen">
+    <span class="text-blue-600">❄</span>Заморозка</button>
+  <button class="menu-item" data-mark="vacation">
+    <span class="text-amber-600">О</span>Отпуск</button>
+  <hr class="my-1">
+  <button class="menu-item text-slate-500" data-mark="">Очистить отметку</button>
 </div>
 {% endblock %}
 {% block modals %}
 <section id="child-modal" class="modal">
-<form method="post">
-{% csrf_token %}
-<input type="hidden" name="action" value="create_child">
-<div class="modal-head">
-<div>
-<b>Новый спортсмен</b>
-<p class="text-xs text-slate-500">Добавление в группу</p>
-</div>
-<button type="button" data-close>
-<i data-lucide="x">
-</i>
-</button>
-</div>
-<div class="modal-body grid gap-4 sm:grid-cols-2">
-<label class="sm:col-span-2">
-<span class="label">ФИО</span>
-<input name="full_name" class="field" required placeholder="Иванова Алиса Сергеевна">
-</label>
-<label>
-<span class="label">Год рождения</span>
-<input name="birth_year" type="number" class="field" required>
-</label>
-<label>
-<span class="label">Группа</span>
-<select name="group_id" class="field">
-{% for group in groups %}
-<option value="{{ group.pk }}">{{ group.name }}</option>
-{% endfor %}
-</select>
-</label>
-<label>
-<span class="label">Родитель</span>
-<input name="parent_name" class="field">
-</label>
-<label>
-<span class="label">Телефон родителя</span>
-<input name="parent_phone" class="field">
-</label>
-<label class="sm:col-span-2 flex items-center gap-2 rounded-xl bg-fuchsia-50 p-3 text-xs">
-<input name="trial" type="checkbox"> Пробное занятие</label>
-</div>
-<div class="modal-foot">
-<button type="button" data-close class="btn btn-soft">Отмена</button>
-<button class="btn btn-primary">Добавить</button>
-</div>
-</form>
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="create_child">
+    <div class="modal-head">
+      <div>
+        <b>Новый спортсмен</b>
+        <p class="text-xs text-slate-500">Добавление в группу</p>
+      </div>
+      <button type="button" data-close>
+        <i data-lucide="x">
+        </i>
+      </button>
+    </div>
+    <div class="modal-body grid gap-4 sm:grid-cols-2">
+      <label class="sm:col-span-2">
+        <span class="label">ФИО</span>
+        <input name="full_name" class="field" required placeholder="Иванова Алиса Сергеевна">
+      </label>
+      <label>
+        <span class="label">Год рождения</span>
+        <input name="birth_year" type="number" class="field" required>
+      </label>
+      <label>
+        <span class="label">Группа</span>
+        <select name="group_id" class="field">
+          {% for group in groups %}
+          <option value="{{ group.pk }}">{{ group.name }}</option>
+          {% endfor %}
+        </select>
+      </label>
+      <label>
+        <span class="label">Родитель</span>
+        <input name="parent_name" class="field">
+      </label>
+      <label>
+        <span class="label">Телефон родителя</span>
+        <input name="parent_phone" class="field">
+      </label>
+      <label class="sm:col-span-2 flex items-center gap-2 rounded-xl bg-fuchsia-50 p-3 text-xs">
+        <input name="trial" type="checkbox"> Пробное занятие</label>
+    </div>
+    <div class="modal-foot">
+      <button type="button" data-close class="btn btn-soft">Отмена</button>
+      <button class="btn btn-primary">Добавить</button>
+    </div>
+  </form>
 </section>
 {% for row in children %}
 <section id="child-{{ row.child.pk }}" class="modal">
-<form method="post" enctype="multipart/form-data" action="{% url 'child_edit' row.child.pk %}">
-{% csrf_token %}
-<input type="hidden" name="next" value="{{ request.get_full_path }}">
-<div class="modal-head">
-<div>
-<b class="text-lg">{{ row.child }}</b>
-<p class="text-xs text-slate-500">Полная карточка спортсмена</p>
-</div>
-<button type="button" data-close>
-<i data-lucide="x">
-</i>
-</button>
-</div>
-<div class="modal-body grid max-h-[65vh] gap-4 overflow-y-auto sm:grid-cols-2">
-{% for field in row.form %}
-<label class="{% if field.name == 'note' or field.name == 'address' %}sm:col-span-2{% endif %}">
-<span class="label">{{ field.label }}</span>{{ field }}</label>
-{% endfor %}
-<div class="sm:col-span-2 rounded-xl bg-slate-50 p-3">
-<b class="text-sm">Последние посещения</b>
-<p class="mt-2 text-xs text-slate-600">
-{% for item in row.attendance_history %}{{ item.date|date:"d.m.Y" }} — {{ item.get_status_display }}{% if not forloop.last %}; {% endif %}
-{% empty %}Истории пока нет{% endfor %}
-</p>
-</div>
-<div class="sm:col-span-2 rounded-xl bg-slate-50 p-3">
-<b class="text-sm">Соревнования</b>
-<p class="mt-2 text-xs text-slate-600">
-{% for item in row.competition_history %}{{ item.competition.name }} — {{ item.place|default:"без места" }}{% if not forloop.last %}; {% endif %}
-{% empty %}Выступлений пока нет{% endfor %}
-</p>
-</div>
-</div>
-<div class="modal-foot justify-between">
-<button name="action" value="archive" class="btn btn-soft text-red-600" onclick="return confirm('Переместить спортсмена в архив?')">В архив</button>
-<div class="flex gap-2">
-<button type="button" data-close class="btn btn-soft">Отмена</button>
-<button name="action" value="save" class="btn btn-primary">Сохранить</button>
-</div>
-</div>
-</form>
+  <form method="post" enctype="multipart/form-data" action="{% url 'child_edit' row.child.pk %}">
+    {% csrf_token %}
+    <input type="hidden" name="next" value="{{ request.get_full_path }}">
+    <div class="modal-head">
+      <div>
+        <b class="text-lg">{{ row.child }}</b>
+        <p class="text-xs text-slate-500">Полная карточка спортсмена</p>
+      </div>
+      <button type="button" data-close>
+        <i data-lucide="x">
+        </i>
+      </button>
+    </div>
+    <div class="modal-body grid max-h-[65vh] gap-4 overflow-y-auto sm:grid-cols-2">
+      {% for field in row.form %}
+      <label class="{% if field.name == 'note' or field.name == 'address' %}sm:col-span-2{% endif %}">
+        <span class="label">{{ field.label }}</span>{{ field }}</label>
+      {% endfor %}
+      <div class="sm:col-span-2 rounded-xl bg-slate-50 p-3">
+        <b class="text-sm">Последние посещения</b>
+        <p class="mt-2 text-xs text-slate-600">
+          {% for item in row.attendance_history %}{{ item.date|date:"d.m.Y" }} — {{ item.get_status_display }}{% if not forloop.last %}; {% endif %}
+          {% empty %}Истории пока нет{% endfor %}
+        </p>
+      </div>
+      <div class="sm:col-span-2 rounded-xl bg-slate-50 p-3">
+        <b class="text-sm">Соревнования</b>
+        <p class="mt-2 text-xs text-slate-600">
+          {% for item in row.competition_history %}{{ item.competition.name }} — {{ item.place|default:"без места" }}{% if not forloop.last %}; {% endif %}
+          {% empty %}Выступлений пока нет{% endfor %}
+        </p>
+      </div>
+    </div>
+    <div class="modal-foot justify-between">
+      <button name="action" value="archive" class="btn btn-soft text-red-600" onclick="return confirm('Переместить спортсмена в архив?')">В архив</button>
+      <div class="flex gap-2">
+        <button type="button" data-close class="btn btn-soft">Отмена</button>
+        <button name="action" value="save" class="btn btn-primary">Сохранить</button>
+      </div>
+    </div>
+  </form>
 </section>
 {% endfor %}
 {% endblock %}
