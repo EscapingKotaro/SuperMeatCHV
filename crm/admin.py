@@ -47,7 +47,7 @@ class UserAdmin(auth_admin.UserAdmin):
     def get_role(self, obj):
         return user_role(obj).label
 
-admin.site.unregister(get_user_model())
+
 admin.site.register(get_user_model(), UserAdmin)
 
 
@@ -58,8 +58,6 @@ class LogEntryAdmin(RoleGate, admin.ModelAdmin):
     list_filter = ("user", "content_type")
     search_fields = ("object_repr",)
 
-if admin.site.is_registered(LogEntry):
-    admin.site.unregister(LogEntry)
 admin.site.register(LogEntry, LogEntryAdmin)
 
 
