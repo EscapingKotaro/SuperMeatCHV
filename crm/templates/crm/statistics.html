@@ -1,5 +1,115 @@
-{% extends 'crm/base.html' %}{% block actions %}<div class="flex gap-2"><select class="field"><option>Август 2026</option></select><button class="btn btn-soft"><i data-lucide="download"></i>Excel</button></div>{% endblock %}{% block content %}
-<div class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><div class="card metric"><p class="metric-label">Всего спортсменов</p><p class="metric-value">128</p><p class="metric-change">+7 за месяц</p></div><div class="card metric"><p class="metric-label">Активные</p><p class="metric-value">114</p><p class="metric-change">89% от всех</p></div><div class="card metric"><p class="metric-label">Новые / остались</p><p class="metric-value">14 / 9</p><p class="metric-change">Конверсия 64%</p></div><div class="card metric"><p class="metric-label">Ушедшие</p><p class="metric-value">5</p><p class="mt-1 text-xs font-bold text-red-500">−2 к июлю</p></div><div class="card metric"><p class="metric-label">Средняя посещаемость</p><p class="metric-value">82%</p><p class="metric-change">+4,2%</p></div></div>
-<div class="grid gap-4 xl:grid-cols-3"><section class="card p-5 xl:col-span-2"><div class="mb-5 flex justify-between"><div><h2 class="font-extrabold">Выручка</h2><p class="text-xs text-slate-500">Факт и прогноз по неделям</p></div><b class="text-xl">842 600 ₽</b></div><div class="relative h-64 border-b border-l border-slate-200"><div class="absolute inset-x-0 top-[28%] border-t border-dashed border-orange-300"><span class="absolute -top-5 right-0 text-[10px] font-bold text-orange-500">Цель 1 200 000 ₽</span></div><div class="absolute inset-x-5 bottom-0 flex h-full items-end justify-between gap-5">{% for h,v in chart|default:"" %}{% endfor %}<div class="flex h-full flex-1 items-end"><div class="h-[45%] w-full rounded-t-xl bg-[#17202A]"></div></div><div class="flex h-full flex-1 items-end"><div class="h-[62%] w-full rounded-t-xl bg-[#17202A]"></div></div><div class="flex h-full flex-1 items-end"><div class="h-[76%] w-full rounded-t-xl bg-[#FF5C35]"></div></div><div class="flex h-full flex-1 items-end"><div class="h-[66%] w-full rounded-t-xl bg-orange-200"></div></div></div></div><div class="mt-3 flex justify-around text-[10px] font-bold text-slate-500"><span>1–7 авг</span><span>8–14 авг</span><span>15–21 авг</span><span>22–31 авг · прогноз</span></div></section>
-<section class="card p-5"><h2 class="font-extrabold">По группам</h2><p class="mb-5 text-xs text-slate-500">Спортсмены и посещаемость</p>{% for name,count,width in groups|default:"" %}{% endfor %}<div class="space-y-5"><div><div class="mb-2 flex justify-between text-xs"><b>Старшая</b><span>32 · 91%</span></div><div class="h-2 rounded-full bg-slate-100"><div class="h-2 w-[91%] rounded-full bg-emerald-500"></div></div></div><div><div class="mb-2 flex justify-between text-xs"><b>Средняя</b><span>41 · 83%</span></div><div class="h-2 rounded-full bg-slate-100"><div class="h-2 w-[83%] rounded-full bg-[#315EBC]"></div></div></div><div><div class="mb-2 flex justify-between text-xs"><b>Младшая</b><span>38 · 76%</span></div><div class="h-2 rounded-full bg-slate-100"><div class="h-2 w-[76%] rounded-full bg-amber-400"></div></div></div><div><div class="mb-2 flex justify-between text-xs"><b>Начальная</b><span>17 · 69%</span></div><div class="h-2 rounded-full bg-slate-100"><div class="h-2 w-[69%] rounded-full bg-red-400"></div></div></div></div></section></div>
-<section class="card mt-4 overflow-hidden"><div class="flex items-center justify-between p-5"><div><h2 class="font-extrabold">Показатели тренеров</h2><p class="text-xs text-slate-500">Новые, ушедшие и посещаемость</p></div></div><div class="table-wrap"><table class="data-table"><thead><tr><th>Тренер</th><th>Группы</th><th>Пробные</th><th>Остались</th><th>Ушли</th><th>Посещаемость</th></tr></thead><tbody><tr><td><b>Ольга Воронова</b></td><td>Старшая, Средняя</td><td>8</td><td>6</td><td>1</td><td><span class="badge bg-emerald-50 text-emerald-700">91%</span></td></tr><tr><td><b>Анна Миронова</b></td><td>Младшая</td><td>5</td><td>2</td><td>3</td><td><span class="badge bg-amber-50 text-amber-700">76%</span></td></tr></tbody></table></div></section>{% endblock %}
+{% extends 'crm/base.html' %}
+
+{% block actions %}
+<form method="get" class="flex items-center gap-2">
+    <input type="date" name="month" value="{{ month_start|date:'Y-m-d' }}" class="field text-sm" onchange="this.form.submit()">
+</form>
+{% endblock %}
+
+{% block content %}
+<!-- Верхние метрики -->
+<div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
+    <div class="card p-4">
+        <div class="text-[10px] font-bold uppercase text-slate-400">Всего спортсменов</div>
+        <div class="text-2xl font-extrabold mt-1">{{ total_children }}</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-[10px] font-bold uppercase text-slate-400">Активных</div>
+        <div class="text-2xl font-extrabold text-emerald-600 mt-1">{{ active_children }}</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-[10px] font-bold uppercase text-slate-400">Новых за месяц</div>
+        <div class="text-2xl font-extrabold text-blue-600 mt-1">{{ new_count }}</div>
+        <small class="text-[10px] text-slate-500">осталось {{ new_kept }}</small>
+    </div>
+    <div class="card p-4">
+        <div class="text-[10px] font-bold uppercase text-slate-400">Ушедших</div>
+        <div class="text-2xl font-extrabold text-red-600 mt-1">{{ left_count }}</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-[10px] font-bold uppercase text-slate-400">Выручка сегодня</div>
+        <div class="text-2xl font-extrabold mt-1">{{ revenue_today|floatformat:0 }} ₽</div>
+    </div>
+    <div class="card p-4">
+        <div class="text-[10px] font-bold uppercase text-slate-400">Выручка за месяц</div>
+        <div class="text-2xl font-extrabold mt-1">{{ revenue_month|floatformat:0 }} ₽</div>
+    </div>
+</div>
+
+<!-- Цель и прогноз -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
+    <div class="card p-5">
+        <div class="flex justify-between items-center mb-2">
+            <div class="text-[10px] font-bold uppercase text-slate-400">Цель по выручке</div>
+            {% if target %}
+            <b class="text-lg">{{ target.amount|floatformat:0 }} ₽</b>
+            {% else %}
+            <span class="text-xs text-slate-400">не установлена</span>
+            {% endif %}
+        </div>
+        {% if target %}
+        <div class="h-3 rounded-full bg-slate-100 overflow-hidden">
+            <div class="h-full bg-[#F62E2E] rounded-full" style="width: {% widthratio revenue_month target.amount 100 %}%"></div>
+        </div>
+        <div class="mt-2 text-xs text-slate-500">
+            Выполнено {{ revenue_month|floatformat:0 }} ₽ из {{ target.amount|floatformat:0 }} ₽
+        </div>
+        {% endif %}
+    </div>
+    <div class="card p-5">
+        <div class="text-[10px] font-bold uppercase text-slate-400 mb-2">Прогноз выручки за месяц</div>
+        <b class="text-2xl font-extrabold text-emerald-600">{{ potential|floatformat:0 }} ₽</b>
+        <div class="mt-1 text-xs text-slate-500">Факт {{ revenue_month|floatformat:0 }} ₽ + ожидаемые продления</div>
+    </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Группы -->
+    <section class="card overflow-hidden">
+        <h3 class="font-extrabold p-4 border-b border-slate-100">Группы</h3>
+        <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] uppercase text-slate-400 border-b border-slate-100">
+                <th class="px-4 py-2">Группа</th><th class="px-2 py-2">Спортсменов</th>
+                <th class="px-2 py-2">Посещений</th><th class="px-2 py-2">Посещаемость</th>
+            </tr></thead>
+            <tbody>
+            {% for gs in groups_stats %}
+                <tr class="border-b border-slate-50">
+                    <td class="px-4 py-2 font-semibold">{{ gs.group.name }}<br>
+                        <small class="text-[10px] text-slate-400">{{ gs.group.trainer.full_name }}</small></td>
+                    <td class="px-2 py-2 font-bold">{{ gs.kids }}</td>
+                    <td class="px-2 py-2">{{ gs.present }}</td>
+                    <td class="px-2 py-2">
+                        <span class="px-2 py-0.5 rounded text-xs font-bold
+                            {% if gs.attendance_pct >= 70 %}bg-emerald-100 text-emerald-700
+                            {% elif gs.attendance_pct >= 40 %}bg-amber-100 text-amber-700
+                            {% else %}bg-red-100 text-red-700{% endif %}">{{ gs.attendance_pct }}%</span>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </section>
+
+    <!-- Тренеры -->
+    <section class="card overflow-hidden">
+        <h3 class="font-extrabold p-4 border-b border-slate-100">Тренеры</h3>
+        <table class="w-full text-sm">
+            <thead><tr class="text-left text-[10px] uppercase text-slate-400 border-b border-slate-100">
+                <th class="px-4 py-2">Тренер</th><th class="px-2 py-2">Посещений</th>
+                <th class="px-2 py-2">Посещаемость</th><th class="px-2 py-2">Ушедших</th>
+            </tr></thead>
+            <tbody>
+            {% for ts in trainers_stats %}
+                <tr class="border-b border-slate-50">
+                    <td class="px-4 py-2 font-semibold">{{ ts.trainer.full_name }}</td>
+                    <td class="px-2 py-2">{{ ts.present }}</td>
+                    <td class="px-2 py-2 font-bold">{{ ts.attendance_pct }}%</td>
+                    <td class="px-2 py-2 {% if ts.left %}text-red-600 font-bold{% endif %}">{{ ts.left }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </section>
+</div>
+{% endblock %}

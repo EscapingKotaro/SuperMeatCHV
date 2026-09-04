@@ -1,0 +1,31 @@
+{% extends 'crm/base.html' %}
+{% block actions %}
+<form method="get"><input type="date" name="month" value="{{ month_start|date:'Y-m-d' }}" class="field text-sm" onchange="this.form.submit()"></form>
+{% endblock %}
+{% block content %}
+<section class="card overflow-hidden">
+    <table class="w-full text-sm">
+        <thead><tr class="bg-slate-50 text-left text-xs font-bold">
+            <th class="px-4 py-2">Дата</th><th class="px-2 py-2">Спортсмен</th>
+            <th class="px-2 py-2">Группа</th><th class="px-2 py-2">Абонемент</th>
+            <th class="px-2 py-2">Принял</th><th class="px-2 py-2 text-right">Сумма</th>
+        </tr></thead>
+        <tbody>
+        {% for p in payments %}
+            <tr class="border-b border-slate-100">
+                <td class="px-4 py-2">{{ p.date|date:"d.m.Y" }}</td>
+                <td class="px-2 py-2 font-semibold">{{ p.child }}</td>
+                <td class="px-2 py-2 text-slate-500">{{ p.child.group|default:"—" }}</td>
+                <td class="px-2 py-2 text-slate-500">{% if p.subscription %}{{ p.subscription.start_date|date:"d.m" }}–{{ p.subscription.end_date|date:"d.m" }}{% else %}—{% endif %}</td>
+                <td class="px-2 py-2 text-slate-500">{{ p.created_by|default:"—" }}</td>
+                <td class="px-2 py-2 text-right font-bold">{{ p.amount|floatformat:0 }} ₽</td>
+            </tr>
+        {% empty %}
+            <tr><td colspan="6" class="text-center py-8 text-slate-400">Нет оплат за период</td></tr>
+        {% endfor %}
+        <tr class="bg-slate-50 font-extrabold"><td colspan="5" class="px-4 py-2">Итого</td>
+            <td class="px-2 py-2 text-right">{{ total|floatformat:0 }} ₽</td></tr>
+        </tbody>
+    </table>
+</section>
+{% endblock %}

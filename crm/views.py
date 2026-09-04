@@ -905,3 +905,244 @@ def group_delete_view(request, pk):
         'page': 'groups'
     }
     return render(request, 'crm/group_delete.html', context)
+
+
+from datetime import date, timedelta, datetime
+from decimal import Decimal
+from django.db.models import Sum, Count, Q
+from django.http import HttpResponse
+
+def _month_range(request):
+    today = timezone.localdate()
+    month_str = request.GET.get('month')
+    try:
+        month_start = datetime.strptime(month_str, '%Y-%m-%d').date()
+    except (ValueError, TypeError):
+        month_start = today.replace(day=1)
+    if month_start.month == 12:
+        month_end = date(month_start.year + 1, 1, 1) - timedelta(days=1)
+    else:
+        month_end = date(month_start.year, month_start.month + 1, 1) - timedelta(days=1)
+    return month_start, month_end, today
+
+def _sessions_held(group, month_start, month_end, today):
+    """Сколько занятий прошло по расписанию группы в месяце (до сегодня)."""
+    weekdays = set(ScheduleSlot.objects.filter(group=group).values_list('weekday', flat=True))
+    last = min(month_end, today)
+    count, d = 0, month_start
+    while d <= last:
+        if d.weekday() in weekdays:
+            count += 1
+        d += timedelta(days=1)
+    return count
+
+def build_salary_data(month_start, month_end):
+    """Собирает таблицу ЗП в формате как в Excel."""
+    summary_rows, grand_total = [], 0
+    trainers = []
+
+    for trainer in Trainer.objects.prefetch_related('groups', 'salary_adjustments'):
+        rows, total = [], 0
+        for group in trainer.groups.all():
+            rate = group.salary_rate or 0
+            visits = Attendance.objects.filter(
+                child__group=group, status='present',
+                date__gte=month_start, date__lte=month_end).count()
+            summa = Decimal(rate) * visits
+            rows.append({'name': group.name, 'rate': rate, 'visits': visits, 'total': summa})
+            summary_rows.append({'name': group.name, 'rate': rate, 'visits': visits, 'total': summa})
+            total += summa
+
+        for adj in trainer.salary_adjustments.filter(month=month_start):
+            rows.append({'name': adj.title, 'rate': '', 'visits': '', 'total': adj.amount})
+            summary_rows.append({'name': adj.title, 'rate': '', 'visits': '', 'total': adj.amount})
+            total += adj.amount
+
+        if rows:
+            trainers.append({'trainer': trainer, 'rows': rows, 'total': total})
+            grand_total += total
+
+    return {'summary_rows': summary_rows, 'grand_total': grand_total, 'trainers': trainers}
+
+
+@login_required
+def statistics_view(request):
+    month_start, month_end, today = _month_range(request)
+
+    children = Child.objects.all()
+    total_children = children.count()
+    active_children = children.filter(status=Child.Status.ACTIVE).count()
+
+    new_qs = children.filter(created_at__date__gte=month_start, created_at__date__lte=month_end)
+    new_count = new_qs.count()
+    new_kept = new_qs.filter(status=Child.Status.ACTIVE).count()
+    left_count = children.filter(
+        status__in=[Child.Status.LOST, Child.Status.ARCHIVED],
+        archived_at__gte=month_start, archived_at__lte=month_end).count()
+
+    # Выручка
+    revenue_today = Payment.objects.filter(date=today).aggregate(s=Sum('amount'))['s'] or 0
+    revenue_month = Payment.objects.filter(
+        date__gte=month_start, date__lte=month_end).aggregate(s=Sum('amount'))['s'] or 0
+    # Прогноз: факт месяца + ожидаемые продления (абонементы, кончающиеся до конца месяца)
+    expected = Subscription.objects.filter(
+        end_date__gte=today, end_date__lte=month_end).aggregate(s=Sum('price'))['s'] or 0
+    potential = Decimal(revenue_month) + Decimal(expected)
+
+    target = RevenueTarget.objects.filter(month=month_start).first()
+
+    # По группам: спортсмены, посещения, посещаемость
+    groups_stats = []
+    for g in Group.objects.filter(is_active=True).select_related('trainer'):
+        kids = g.children.count()
+        present = Attendance.objects.filter(
+            child__group=g, status='present',
+            date__gte=month_start, date__lte=month_end).count()
+        absent = Attendance.objects.filter(
+            child__group=g, status='absent',
+            date__gte=month_start, date__lte=month_end).count()
+        sessions = _sessions_held(g, month_start, month_end, today)
+        capacity = kids * sessions
+        attendance_pct = round(present * 100 / capacity) if capacity else 0
+        groups_stats.append({
+            'group': g, 'kids': kids, 'present': present, 'absent': absent,
+            'sessions': sessions, 'attendance_pct': attendance_pct,
+        })
+
+    # По тренерам: ушедшие + посещаемость
+    trainers_stats = []
+    for t in Trainer.objects.filter(is_active=True):
+        t_left = children.filter(
+            group__trainer=t, status__in=[Child.Status.LOST, Child.Status.ARCHIVED],
+            archived_at__gte=month_start, archived_at__lte=month_end).count()
+        t_groups = [gs for gs in groups_stats if gs['group'].trainer_id == t.id]
+        t_present = sum(gs['present'] for gs in t_groups)
+        t_capacity = sum(gs['kids'] * gs['sessions'] for gs in t_groups)
+        trainers_stats.append({
+            'trainer': t,
+            'left': t_left,
+            'present': t_present,
+            'attendance_pct': round(t_present * 100 / t_capacity) if t_capacity else 0,
+        })
+
+    context = {
+        'month_start': month_start, 'month_end': month_end, 'today': today,
+        'total_children': total_children, 'active_children': active_children,
+        'new_count': new_count, 'new_kept': new_count - 0 and new_kept,
+        'left_count': left_count,
+        'revenue_today': revenue_today, 'revenue_month': revenue_month,
+        'potential': potential, 'target': target,
+        'groups_stats': groups_stats, 'trainers_stats': trainers_stats,
+        'title': 'Статистика', 'page': 'statistics',
+    }
+    return render(request, 'crm/statistics.html', context)
+
+
+@login_required
+def salaries_view(request):
+    month_start, month_end, today = _month_range(request)
+    data = build_salary_data(month_start, month_end)
+    context = {**data, 'month_start': month_start, 'month_end': month_end,
+               'title': 'ЗП тренеров', 'page': 'salaries'}
+    return render(request, 'crm/salaries.html', context)
+
+
+@login_required
+def salaries_export_view(request):
+    """Выгрузка таблицы ЗП в Excel (формат как в ручном подсчете)."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    month_start, month_end, today = _month_range(request)
+    data = build_salary_data(month_start, month_end)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'ЗП тренеров'
+
+    thin = Side(style='thin', color='000000')
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    green = PatternFill('solid', fgColor='92D050')
+    gray = PatternFill('solid', fgColor='E2EFDA')
+    bold = Font(bold=True)
+    center = Alignment(horizontal='center')
+
+    ws.merge_cells('A1:D1')
+    ws['A1'] = f"{month_start:%d.%m.%Y} — {month_end:%d.%m.%Y}"
+    ws['A1'].font = Font(bold=True, size=14)
+    ws['A1'].alignment = center
+
+    row = 3
+    for header, col in [('Группа', 'A'), ('Ставка', 'B'), ('Посещение', 'C'), ('Всего', 'D')]:
+        c = ws[f'{col}{row}']; c.value = header; c.font = bold; c.border = border; c.fill = gray
+    row += 1
+
+    for r in data['summary_rows']:
+        ws[f'A{row}'] = r['name']; ws[f'B{row}'] = r['rate']
+        ws[f'C{row}'] = r['visits']; ws[f'D{row}'] = r['total']
+        for col in 'ABCD': ws[f'{col}{row}'].border = border
+        row += 1
+
+    ws[f'A{row}'] = 'Итого'; ws[f'A{row}'].font = bold
+    ws[f'D{row}'] = data['grand_total']; ws[f'D{row}'].font = bold
+    ws[f'D{row}'].fill = gray
+    for col in 'ABCD': ws[f'{col}{row}'].border = border
+    row += 2
+
+    for t in data['trainers']:
+        ws.merge_cells(f'A{row}:D{row}')
+        ws[f'A{row}'] = t['trainer'].full_name
+        ws[f'A{row}'].font = bold; ws[f'A{row}'].fill = green
+        for col in 'BCD': ws[f'{col}{row}'].fill = green
+        row += 1
+        for r in t['rows']:
+            ws[f'A{row}'] = r['name']; ws[f'B{row}'] = r['rate']
+            ws[f'C{row}'] = r['visits']; ws[f'D{row}'] = r['total']
+            for col in 'ABCD': ws[f'{col}{row}'].border = border
+            row += 1
+        ws[f'C{row}'] = 'Итого'; ws[f'C{row}'].font = bold
+        ws[f'D{row}'] = t['total']; ws[f'D{row}'].font = bold
+        row += 2
+
+    ws.column_dimensions['A'].width = 40
+    ws.column_dimensions['B'].width = 12
+    ws.column_dimensions['C'].width = 12
+    ws.column_dimensions['D'].width = 12
+
+    response = HttpResponse(
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="salaries_{month_start:%Y-%m}.xlsx"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def payments_table_view(request):
+    month_start, month_end, today = _month_range(request)
+    payments = Payment.objects.filter(
+        date__gte=month_start, date__lte=month_end
+    ).select_related('child', 'child__group', 'created_by', 'subscription').order_by('-date')
+    total = payments.aggregate(s=Sum('amount'))['s'] or 0
+    context = {'payments': payments, 'total': total,
+               'month_start': month_start, 'month_end': month_end,
+               'title': 'Предварительные оплаты', 'page': 'payments_table'}
+    return render(request, 'crm/payments_table.html', context)
+
+
+@login_required
+def expenses_table_view(request):
+    month_start, month_end, today = _month_range(request)
+    if request.method == 'POST':
+        title = request.POST.get('title')
+        amount = request.POST.get('amount')
+        if title and amount:
+            Expense.objects.create(title=title, amount=amount, created_by=request.user)
+            messages.success(request, 'Расход добавлен')
+            return redirect('expenses_table')
+    expenses = Expense.objects.filter(
+        date__gte=month_start, date__lte=month_end).order_by('-date')
+    total = expenses.aggregate(s=Sum('amount'))['s'] or 0
+    context = {'expenses': expenses, 'total': total,
+               'month_start': month_start, 'month_end': month_end,
+               'title': 'Расходы', 'page': 'expenses_table'}
+    return render(request, 'crm/expenses_table.html', context)

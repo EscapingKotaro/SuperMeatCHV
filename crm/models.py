@@ -60,6 +60,7 @@ class Group(models.Model):
     trainer = models.ForeignKey(Trainer, on_delete=models.PROTECT,
                                related_name="groups", verbose_name="тренер")
     is_active = models.BooleanField("Активна", default=True)
+    salary_rate = models.DecimalField("Ставка за посещение, ₽", max_digits=10, decimal_places=2, default=300)
 
     class Meta:
         verbose_name = "Группа"
@@ -85,6 +86,21 @@ class ScheduleSlot(models.Model):
     def __str__(self):
         d = dict(self.WEEKDAYS)[self.weekday]
         return f"{self.group} · {d} {self.start_time:%H:%M}"
+
+class SalaryAdjustment(models.Model):
+    """Ручные строки ЗП: перс, замены, соревнования."""
+    trainer = models.ForeignKey(Trainer, on_delete=models.CASCADE,
+                                related_name="salary_adjustments", verbose_name="тренер")
+    month = models.DateField("Месяц", help_text="Первое число месяца")
+    title = models.CharField("Назначение", max_length=200)
+    amount = models.DecimalField("Сумма, ₽", max_digits=12, decimal_places=2)
+
+    class Meta:
+        verbose_name = "Строка ЗП"
+        verbose_name_plural = "Ручные строки ЗП"
+
+    def __str__(self):
+        return f"{self.trainer} · {self.title} · {self.amount}"
 
 
 class Child(models.Model):
@@ -113,6 +129,8 @@ class Child(models.Model):
     discount_percent = models.PositiveSmallIntegerField("Скидка, %", default=0)
     note = models.TextField("Комментарий", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    archived_at = models.DateField("Дата ухода/архива", blank=True, null=True)
+
 
     class Meta:
         verbose_name = "Ребёнок"
@@ -262,21 +280,6 @@ class Child(models.Model):
         today = timezone.localdate()
         return (today - self.trial_from).days >= 14
 
-    def mark_as_lost(self):
-        """Автоматически помечаем как потерянного"""
-        self.status = self.Status.LOST
-        self.save(update_fields=['status'])
-
-    def archive(self):
-        """Переводим в архив"""
-        self.status = self.Status.ARCHIVED
-        self.save(update_fields=['status'])
-
-    def restore_from_archive(self):
-        """Восстанавливаем из архива"""
-        self.status = self.Status.ACTIVE
-        self.save(update_fields=['status'])
-
     def has_subscription_ending_soon(self):
         """Абонемент заканчивается в течение 7 дней"""
         end = self.nearest_expiry()
@@ -291,6 +294,21 @@ class Child(models.Model):
         if not end:
             return None
         return (end - timezone.localdate()).days
+
+    def archive(self):
+        self.status = self.Status.ARCHIVED
+        self.archived_at = timezone.localdate()
+        self.save(update_fields=['status', 'archived_at'])
+
+    def mark_as_lost(self):
+        self.status = self.Status.LOST
+        self.archived_at = timezone.localdate()
+        self.save(update_fields=['status', 'archived_at'])
+
+    def restore_from_archive(self):
+        self.status = self.Status.ACTIVE
+        self.archived_at = None
+        self.save(update_fields=['status', 'archived_at'])
 
 
 class ChildRank(models.Model):

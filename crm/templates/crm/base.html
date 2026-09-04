@@ -47,9 +47,28 @@
 <a class="nav-pill {% if page == 'groups' %}active{% endif %}" href="{% url 'group_list' %}">
     <i data-lucide="users"></i>Группы
 </a>
-                <a class="nav-pill {% if page == 'statistics' %}active{% endif %}" href="/test/statistics/">
-                    <i data-lucide="chart-no-axes-combined"></i>Статистика
-                </a>
+                <div class="relative group/nav shrink-0">
+    <a class="nav-pill {% if page == 'statistics' or page == 'payments_table' or page == 'expenses_table' or page == 'salaries' %}active{% endif %}" href="{% url 'statistics' %}">
+        <i data-lucide="chart-no-axes-combined"></i>Статистика
+        <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
+    </a>
+    <div class="invisible absolute left-0 top-full z-40 pt-1 opacity-0 transition-all group-hover/nav:visible group-hover/nav:opacity-100">
+        <div class="w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+            <a href="{% url 'statistics' %}" class="menu-item {% if page == 'statistics' %}bg-slate-100{% endif %}">
+                <i data-lucide="chart-no-axes-combined"></i>Статистика
+            </a>
+            <a href="{% url 'payments_table' %}" class="menu-item {% if page == 'payments_table' %}bg-slate-100{% endif %}">
+                <i data-lucide="wallet-cards"></i>Предварительные оплаты
+            </a>
+            <a href="{% url 'expenses_table' %}" class="menu-item {% if page == 'expenses_table' %}bg-slate-100{% endif %}">
+                <i data-lucide="receipt-text"></i>Расходы
+            </a>
+            <a href="{% url 'salaries' %}" class="menu-item {% if page == 'salaries' %}bg-slate-100{% endif %}">
+                <i data-lucide="banknote"></i>ЗП тренеров
+            </a>
+        </div>
+    </div>
+</div>
                 <a class="nav-pill {% if page == 'payments' %}active{% endif %}" href="/test/payments/">
                     <i data-lucide="wallet-cards"></i>Продления
                 </a>

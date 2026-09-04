@@ -65,5 +65,12 @@ urlpatterns = [
     path('child/<int:child_id>/restore/', views.restore_child_view, name='restore_child'),
     path('group/<int:group_id>/trial/', views.add_trial_child_view, name='add_trial_child'),
     path('attendance/cancel/', views.cancel_attendance_view, name='cancel_attendance'),
+
+
+    path('statistics/', views.statistics_view, name='statistics'),
+path('statistics/payments/', views.payments_table_view, name='payments_table'),
+path('statistics/expenses/', views.expenses_table_view, name='expenses_table'),
+path('statistics/salaries/', views.salaries_view, name='salaries'),
+path('statistics/salaries/export/', views.salaries_export_view, name='salaries_export'),
 ]
 
