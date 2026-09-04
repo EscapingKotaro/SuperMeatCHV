@@ -96,7 +96,7 @@ from django.http import JsonResponse
 from django.views.decorators.http import require_POST
 from django.utils import timezone
 from datetime import timedelta, datetime
-from .models import Child, Group, ScheduleSlot, Attendance
+from .models import *
 from .forms import ChildForm
 
 def generate_class_dates(group, start_date, limit=60):
