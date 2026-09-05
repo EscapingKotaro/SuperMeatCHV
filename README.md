@@ -15,6 +15,9 @@ python manage.py runserver
 
 user.set_password("Demo12345!")
 
+логин: admin
+Пароль: FvthbrfCjcfnm
+
 ## Основные страницы
 
 | Экран | Адрес |
