@@ -41,7 +41,7 @@
                             {% csrf_token %}
                             <input type="hidden" name="action" value="toggle">
                             <input type="hidden" name="user_id" value="{{ item.pk }}">
-                            <button class="btn btn-soft" {% if item==request.user %}disabled{% endif %}>
+                            <button class="btn btn-soft" {% if item == request.user %}disabled{% endif %}>
                                 {% if item.is_active %}Отключить{% else %}Включить{% endif %}
                             </button>
                         </form>
