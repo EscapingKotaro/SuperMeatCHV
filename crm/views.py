@@ -32,6 +32,9 @@ from .forms import (
     SubscriptionForm,
     TariffForm,
 )
+
+from .context_processors import sync_subscription_notifications
+
 from .models import (
     Apparatus,
     Notification,
@@ -1024,12 +1027,15 @@ def notifications_page(request):
         messages.success(request, "Статус задачи изменён")
         return redirect("notifications")
 
+    sync_subscription_notifications(request.user)
+    
     # Последние уведомления пользователя
     event_notifications = list(
         Notification.objects
         .filter(recipient=request.user)
         .select_related("actor", "task")[:50]
     )
+    
 
     unread_count = sum(n.read_at is None for n in event_notifications)
 
@@ -1049,7 +1055,6 @@ def notifications_page(request):
         )
 
     today = timezone.localdate()
-    alerts = []
     
     trial_count = Newcomer.objects.filter(
         trial_at__isnull=False,
@@ -1058,29 +1063,17 @@ def notifications_page(request):
         child__isnull=True,
     ).count()
 
-    for child in Child.objects.filter(status=Child.Status.ACTIVE):
-        expiry = child.nearest_expiry()
-        debt = child.debt()
-
-        if expiry and expiry <= today + timedelta(days=7):
-            alerts.append({
-                "kind": "subscription",
-                "child": child,
-                "expiry": expiry,
-                "debt": debt,
-            })
-
 
     open_task_count = task_qs.count()
 
     return render(request, "crm/notifications.html", page_context(
         request, "notifications",
-        alerts=alerts,
+        subscription_count=subscription_count,
         event_notifications=event_notifications,
         unread_count=unread_count,
         open_task_count=open_task_count,
         trial_count=trial_count,
-        open_count=open_task_count + len(alerts) + trial_count,
+        open_count=open_task_count + subscription_count + trial_count,
         today=today,
     ))
 
@@ -1240,6 +1233,18 @@ def newcomers_page(request):
 @login_required
 def calendar_page(request):
     today = timezone.localdate()
+    
+    subscription_count = (
+    Subscription.objects
+    .filter(
+        is_active=True,
+        child__status=Child.Status.ACTIVE,
+        end_date__range=(today, today + timedelta(days=7)),
+    )
+    .values("child_id")
+    .distinct()
+    .count())  
+    
     now = timezone.now()
 
     try:

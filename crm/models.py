@@ -755,6 +755,7 @@ class Notification(models.Model):
         TASK_DELETED = "task_deleted", "Задача удалена"
         LEAD_CREATED = "lead_created", "Новая заявка"
         TRIAL_SCHEDULED = "trial_scheduled", "Пробное занятие"
+        SUBSCRIPTION_EXPIRING = "subscription_expiring", "Заканчивается абонемент"
 
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
@@ -773,12 +774,21 @@ class Notification(models.Model):
     kind = models.CharField("Тип", max_length=30, choices=Kind.choices)
     message = models.CharField("Текст", max_length=500)
     url = models.CharField("Ссылка", max_length=500, blank=True)
+    event_key = models.CharField(
+        "Ключ события", max_length=160, blank=True, null=True,
+    )
     read_at = models.DateTimeField("Прочитано", null=True, blank=True)
     created_at = models.DateTimeField("Создано", auto_now_add=True)
 
     class Meta:
         ordering = ("-created_at",)
         indexes = [models.Index(fields=("recipient", "read_at"))]
+        constraints = [
+            models.UniqueConstraint(
+                fields=("recipient", "event_key"),
+                name="unique_notification_event",
+            ),
+        ]
         verbose_name = "Уведомление"
         verbose_name_plural = "Уведомления"
 
