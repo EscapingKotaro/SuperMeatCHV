@@ -10,7 +10,7 @@ from crm.models import (
     Role, StaffProfile, Trainer, Group, ScheduleSlot, Child, ChildRank,
     Subscription, Payment, Attendance, Competition, Apparatus,
     CompetitionEntry, ApparatusScore, Camp, CampStay, Expense,
-    RevenueTarget, SalaryPayout, ManagerTask,
+    RevenueTarget, SalaryPayout, ManagerTask, recalculate_competition_places,
 )
 
 User = get_user_model()
@@ -168,7 +168,6 @@ class Command(BaseCommand):
                 competition=comp,
                 category="Юноши 2015 г.р.",
                 rank="2 юн. разряд",
-                place=random.randint(1, 10),
             )
             for app in Apparatus.objects.filter(competition=comp):
                 ApparatusScore.objects.create(
@@ -176,6 +175,7 @@ class Command(BaseCommand):
                     apparatus=app,
                     points=Decimal(str(round(random.uniform(7.0, 9.5), 2))),
                 )
+        recalculate_competition_places(comp)
 
         # --- Лагерь ---
         camp = Camp.objects.create(name="Лагерь 'Игорь'")

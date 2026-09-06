@@ -423,14 +423,8 @@ class CompetitionAdmin(admin.ModelAdmin):
 
     @admin.action(description="🏆 Пересчитать места в категориях")
     def recalc_places(self, request, queryset):
-        for comp in queryset:
-            cats = comp.entries.values_list("category", flat=True).distinct()
-            for cat in cats:
-                entries = (comp.entries.filter(category=cat)
-                           .annotate(total=Sum("scores__points"))
-                           .order_by("-total"))
-                for i, e in enumerate(entries, 1):
-                    CompetitionEntry.objects.filter(pk=e.pk).update(place=i)
+        for competition in queryset:
+            recalculate_competition_places(competition)
 
     @admin.action(description="📥 Таблица результатов в Excel")
     def export_xlsx(self, request, queryset):
@@ -439,11 +433,33 @@ class CompetitionAdmin(admin.ModelAdmin):
                       [a.name for a in comp.apparatus.all()] + ["Сумма", "Место"]
             rows = []
             for e in comp.entries.select_related("child").prefetch_related("scores"):
-                scores = {s.apparatus_id: s.points for s in e.scores.all()}
+                scores = {
+                    s.apparatus_id: s.points
+                    for s in e.scores.all()
+                }
+
+                total = e.total_points()
+
                 rows.append(
-                    [str(e.child), e.child.birth_year, e.rank, e.category] +
-                    [scores.get(a.id, "") for a in comp.apparatus.all()] +
-                    [float(e.total_points()), e.place or ""])
+                    [
+                        str(e.child),
+                        e.child.birth_year,
+                        e.rank,
+                        e.category,
+                    ]
+                    + [
+                        (
+                            scores.get(a.id)
+                            if scores.get(a.id) is not None
+                            else ""
+                        )
+                        for a in comp.apparatus.all()
+                    ]
+                    + [
+                        float(total) if total is not None else "",
+                        e.place or "",
+                    ]
+                )
             return xlsx_response(headers, rows, f"competition_{comp.pk}")
 
 

@@ -636,6 +636,59 @@ class ApparatusScore(models.Model):
         value = "—" if self.points is None else self.points
         return f"{self.entry} · {self.apparatus} · {value}"
 
+def recalculate_competition_places(competition):
+    categories = (
+        competition.entries
+        .values_list("category", flat=True)
+        .distinct()
+    )
+
+    for category in categories:
+        entries = list(
+            competition.entries
+            .filter(category=category)
+            .select_related("competition")
+        )
+
+        completed = []
+
+        for entry in entries:
+            total = entry.total_points()
+
+            if total is None:
+                CompetitionEntry.objects.filter(
+                    pk=entry.pk,
+                ).update(place=None)
+
+                entry.place = None
+                continue
+
+            completed.append((entry, total))
+
+        completed.sort(
+            key=lambda item: item[1],
+            reverse=True,
+        )
+
+        last_total = None
+        last_place = 0
+
+        for index, (entry, total) in enumerate(
+            completed,
+            start=1,
+        ):
+            if last_total is not None and total == last_total:
+                place = last_place
+            else:
+                place = index
+
+            CompetitionEntry.objects.filter(
+                pk=entry.pk,
+            ).update(place=place)
+
+            entry.place = place
+            last_total = total
+            last_place = place
 
 class Camp(models.Model):
     name = models.CharField("Название лагеря", max_length=200)

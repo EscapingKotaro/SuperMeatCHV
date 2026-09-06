@@ -33,6 +33,7 @@ from crm.models import (
     Subscription,
     Tariff,
     Trainer,
+    recalculate_competition_places,
 )
 
 
@@ -1113,18 +1114,7 @@ class Command(BaseCommand):
                     )
                 touched_entries.append(entry)
 
-            # Места считаем отдельно внутри каждой категории.
-            categories = sorted({entry.category for entry in touched_entries})
-            for category in categories:
-                category_entries = [
-                    entry for entry in touched_entries if entry.category == category
-                ]
-                category_entries.sort(
-                    key=lambda entry: entry.total_points(), reverse=True
-                )
-                for place, entry in enumerate(category_entries, 1):
-                    entry.place = place
-                    entry.save(update_fields=["place"])
+            recalculate_competition_places(competition)
 
             return competition
 
