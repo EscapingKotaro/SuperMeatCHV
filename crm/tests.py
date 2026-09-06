@@ -1077,8 +1077,8 @@ class CrmWorkflowTests(TestCase):
         )
 
         today = timezone.localdate()
-        week_start = today - timedelta(days=today.weekday())
-
+        month_start = today.replace(day=1)
+        
         self.assertRedirects(
             response,
             f"{reverse('calendar')}?start={month_start.isoformat()}&day={today.isoformat()}&scope=all&state=open"
@@ -1187,7 +1187,7 @@ class CrmWorkflowTests(TestCase):
 
         self.assertRedirects(
             response,
-            f"{reverse('calendar')}?start={week_start.isoformat()}&day={today.isoformat()}&scope=all&state=open",
+            f"{reverse('calendar')}?start={month_start.isoformat()}&day={today.isoformat()}&scope=all&state=open",
         )
 
         self.assertFalse(
