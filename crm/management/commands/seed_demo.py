@@ -151,11 +151,7 @@ class Command(BaseCommand):
         }
 
         for username, branch in user_branch.items():
-            user = users[username]
-            user.branch = branch
-            user.save(update_fields=["branch"])
-
-            profile = user.profile
+            profile = users[username].profile
             profile.branch = branch
             profile.shift_anchor = shift_anchors.get(username)
             profile.save(update_fields=["branch", "shift_anchor"])
