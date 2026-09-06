@@ -657,41 +657,6 @@ class SalaryPayout(models.Model):
 
 class ManagerTask(models.Model):
     """Единая задача CRM: руководитель, календарь и уведомления."""
-    class Notification(models.Model):
-        class Kind(models.TextChoices):
-            TASK_CREATED = "task_created", "Новая задача"
-            TASK_UPDATED = "task_updated", "Задача изменена"
-            TASK_COMPLETED = "task_completed", "Задача выполнена"
-            TASK_REOPENED = "task_reopened", "Задача возвращена"
-            TASK_DELETED = "task_deleted", "Задача удалена"
-
-        recipient = models.ForeignKey(
-            settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
-            related_name="notifications", verbose_name="Получатель",
-        )
-        actor = models.ForeignKey(
-            settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-            null=True, blank=True, related_name="triggered_notifications",
-            verbose_name="Инициатор",
-        )
-        task = models.ForeignKey(
-            ManagerTask, on_delete=models.SET_NULL,
-            null=True, blank=True, related_name="notifications",
-            verbose_name="Задача",
-        )
-        kind = models.CharField("Тип", max_length=30, choices=Kind.choices)
-        message = models.CharField("Текст", max_length=500)
-        read_at = models.DateTimeField("Прочитано", null=True, blank=True)
-        created_at = models.DateTimeField("Создано", auto_now_add=True)
-
-        class Meta:
-            ordering = ("-created_at",)
-            indexes = [models.Index(fields=("recipient", "read_at"))]
-            verbose_name = "Уведомление"
-            verbose_name_plural = "Уведомления"
-
-        def __str__(self):
-            return self.message
 
     title = models.CharField(
         "Задача",
@@ -781,7 +746,41 @@ class ManagerTask(models.Model):
     def __str__(self):
         return self.title
 
+class Notification(models.Model):
+    class Kind(models.TextChoices):
+        TASK_CREATED = "task_created", "Новая задача"
+        TASK_UPDATED = "task_updated", "Задача изменена"
+        TASK_COMPLETED = "task_completed", "Задача выполнена"
+        TASK_REOPENED = "task_reopened", "Задача возвращена"
+        TASK_DELETED = "task_deleted", "Задача удалена"
 
+    recipient = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name="notifications", verbose_name="Получатель",
+    )
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="triggered_notifications",
+        verbose_name="Инициатор",
+    )
+    task = models.ForeignKey(
+        ManagerTask, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name="notifications",
+        verbose_name="Задача",
+    )
+    kind = models.CharField("Тип", max_length=30, choices=Kind.choices)
+    message = models.CharField("Текст", max_length=500)
+    read_at = models.DateTimeField("Прочитано", null=True, blank=True)
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at",)
+        indexes = [models.Index(fields=("recipient", "read_at"))]
+        verbose_name = "Уведомление"
+        verbose_name_plural = "Уведомления"
+
+    def __str__(self):
+        return self.message
 
 class Lead(models.Model):
     """Заявка из рекламы, звонка или сайта. Не обязана стать новичком."""
