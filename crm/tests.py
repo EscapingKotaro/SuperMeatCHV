@@ -795,3 +795,65 @@ class CrmWorkflowTests(TestCase):
         self.assertFalse(Notification.objects.filter(
             kind=Notification.Kind.LEAD_CREATED,
         ).exists())
+                      
+    def test_newcomer_trial_creates_notification(self):
+        trial_at = timezone.now() + timedelta(days=1)
+
+        self.client.login(username="admin", password="TestPass123!")
+        response = self.client.post(reverse("newcomers"), {
+            "full_name": "Петрова Алиса",
+            "birth_date": "",
+            "age_text": "9 лет",
+            "phone": "79990000001",
+            "source": "VK",
+            "trial_at": trial_at.strftime("%Y-%m-%dT%H:%M"),
+            "trainer": "",
+            "group": "",
+            "attended": "",
+            "paid": "",
+            "lesson_cancelled": "",
+            "comment": "",
+        })
+
+        self.assertRedirects(response, reverse("newcomers"))
+
+        newcomer = Newcomer.objects.get(full_name="Петрова Алиса")
+
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.boss,
+            actor=self.admin,
+            kind=Notification.Kind.TRIAL_SCHEDULED,
+            url=f"{reverse('newcomers')}?edit={newcomer.pk}",
+        ).exists())
+
+    def test_editing_newcomer_without_trial_change_does_not_notify(self):
+        trial_at = timezone.now() + timedelta(days=1)
+
+        newcomer = Newcomer.objects.create(
+            full_name="Иванова Ева",
+            trial_at=trial_at,
+        )
+
+        self.client.login(username="admin", password="TestPass123!")
+
+        self.client.post(
+            f"{reverse('newcomers')}?edit={newcomer.pk}",
+            {
+                "full_name": "Иванова Ева",
+                "birth_date": "",
+                "age_text": "",
+                "phone": "79990000002",
+                "source": "VK",
+                "trial_at": timezone.localtime(trial_at).strftime("%Y-%m-%dT%H:%M"),
+                "trainer": "",
+                "group": "",
+                "attended": "",
+                "paid": "",
+                "lesson_cancelled": "",
+                "comment": "Изменили комментарий",
+            },
+        )
+
+        self.assertFalse(Notification.objects.filter(
+            kind=Notification.Kind.TRIAL_SCHEDULED,
+        ).exists())
