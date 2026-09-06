@@ -147,134 +147,93 @@
 
     <!-- Заголовки дней -->
     <div class="grid grid-cols-7 border-b bg-[#FAFBFC]">
-        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Пн</div>
-        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Вт</div>
-        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Ср</div>
-        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Чт</div>
-        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Пт</div>
-        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Сб</div>
-        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Вс</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[10px]">Пн</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[10px]">Вт</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[10px]">Ср</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[10px]">Чт</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[10px]">Пт</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[10px]">Сб</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[10px]">Вс</div>
     </div>
 
 
-    <!-- Мобильный месяц: компактная сетка -->
-    <div class="grid grid-cols-7 gap-px bg-slate-200 sm:hidden">
+    <!-- Единый компактный календарь для телефона и ПК -->
+    <div class="grid grid-cols-7 gap-px bg-slate-200">
 
         {% for day in days %}
         <a
             href="?start={{ day.month_start|date:'Y-m-d' }}&day={{ day.date|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
-            class="relative flex aspect-square min-w-0 flex-col items-center justify-center bg-white px-0.5 py-1
-            {% if not day.in_month %}bg-slate-50/80{% endif %}
+            class="relative flex min-h-[72px] min-w-0 flex-col bg-white p-1.5 transition
+            sm:min-h-[88px] sm:p-2
+            lg:min-h-[98px] lg:p-2.5
+            xl:min-h-[104px]
+            {% if not day.in_month %}bg-slate-50/80{% else %}hover:bg-slate-50{% endif %}
             {% if day.date == selected_day %}z-10 bg-blue-50 ring-2 ring-inset ring-[#315EBC]{% elif day.date == today %}bg-orange-50{% endif %}"
         >
 
-            <span class="text-sm font-extrabold leading-none
-                {% if not day.in_month %}text-slate-300
-                {% elif day.date == today %}text-[#FF5C35]
-                {% elif day.date == selected_day %}text-[#315EBC]
-                {% else %}text-slate-900{% endif %}">
-                {{ day.date|date:"d" }}
-            </span>
+            <div class="flex items-start justify-between gap-1">
 
-            <div class="mt-1 flex h-3 items-center justify-center gap-1">
+                <span class="text-base font-extrabold leading-none
+                    sm:text-lg
+                    lg:text-xl
+                    {% if not day.in_month %}text-slate-300
+                    {% elif day.date == today %}text-[#FF5C35]
+                    {% elif day.date == selected_day %}text-[#315EBC]
+                    {% else %}text-slate-900{% endif %}">
+                    {{ day.date|date:"d" }}
+                </span>
 
                 {% if day.task_count %}
-                <span class="h-1.5 w-1.5 rounded-full
-                    {% if day.date == today %}bg-[#FF5C35]
-                    {% elif day.date == selected_day %}bg-[#315EBC]
-                    {% else %}bg-blue-400{% endif %}">
+                <span class="grid min-w-4 place-items-center rounded-full bg-slate-100 px-1 py-0.5 text-[7px] font-extrabold text-slate-500 sm:min-w-5 sm:text-[8px]">
+                    {{ day.task_count }}
                 </span>
                 {% endif %}
 
+            </div>
+
+
+            <div class="mt-auto flex flex-wrap items-center gap-1 pt-1.5">
+
+                {% if day.task_count %}
+                <span
+                    class="flex items-center gap-1 text-[8px] font-bold text-slate-500 sm:text-[9px]"
+                    title="{{ day.task_count }} задач"
+                >
+                    <span class="h-1.5 w-1.5 rounded-full
+                        {% if day.date == today %}bg-[#FF5C35]
+                        {% elif day.date == selected_day %}bg-[#315EBC]
+                        {% else %}bg-blue-400{% endif %}">
+                    </span>
+
+                    <span class="hidden md:inline">
+                        {{ day.task_count }}
+                    </span>
+                </span>
+                {% endif %}
+
+
                 {% if day.workers %}
-                <span class="flex items-center gap-0.5 text-[8px] font-bold text-emerald-600">
-                    <i data-lucide="users" class="h-2.5 w-2.5"></i>
+                <span
+                    class="flex items-center gap-0.5 rounded-md bg-emerald-50 px-1 py-0.5 text-[8px] font-bold text-emerald-600 sm:gap-1 sm:px-1.5 sm:text-[9px]"
+                    title="На смене: {{ day.working_names }}"
+                >
+                    <i data-lucide="users" class="h-2.5 w-2.5 sm:h-3 sm:w-3"></i>
                     {{ day.workers|length }}
                 </span>
                 {% endif %}
 
             </div>
 
-            {% if day.task_count %}
-            <span class="absolute right-1 top-1 rounded-full bg-slate-100 px-1 text-[7px] font-extrabold text-slate-500">
-                {{ day.task_count }}
+
+            {% if day.date == today %}
+            <span class="absolute bottom-1 right-1 hidden text-[7px] font-extrabold uppercase tracking-wide text-[#FF5C35] lg:block">
+                сегодня
             </span>
             {% endif %}
 
         </a>
         {% endfor %}
-    </div>
 
-
-    <!-- Desktop/tablet месяц -->
-    <div class="hidden grid-cols-7 gap-px bg-slate-200 sm:grid">
-        {% for day in days %}
-        <a
-            href="?start={{ day.month_start|date:'Y-m-d' }}&day={{ day.date|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
-            class="relative min-h-[132px] bg-white p-3 transition
-            {% if not day.in_month %}bg-slate-50/70 text-slate-300{% else %}hover:bg-slate-50{% endif %}
-            {% if day.date == selected_day %}z-10 bg-blue-50/70 ring-2 ring-inset ring-[#315EBC]{% elif day.date == today %}bg-orange-50/45{% endif %}"
-        >
-            <div class="mb-2 flex items-start justify-between gap-2">
-                <div>
-                    <div class="text-xl font-extrabold tracking-tight
-                        {% if not day.in_month %}text-slate-300{% elif day.date == today %}text-[#FF5C35]{% elif day.date == selected_day %}text-[#315EBC]{% else %}text-slate-900{% endif %}">
-                        {{ day.date|date:"d" }}
-                    </div>
-
-                    {% if day.date == today %}
-                    <div class="mt-0.5 text-[8px] font-extrabold uppercase tracking-wide text-[#FF5C35]">
-                        Сегодня
-                    </div>
-                    {% endif %}
-                </div>
-
-                <div class="flex items-center gap-1">
-                    {% if day.workers %}
-                    <span
-                        class="flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-1 text-[9px] font-bold text-emerald-600"
-                        title="На смене: {{ day.working_names }}"
-                    >
-                        <i data-lucide="users" class="h-3 w-3"></i>
-                        {{ day.workers|length }}
-                    </span>
-                    {% endif %}
-
-                    {% if day.task_count %}
-                    <span class="grid min-w-6 place-items-center rounded-md bg-slate-100 px-1.5 py-1 text-[9px] font-extrabold text-slate-600">
-                        {{ day.task_count }}
-                    </span>
-                    {% endif %}
-                </div>
-            </div>
-
-            <div class="space-y-1">
-                {% for item in day.items %}
-                <div class="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-[9px]
-                    {% if item.is_done %}bg-emerald-50 text-emerald-700
-                    {% elif item.is_overdue_now %}bg-red-50 text-red-700
-                    {% else %}bg-blue-50 text-slate-700{% endif %}">
-
-                    {% if item.scheduled_at %}
-                    <b class="shrink-0">
-                        {{ item.scheduled_at|date:"H:i" }}
-                    </b>
-                    {% endif %}
-
-                    <span class="truncate font-semibold">
-                        {{ item.title }}
-                    </span>
-                </div>
-                {% endfor %}
-
-                {% if day.more_count %}
-                <span class="block px-1 pt-1 text-[9px] font-bold text-[#315EBC]">
-                    +{{ day.more_count }} ещё
-                </span>
-                {% endif %}
-            </div>
-        </a>
-        {% endfor %}
     </div>
 
 </section>
