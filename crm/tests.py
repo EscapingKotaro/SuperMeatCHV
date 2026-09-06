@@ -18,7 +18,6 @@ from .models import (
     Lead,
     ManagerTask,
     Newcomer,
-    Reminder,
     Role,
     StaffProfile,
     Subscription,
@@ -61,20 +60,85 @@ class CrmWorkflowTests(TestCase):
         self.assertTrue(Expense.objects.filter(title="Вода", created_by=self.admin).exists())
 
     def test_boss_assigns_task_and_admin_completes_it(self):
-        self.client.login(username="boss", password="TestPass123!")
-        response = self.client.post(reverse("boss"), {
-            "action": "create_task", "task-title": "Позвонить родителю",
-            "task-description": "Уточнить оплату", "task-assignee": self.admin.pk,
-            "task-due_date": (timezone.localdate() + timedelta(days=1)).isoformat(),
-        })
-        self.assertRedirects(response, reverse("boss"))
-        task = ManagerTask.objects.get(title="Позвонить родителю")
+        self.client.login(
+            username="boss",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("boss"),
+            {
+                "action": "create_task",
+                "task-title": "Позвонить родителю",
+                "task-description": "Уточнить оплату",
+                "task-assignee": self.admin.pk,
+                "task-due_date": (
+                    timezone.localdate()
+                    + timedelta(days=1)
+                ).isoformat(),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("boss"),
+        )
+
+        task = ManagerTask.objects.get(
+            title="Позвонить родителю"
+        )
+
+        self.assertEqual(
+            task.created_by,
+            self.boss,
+        )
+
+        self.assertEqual(
+            task.assignee,
+            self.admin,
+        )
+
         self.client.logout()
-        self.client.login(username="admin", password="TestPass123!")
-        self.client.post(reverse("notifications"), {"task_id": task.pk})
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("notifications"),
+            {
+                "task_id": task.pk,
+                "completion_comment": (
+                    "Позвонил, оплату подтвердили"
+                ),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("notifications"),
+        )
+
         task.refresh_from_db()
-        self.assertTrue(task.is_done)
-        self.assertIsNotNone(task.done_at)
+
+        self.assertTrue(
+            task.is_done
+        )
+
+        self.assertIsNotNone(
+            task.done_at
+        )
+
+        self.assertEqual(
+            task.completed_by,
+            self.admin,
+        )
+
+        self.assertEqual(
+            task.completion_comment,
+            "Позвонил, оплату подтвердили",
+        )
 
     def test_attendance_mark_is_saved(self):
         self.client.login(username="admin", password="TestPass123!")
@@ -170,19 +234,345 @@ class CrmWorkflowTests(TestCase):
         self.assertEqual(newcomer.phone, "123")
         self.assertEqual(newcomer.full_name, "Петрова Ева")
 
-    def test_calendar_reminder_and_backup_pages(self):
-        self.client.login(username="admin", password="TestPass123!")
-        remind_at = timezone.now() + timedelta(hours=2)
-        response = self.client.post(reverse("calendar"), {
-            "action": "save", "title": "Перезвонить", "description": "",
-            "remind_at": remind_at.strftime("%Y-%m-%dT%H:%M"),
-            "assignee": self.admin.pk, "visible_to_all": "on",
-        })
-        self.assertRedirects(response, reverse("calendar"))
-        self.assertTrue(Reminder.objects.filter(title="Перезвонить").exists())
-        self.assertEqual(self.client.get(reverse("backup_export")).status_code, 403)
-        self.client.logout(); self.client.login(username="senior", password="TestPass123!")
-        self.assertEqual(self.client.get(reverse("backup_export")).status_code, 200)
+def test_calendar_creates_manager_task(self):
+    self.client.login(
+        username="admin",
+        password="TestPass123!",
+    )
+
+    start_at = (
+        timezone.now()
+        + timedelta(days=1)
+    ).replace(
+        second=0,
+        microsecond=0,
+    )
+
+    end_at = (
+        start_at
+        + timedelta(hours=1)
+    )
+
+    response = self.client.post(
+        reverse("calendar"),
+        {
+            "action": "save",
+            "title": "Позвонить поставщику",
+            "description": "Уточнить доставку",
+            "assignee": self.admin.pk,
+            "scheduled_at": start_at.strftime(
+                "%Y-%m-%dT%H:%M"
+            ),
+            "scheduled_end_at": end_at.strftime(
+                "%Y-%m-%dT%H:%M"
+            ),
+            "due_date": start_at.date().isoformat(),
+        },
+    )
+
+    self.assertRedirects(
+        response,
+        reverse("calendar"),
+    )
+
+    task = ManagerTask.objects.get(
+        title="Позвонить поставщику"
+    )
+
+    self.assertEqual(
+        task.created_by,
+        self.admin,
+    )
+
+    self.assertEqual(
+        task.assignee,
+        self.admin,
+    )
+
+    self.assertIsNotNone(
+        task.scheduled_at
+    )
+
+    self.assertIsNotNone(
+        task.scheduled_end_at
+    )
+
+    self.assertGreater(
+        task.scheduled_end_at,
+        task.scheduled_at,
+    )
+
+
+def test_calendar_rejects_invalid_task_time_range(self):
+    self.client.login(
+        username="admin",
+        password="TestPass123!",
+    )
+
+    start_at = (
+        timezone.now()
+        + timedelta(days=1)
+    ).replace(
+        second=0,
+        microsecond=0,
+    )
+
+    end_at = (
+        start_at
+        - timedelta(hours=1)
+    )
+
+    response = self.client.post(
+        reverse("calendar"),
+        {
+            "action": "save",
+            "title": "Неверный интервал",
+            "description": "",
+            "assignee": self.admin.pk,
+            "scheduled_at": start_at.strftime(
+                "%Y-%m-%dT%H:%M"
+            ),
+            "scheduled_end_at": end_at.strftime(
+                "%Y-%m-%dT%H:%M"
+            ),
+            "due_date": start_at.date().isoformat(),
+        },
+    )
+
+    self.assertEqual(
+        response.status_code,
+        200,
+    )
+
+    self.assertFalse(
+        ManagerTask.objects.filter(
+            title="Неверный интервал"
+        ).exists()
+    )
+
+
+def test_task_author_can_delete_task(self):
+    task = ManagerTask.objects.create(
+        title="Удалить меня",
+        description="",
+        assignee=self.admin,
+        created_by=self.admin,
+        due_date=timezone.localdate(),
+    )
+
+    self.client.login(
+        username="admin",
+        password="TestPass123!",
+    )
+
+    response = self.client.post(
+        reverse("calendar"),
+        {
+            "action": "delete",
+            "task_id": task.pk,
+        },
+    )
+
+    self.assertRedirects(
+        response,
+        reverse("calendar"),
+    )
+
+    self.assertFalse(
+        ManagerTask.objects.filter(
+            pk=task.pk
+        ).exists()
+    )
+
+
+def test_other_manager_cannot_delete_foreign_task(self):
+    task = ManagerTask.objects.create(
+        title="Чужая задача",
+        description="",
+        assignee=self.admin,
+        created_by=self.admin,
+        due_date=timezone.localdate(),
+    )
+
+    self.client.login(
+        username="senior",
+        password="TestPass123!",
+    )
+
+    response = self.client.post(
+        reverse("calendar"),
+        {
+            "action": "delete",
+            "task_id": task.pk,
+        },
+    )
+
+    self.assertEqual(
+        response.status_code,
+        403,
+    )
+
+    self.assertTrue(
+        ManagerTask.objects.filter(
+            pk=task.pk
+        ).exists()
+    )
+
+
+def test_other_manager_cannot_complete_foreign_task(self):
+    task = ManagerTask.objects.create(
+        title="Задача администратора",
+        assignee=self.admin,
+        created_by=self.boss,
+        due_date=timezone.localdate(),
+    )
+
+    self.client.login(
+        username="senior",
+        password="TestPass123!",
+    )
+
+    response = self.client.post(
+        reverse("notifications"),
+        {
+            "task_id": task.pk,
+            "completion_comment": "Попытка",
+        },
+    )
+
+    self.assertEqual(
+        response.status_code,
+        403,
+    )
+
+    task.refresh_from_db()
+
+    self.assertFalse(
+        task.is_done
+    )
+
+    self.assertIsNone(
+        task.completed_by
+    )
+
+
+def test_common_task_can_be_completed_by_any_manager(self):
+    task = ManagerTask.objects.create(
+        title="Общая задача",
+        assignee=None,
+        created_by=self.boss,
+        due_date=timezone.localdate(),
+    )
+
+    self.client.login(
+        username="senior",
+        password="TestPass123!",
+    )
+
+    response = self.client.post(
+        reverse("notifications"),
+        {
+            "task_id": task.pk,
+            "completion_comment": "Готово",
+        },
+    )
+
+    self.assertRedirects(
+        response,
+        reverse("notifications"),
+    )
+
+    task.refresh_from_db()
+
+    self.assertTrue(
+        task.is_done
+    )
+
+    self.assertEqual(
+        task.completed_by,
+        self.senior,
+    )
+
+    self.assertEqual(
+        task.completion_comment,
+        "Готово",
+    )
+
+
+def test_completed_task_can_be_returned_to_work(self):
+    task = ManagerTask.objects.create(
+        title="Вернуть в работу",
+        assignee=self.admin,
+        created_by=self.boss,
+        is_done=True,
+        done_at=timezone.now(),
+        completed_by=self.admin,
+        completion_comment="Первый результат",
+    )
+
+    self.client.login(
+        username="admin",
+        password="TestPass123!",
+    )
+
+    response = self.client.post(
+        reverse("notifications"),
+        {
+            "task_id": task.pk,
+        },
+    )
+
+    self.assertRedirects(
+        response,
+        reverse("notifications"),
+    )
+
+    task.refresh_from_db()
+
+    self.assertFalse(
+        task.is_done
+    )
+
+    self.assertIsNone(
+        task.done_at
+    )
+
+    self.assertIsNone(
+        task.completed_by
+    )
+
+    self.assertEqual(
+        task.completion_comment,
+        "",
+    )
+
+
+def test_backup_permissions(self):
+    self.client.login(
+        username="admin",
+        password="TestPass123!",
+    )
+
+    self.assertEqual(
+        self.client.get(
+            reverse("backup_export")
+        ).status_code,
+        403,
+    )
+
+    self.client.logout()
+
+    self.client.login(
+        username="senior",
+        password="TestPass123!",
+    )
+
+    self.assertEqual(
+        self.client.get(
+            reverse("backup_export")
+        ).status_code,
+        200,
+    )
 
     def test_all_primary_pages_render(self):
         self.client.login(username="boss", password="TestPass123!")

@@ -484,8 +484,46 @@ class CampStayAdmin(admin.ModelAdmin):
 
 @admin.register(ManagerTask)
 class ManagerTaskAdmin(admin.ModelAdmin):
-    list_display = ("title", "assignee", "due_date", "is_done", "created_by")
-    list_filter = ("is_done", "assignee", "due_date")
-    search_fields = ("title", "description", "assignee__username", "created_by__username")
-    autocomplete_fields = ["assignee", "created_by"]
-    ordering = ("-created_at",)
+    list_display = (
+        "title",
+        "assignee",
+        "scheduled_at",
+        "scheduled_end_at",
+        "due_date",
+        "is_done",
+        "completed_by",
+        "created_by",
+    )
+
+    list_filter = (
+        "is_done",
+        "assignee",
+        "completed_by",
+        "due_date",
+    )
+
+    search_fields = (
+        "title",
+        "description",
+        "assignee__username",
+        "assignee__first_name",
+        "assignee__last_name",
+        "created_by__username",
+        "completed_by__username",
+        "completion_comment",
+    )
+
+    autocomplete_fields = [
+        "assignee",
+        "created_by",
+        "completed_by",
+    ]
+
+    readonly_fields = (
+        "created_at",
+        "done_at",
+    )
+
+    ordering = (
+        "-created_at",
+    )

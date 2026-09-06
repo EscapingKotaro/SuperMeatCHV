@@ -55,11 +55,16 @@ class ManagerTaskForm(StyledFormMixin, forms.ModelForm):
             "description",
             "assignee",
             "scheduled_at",
+            "scheduled_end_at",
             "due_date",
         )
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
             "scheduled_at": forms.DateTimeInput(
+                format="%Y-%m-%dT%H:%M",
+                attrs={"type": "datetime-local"},
+            ),
+            "scheduled_end_at": forms.DateTimeInput(
                 format="%Y-%m-%dT%H:%M",
                 attrs={"type": "datetime-local"},
             ),
@@ -82,10 +87,17 @@ class ManagerTaskForm(StyledFormMixin, forms.ModelForm):
         )
 
         self.fields["assignee"].required = False
-        self.fields["assignee"].empty_label = "Общая задача для администрации"
+        self.fields["assignee"].empty_label = (
+            "Общая задача для администрации"
+        )
 
         self.fields["scheduled_at"].required = False
         self.fields["scheduled_at"].input_formats = [
+            "%Y-%m-%dT%H:%M",
+        ]
+
+        self.fields["scheduled_end_at"].required = False
+        self.fields["scheduled_end_at"].input_formats = [
             "%Y-%m-%dT%H:%M",
         ]
 
@@ -95,6 +107,26 @@ class ManagerTaskForm(StyledFormMixin, forms.ModelForm):
         ]
 
         self.apply_styles()
+
+    def clean(self):
+        cleaned = super().clean()
+
+        start_at = cleaned.get("scheduled_at")
+        end_at = cleaned.get("scheduled_end_at")
+
+        if end_at and not start_at:
+            self.add_error(
+                "scheduled_end_at",
+                "Сначала укажите дату и время начала задачи",
+            )
+
+        elif start_at and end_at and end_at <= start_at:
+            self.add_error(
+                "scheduled_end_at",
+                "Окончание должно быть позже начала",
+            )
+
+        return cleaned
 
 
 class RevenueTargetForm(StyledFormMixin, forms.ModelForm):

@@ -895,41 +895,147 @@ def competition_export(request, pk):
     log_action(request, "competition.export", competition, f"Выгружены результаты {competition.name}")
     return response
 
+def can_complete_manager_task(user, task):
+    return (
+        task.assignee_id is None
+        or task.assignee_id == user.pk
+        or user_role(user) == Role.BOSS
+    )
+
+
+def can_manage_manager_task(user, task):
+    return (
+        task.created_by_id == user.pk
+        or user_role(user) == Role.BOSS
+    )
+
+
+def toggle_manager_task(task, user, completion_comment=""):
+    if task.is_done:
+        task.is_done = False
+        task.done_at = None
+        task.completed_by = None
+        task.completion_comment = ""
+
+    else:
+        task.is_done = True
+        task.done_at = timezone.now()
+        task.completed_by = user
+        task.completion_comment = completion_comment.strip()
+
+    task.save(
+        update_fields=[
+            "is_done",
+            "done_at",
+            "completed_by",
+            "completion_comment",
+        ]
+    )
 
 @login_required
 def notifications_page(request):
     if request.method == "POST":
-        task = get_object_or_404(ManagerTask, pk=request.POST.get("task_id"))
-        if task.assignee_id not in (None, request.user.pk) and user_role(request.user) != Role.BOSS:
-            return HttpResponseForbidden("Это задача другого пользователя")
-        task.is_done = not task.is_done
-        task.done_at = timezone.now() if task.is_done else None
-        task.save(update_fields=["is_done", "done_at"])
-        log_action(request, "task.toggle", task, f"Задача «{task.title}»: {'выполнена' if task.is_done else 'возвращена'}")
-        messages.success(request, "Статус задачи изменён")
+        task = get_object_or_404(
+            ManagerTask,
+            pk=request.POST.get("task_id"),
+        )
+
+        if not can_complete_manager_task(
+            request.user,
+            task,
+        ):
+            return HttpResponseForbidden(
+                "Это задача другого пользователя"
+            )
+
+        toggle_manager_task(
+            task,
+            request.user,
+            request.POST.get(
+                "completion_comment",
+                "",
+            ),
+        )
+
+        log_action(
+            request,
+            "task.toggle",
+            task,
+            f"Задача «{task.title}»: "
+            f"{'выполнена' if task.is_done else 'возвращена в работу'}",
+        )
+
+        messages.success(
+            request,
+            "Статус задачи изменён",
+        )
+
         return redirect("notifications")
-    tasks = ManagerTask.objects.select_related("assignee", "created_by")
+
+    tasks = ManagerTask.objects.select_related(
+        "assignee",
+        "created_by",
+        "completed_by",
+    )
+
     if user_role(request.user) != Role.BOSS:
-        tasks = tasks.filter(Q(assignee=request.user) | Q(assignee__isnull=True))
+        tasks = tasks.filter(
+            Q(assignee=request.user)
+            | Q(assignee__isnull=True)
+        )
+
     today = timezone.localdate()
+
     alerts = []
-    for child in Child.objects.filter(status=Child.Status.ACTIVE):
+
+    for child in Child.objects.filter(
+        status=Child.Status.ACTIVE
+    ):
         expiry = child.nearest_expiry()
         debt = child.debt()
+
         if expiry and expiry <= today + timedelta(days=7):
-            alerts.append({"kind": "subscription", "child": child, "expiry": expiry, "debt": debt})
-    trials = Child.objects.filter(status=Child.Status.TRIAL, trial_from__lte=today)
-    reminders = Reminder.objects.filter(
-        Q(assignee=request.user) | Q(visible_to_all=True),
-        is_done=False,
-        remind_at__date__lte=today + timedelta(days=1),
-    ).select_related("assignee")
-    imported_leads = Lead.objects.filter(imported_from_ad=True, status=Lead.Status.NEW)
-    return render(request, "crm/notifications.html", page_context(
-        request, "notifications", tasks=tasks, alerts=alerts, trials=trials,
-        reminders=reminders, imported_leads=imported_leads,
-        open_count=tasks.filter(is_done=False).count() + len(alerts) + trials.count() + reminders.count() + imported_leads.count(), today=today,
-    ))
+            alerts.append({
+                "kind": "subscription",
+                "child": child,
+                "expiry": expiry,
+                "debt": debt,
+            })
+
+    trials = Child.objects.filter(
+        status=Child.Status.TRIAL,
+        trial_from__lte=today,
+    )
+
+    imported_leads = Lead.objects.filter(
+        imported_from_ad=True,
+        status=Lead.Status.NEW,
+    )
+
+    open_task_count = tasks.filter(
+        is_done=False
+    ).count()
+
+    return render(
+        request,
+        "crm/notifications.html",
+        page_context(
+            request,
+            "notifications",
+            tasks=tasks,
+            alerts=alerts,
+            trials=trials,
+            imported_leads=imported_leads,
+            open_task_count=open_task_count,
+            open_count=(
+                open_task_count
+                + len(alerts)
+                + trials.count()
+                + imported_leads.count()
+            ),
+            today=today,
+        ),
+    )
 
 
 @login_required
@@ -1039,11 +1145,13 @@ def calendar_page(request):
         pk=request.GET.get("edit")
     ).first()
 
-    # Редактировать содержание может автор или начальник.
+    # Редактировать задачу может автор или начальник.
     if (
         editing
-        and editing.created_by_id != request.user.pk
-        and user_role(request.user) != Role.BOSS
+        and not can_manage_manager_task(
+            request.user,
+            editing,
+        )
     ):
         return HttpResponseForbidden(
             "Редактировать чужую задачу может только начальник"
@@ -1057,7 +1165,9 @@ def calendar_page(request):
     if request.method == "POST":
         action = request.POST.get("action", "save")
 
-        # График 2/2 оставляем как был.
+        # --------------------------------------------------
+        # График 2/2
+        # --------------------------------------------------
         if action == "set_shift":
             profile, _ = StaffProfile.objects.get_or_create(
                 user=request.user
@@ -1067,14 +1177,17 @@ def calendar_page(request):
                 profile.shift_anchor = date.fromisoformat(
                     request.POST.get("shift_anchor", "")
                 )
-                profile.save(update_fields=["shift_anchor"])
+
+                profile.save(
+                    update_fields=["shift_anchor"]
+                )
 
                 messages.success(
                     request,
                     "График 2/2 пересчитан",
                 )
 
-            except ValueError:
+            except (ValueError, TypeError):
                 messages.error(
                     request,
                     "Укажите первый рабочий день",
@@ -1082,41 +1195,30 @@ def calendar_page(request):
 
             return redirect("calendar")
 
-        # Выполнение задачи из календаря.
+        # --------------------------------------------------
+        # Выполнение / возврат задачи
+        # --------------------------------------------------
         if action == "toggle":
             task = get_object_or_404(
                 ManagerTask,
                 pk=request.POST.get("task_id"),
             )
 
-            # Персональную задачу может закрыть исполнитель
-            # или начальник. Общую — любой администратор.
-            if (
-                task.assignee_id is not None
-                and task.assignee_id != request.user.pk
-                and user_role(request.user) != Role.BOSS
+            if not can_complete_manager_task(
+                request.user,
+                task,
             ):
                 return HttpResponseForbidden(
                     "Это задача другого пользователя"
                 )
 
-            if task.is_done:
-                task.is_done = False
-                task.done_at = None
-                task.completed_by = None
-                task.completion_comment = ""
-            else:
-                task.is_done = True
-                task.done_at = timezone.now()
-                task.completed_by = request.user
-
-            task.save(
-                update_fields=[
-                    "is_done",
-                    "done_at",
-                    "completed_by",
+            toggle_manager_task(
+                task,
+                request.user,
+                request.POST.get(
                     "completion_comment",
-                ]
+                    "",
+                ),
             )
 
             log_action(
@@ -1127,40 +1229,97 @@ def calendar_page(request):
                 f"{'выполнена' if task.is_done else 'возвращена в работу'}",
             )
 
+            messages.success(
+                request,
+                (
+                    "Задача выполнена"
+                    if task.is_done
+                    else "Задача возвращена в работу"
+                ),
+            )
+
             return redirect("calendar")
 
-        # Создание / изменение задачи.
-        if form.is_valid():
-            task = form.save(commit=False)
+        # --------------------------------------------------
+        # Удаление задачи
+        # --------------------------------------------------
+        if action == "delete":
+            task = get_object_or_404(
+                ManagerTask,
+                pk=request.POST.get("task_id"),
+            )
 
-            if editing:
-                task.created_by = editing.created_by
-            else:
-                task.created_by = request.user
+            if not can_manage_manager_task(
+                request.user,
+                task,
+            ):
+                return HttpResponseForbidden(
+                    "Удалить чужую задачу может только начальник"
+                )
 
-            task.save()
+            task_title = task.title
 
             log_action(
                 request,
-                "task.save",
+                "task.delete",
                 task,
-                f"Сохранена задача «{task.title}»",
+                f"Удалена задача «{task_title}»",
             )
+
+            task.delete()
 
             messages.success(
                 request,
-                "Задача сохранена",
+                "Задача удалена",
             )
 
             return redirect("calendar")
 
-        messages.error(
-            request,
-            "Проверьте дату и поля задачи",
-        )
+        # --------------------------------------------------
+        # Создание / редактирование задачи
+        # --------------------------------------------------
+        if action == "save":
+            if form.is_valid():
+                task = form.save(commit=False)
 
-    # ВАЖНО:
-    # календарь общий. Здесь специально нет фильтра по текущему пользователю.
+                # При редактировании автора не меняем.
+                if editing:
+                    task.created_by = editing.created_by
+                else:
+                    task.created_by = request.user
+
+                task.save()
+
+                log_action(
+                    request,
+                    "task.save",
+                    task,
+                    (
+                        f"Изменена задача «{task.title}»"
+                        if editing
+                        else f"Создана задача «{task.title}»"
+                    ),
+                )
+
+                messages.success(
+                    request,
+                    (
+                        "Задача изменена"
+                        if editing
+                        else "Задача создана"
+                    ),
+                )
+
+                return redirect("calendar")
+
+            messages.error(
+                request,
+                "Проверьте поля задачи",
+            )
+
+    # ------------------------------------------------------
+    # Все задачи видны всей администрации.
+    # ------------------------------------------------------
     tasks = list(
         ManagerTask.objects
         .select_related(
@@ -1168,28 +1327,33 @@ def calendar_page(request):
             "created_by",
             "completed_by",
         )
-        .order_by("scheduled_at", "due_date", "-created_at")
+        .order_by(
+            "scheduled_at",
+            "due_date",
+            "-created_at",
+        )
     )
+
+    today = timezone.localdate()
 
     week_start = (
-        timezone.localdate()
-        - timedelta(days=timezone.localdate().weekday())
+        today
+        - timedelta(days=today.weekday())
     )
 
-    days = []
-
+    # ------------------------------------------------------
+    # Задачи без даты
+    # ------------------------------------------------------
     undated_tasks = []
 
     for task in tasks:
-        if task.scheduled_at:
-            task_calendar_date = timezone.localtime(
-                task.scheduled_at
-            ).date()
-        else:
-            task_calendar_date = task.due_date
-
-        if task_calendar_date is None:
+        if not task.scheduled_at and not task.due_date:
             undated_tasks.append(task)
+
+    # ------------------------------------------------------
+    # Календарь на 14 дней
+    # ------------------------------------------------------
+    days = []
 
     for offset in range(14):
         day = week_start + timedelta(days=offset)
@@ -1197,55 +1361,93 @@ def calendar_page(request):
         day_items = []
 
         for task in tasks:
+            task_date = None
+
+            # Приоритет:
+            # scheduled_at → due_date
             if task.scheduled_at:
                 task_date = timezone.localtime(
                     task.scheduled_at
                 ).date()
-            else:
+
+            elif task.due_date:
                 task_date = task.due_date
 
             if task_date == day:
                 day_items.append(task)
+
+        # Внутри дня сортируем сначала по времени.
+        day_items.sort(
+            key=lambda task: (
+                timezone.localtime(task.scheduled_at).time()
+                if task.scheduled_at
+                else datetime.max.time(),
+                task.created_at,
+            )
+        )
 
         days.append({
             "date": day,
             "items": day_items,
         })
 
+    # ------------------------------------------------------
+    # График сотрудников 2/2
+    # ------------------------------------------------------
     shift_rows = []
 
-    for profile in (
+    profiles = (
         StaffProfile.objects
-        .select_related("user", "branch")
-        .filter(user__is_active=True)
-        .exclude(role=Role.BOSS)
-    ):
+        .select_related(
+            "user",
+            "branch",
+        )
+        .filter(
+            user__is_active=True,
+        )
+        .exclude(
+            role=Role.BOSS,
+        )
+    )
+
+    for profile in profiles:
         work_days = set()
 
         if profile.shift_anchor:
             for item in days:
-                if (
-                    item["date"] - profile.shift_anchor
-                ).days % 4 in (0, 1):
-                    work_days.add(item["date"])
+                difference = (
+                    item["date"]
+                    - profile.shift_anchor
+                ).days
+
+                if difference % 4 in (0, 1):
+                    work_days.add(
+                        item["date"]
+                    )
 
         shift_rows.append({
             "profile": profile,
             "work_days": work_days,
         })
 
+    # ------------------------------------------------------
+    # Render
+    # ------------------------------------------------------
     return render(
         request,
         "crm/calendar.html",
         page_context(
             request,
             "calendar",
+
             form=form,
             editing=editing,
-            days=days,
+
             tasks=tasks,
+            days=days,
             undated_tasks=undated_tasks,
-            today=timezone.localdate(),
+
+            today=today,
             shift_rows=shift_rows,
         ),
     )
