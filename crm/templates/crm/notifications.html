@@ -1,184 +1,651 @@
 {% extends 'crm/base.html' %}
 
+
 {% block content %}
-<div class="grid gap-4 lg:grid-cols-[240px_1fr]">
 
-    <aside class="card h-fit p-4">
-        <p class="text-xs font-bold text-slate-500">ТРЕБУЕТ ВНИМАНИЯ</p>
-        <p class="mt-2 text-4xl font-extrabold">{{ open_count }}</p>
-        <p class="text-xs text-slate-500">открытых событий</p>
+<div class="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
 
-        <div class="mt-5 space-y-2 text-xs">
+    <!-- =========================
+         ЛЕВАЯ КОЛОНКА
+         СВОДКА
+    ========================== -->
+    <aside class="card h-fit p-4 lg:sticky lg:top-24">
 
-            <a href="{% url 'calendar' %}?scope={% if is_boss %}all{% else %}mine{% endif %}&state=open"
-               class="flex justify-between rounded-lg px-1 py-1 hover:bg-slate-50">
-                <span>Открытые задачи</span>
-                <b>{{ open_task_count }}</b>
+        <p class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+            Требует внимания
+        </p>
+
+        <div class="mt-2 flex items-end gap-2">
+            <p class="text-4xl font-extrabold tracking-tight">
+                {{ open_count }}
+            </p>
+
+            <span class="pb-1 text-xs text-slate-400">
+                событий
+            </span>
+        </div>
+
+
+        <div class="mt-5 space-y-1">
+
+            <!-- Задачи -->
+            <a
+                href="{% url 'calendar' %}?scope={% if is_boss %}all{% else %}mine{% endif %}&state=open"
+                class="flex items-center justify-between rounded-xl px-2.5 py-2 text-xs transition hover:bg-slate-50"
+            >
+
+                <span class="flex items-center gap-2 text-slate-600">
+                    <i
+                        data-lucide="list-checks"
+                        class="h-3.5 w-3.5 text-slate-400"
+                    ></i>
+
+                    Открытые задачи
+                </span>
+
+                <b class="{% if open_task_count %}text-slate-900{% else %}text-slate-400{% endif %}">
+                    {{ open_task_count }}
+                </b>
+
             </a>
 
-            <a href="{% url 'payments' %}"
-               class="flex justify-between rounded-lg px-1 py-1 hover:bg-slate-50">
-                <span>Абонементы</span>
-                <b>{{ subscription_count }}</b>
-            </a>
 
+            <!-- Абонементы -->
             <a
                 href="{% url 'payments' %}"
-                class="flex justify-between rounded-lg px-1 py-1 hover:bg-slate-50">
-                <span>Долги</span>
-                <b class="{% if debt_count %}text-red-600{% endif %}">
+                class="flex items-center justify-between rounded-xl px-2.5 py-2 text-xs transition hover:bg-slate-50"
+            >
+
+                <span class="flex items-center gap-2 text-slate-600">
+                    <i
+                        data-lucide="calendar-clock"
+                        class="h-3.5 w-3.5 text-slate-400"
+                    ></i>
+
+                    Абонементы
+                </span>
+
+                <b class="{% if subscription_count %}text-amber-600{% else %}text-slate-400{% endif %}">
+                    {{ subscription_count }}
+                </b>
+
+            </a>
+
+
+            <!-- Долги -->
+            <a
+                href="#notifications-list"
+                class="flex items-center justify-between rounded-xl px-2.5 py-2 text-xs transition
+                {% if debt_count %}
+                    bg-red-50 hover:bg-red-100
+                {% else %}
+                    hover:bg-slate-50
+                {% endif %}"
+            >
+
+                <span class="flex items-center gap-2
+                {% if debt_count %}
+                    font-semibold text-red-700
+                {% else %}
+                    text-slate-600
+                {% endif %}">
+
+                    <i
+                        data-lucide="circle-dollar-sign"
+                        class="h-3.5 w-3.5
+                        {% if debt_count %}
+                            text-red-500
+                        {% else %}
+                            text-slate-400
+                        {% endif %}"
+                    ></i>
+
+                    Долги
+                </span>
+
+                <b class="{% if debt_count %}text-red-600{% else %}text-slate-400{% endif %}">
                     {{ debt_count }}
                 </b>
+
             </a>
 
-            <a href="{% url 'newcomers' %}"
-               class="flex justify-between rounded-lg px-1 py-1 hover:bg-slate-50">
-                <span>Пробные</span>
-                <b>{{ trial_count }}</b>
-            </a>
 
-            {% if unread_count %}
-            <div class="flex justify-between rounded-lg bg-red-50 px-1 py-1 text-red-600">
-                <span>Новые уведомления</span>
-                <b>{{ unread_count }}</b>
-            </div>
-            {% endif %}
+            <!-- Пробные -->
+            <a
+                href="#today-trials"
+                class="flex items-center justify-between rounded-xl px-2.5 py-2 text-xs transition
+                {% if trial_count %}
+                    bg-fuchsia-50 hover:bg-fuchsia-100
+                {% else %}
+                    hover:bg-slate-50
+                {% endif %}"
+            >
+
+                <span class="flex items-center gap-2
+                {% if trial_count %}
+                    font-semibold text-fuchsia-700
+                {% else %}
+                    text-slate-600
+                {% endif %}">
+
+                    <i
+                        data-lucide="user-round-check"
+                        class="h-3.5 w-3.5
+                        {% if trial_count %}
+                            text-fuchsia-500
+                        {% else %}
+                            text-slate-400
+                        {% endif %}"
+                    ></i>
+
+                    Пробные
+                </span>
+
+                <b class="{% if trial_count %}text-fuchsia-600{% else %}text-slate-400{% endif %}">
+                    {{ trial_count }}
+                </b>
+
+            </a>
 
         </div>
+
+
+        {% if unread_count %}
+
+        <div class="mt-4 flex items-center justify-between rounded-xl bg-blue-50 px-3 py-2 text-xs text-blue-700">
+
+            <span class="flex items-center gap-2 font-semibold">
+                <i
+                    data-lucide="bell-ring"
+                    class="h-3.5 w-3.5"
+                ></i>
+
+                Новые
+            </span>
+
+            <b>
+                {{ unread_count }}
+            </b>
+
+        </div>
+
+        {% endif %}
+
     </aside>
 
 
-    <section class="space-y-4">
+    <!-- =========================
+         ПРАВАЯ КОЛОНКА
+    ========================== -->
+    <div class="min-w-0 space-y-4">
 
-        {% if event_notifications %}
-        <section class="card overflow-hidden">
 
-            <div class="flex items-center justify-between border-b p-4">
-                <div>
-                    <b>Уведомления</b>
-                    <p class="text-xs text-slate-500">
-                        Последние изменения, которые касаются вас
-                    </p>
+        <!-- =========================
+             ПРОБНЫЕ СЕГОДНЯ
+        ========================== -->
+        {% if today_trials %}
+
+        <section
+            id="today-trials"
+            class="card overflow-hidden"
+        >
+
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b bg-fuchsia-50/40 px-4 py-3.5">
+
+                <div class="flex items-center gap-3">
+
+                    <span class="grid h-9 w-9 place-items-center rounded-xl bg-fuchsia-100 text-fuchsia-600">
+                        <i
+                            data-lucide="user-round-check"
+                            class="h-4 w-4"
+                        ></i>
+                    </span>
+
+
+                    <div>
+
+                        <b class="block text-sm">
+                            Пробные сегодня
+                        </b>
+
+                        <p class="mt-0.5 text-[11px] text-slate-500">
+                            Подтвердите результат пробного занятия
+                        </p>
+
+                    </div>
+
                 </div>
 
-                {% if unread_count %}
-                <span class="badge bg-red-50 text-red-600">
-                    {{ unread_count }} новых
+
+                <span class="badge bg-fuchsia-100 text-fuchsia-700">
+                    {{ trial_count }}
                 </span>
-                {% endif %}
+
             </div>
 
 
             <div class="divide-y">
+
+                {% for newcomer in today_trials %}
+
+                <article class="flex flex-col gap-4 p-4 transition hover:bg-slate-50/60 xl:flex-row xl:items-center">
+
+                    <!-- Человек -->
+                    <div class="flex min-w-0 flex-1 items-start gap-3">
+
+                        <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-fuchsia-50 text-fuchsia-600">
+                            <i
+                                data-lucide="user-round"
+                                class="h-5 w-5"
+                            ></i>
+                        </span>
+
+
+                        <div class="min-w-0">
+
+                            <div class="flex flex-wrap items-center gap-2">
+
+                                <b class="text-sm">
+                                    {{ newcomer.full_name }}
+                                </b>
+
+
+                                <span class="badge bg-slate-100 text-slate-600">
+
+                                    <i
+                                        data-lucide="clock-3"
+                                        class="h-3 w-3"
+                                    ></i>
+
+                                    {{ newcomer.trial_at|date:"H:i" }}
+
+                                </span>
+
+                            </div>
+
+
+                            <div class="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
+
+                                {% if newcomer.group %}
+
+                                <span class="flex items-center gap-1">
+                                    <i
+                                        data-lucide="users"
+                                        class="h-3 w-3"
+                                    ></i>
+
+                                    {{ newcomer.group.name }}
+                                </span>
+
+                                {% endif %}
+
+
+                                {% if newcomer.trainer %}
+
+                                <span class="flex items-center gap-1">
+                                    <i
+                                        data-lucide="user-check"
+                                        class="h-3 w-3"
+                                    ></i>
+
+                                    {{ newcomer.trainer.full_name }}
+                                </span>
+
+                                {% endif %}
+
+
+                                {% if newcomer.phone %}
+
+                                <span class="flex items-center gap-1">
+                                    <i
+                                        data-lucide="phone"
+                                        class="h-3 w-3"
+                                    ></i>
+
+                                    {{ newcomer.phone }}
+                                </span>
+
+                                {% endif %}
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+
+                    <!-- Действия -->
+                    <div class="flex shrink-0 flex-wrap gap-2">
+
+                        <form method="post">
+
+                            {% csrf_token %}
+
+                            <input
+                                type="hidden"
+                                name="action"
+                                value="confirm_trial"
+                            >
+
+                            <input
+                                type="hidden"
+                                name="newcomer_id"
+                                value="{{ newcomer.pk }}"
+                            >
+
+                            <button class="btn btn-primary">
+
+                                <i data-lucide="check"></i>
+
+                                Пришёл
+
+                            </button>
+
+                        </form>
+
+
+                        <form
+                            method="post"
+                            onsubmit="return confirm('Отметить пробное занятие отменённым?');"
+                        >
+
+                            {% csrf_token %}
+
+                            <input
+                                type="hidden"
+                                name="action"
+                                value="cancel_trial"
+                            >
+
+                            <input
+                                type="hidden"
+                                name="newcomer_id"
+                                value="{{ newcomer.pk }}"
+                            >
+
+                            <button class="btn btn-soft">
+
+                                <i data-lucide="x"></i>
+
+                                Отменено
+
+                            </button>
+
+                        </form>
+
+
+                        <a
+                            href="{% url 'newcomers' %}?edit={{ newcomer.pk }}"
+                            class="btn btn-soft"
+                        >
+                            Подробнее
+                        </a>
+
+                    </div>
+
+                </article>
+
+                {% endfor %}
+
+            </div>
+
+        </section>
+
+        {% endif %}
+
+
+        <!-- =========================
+             УВЕДОМЛЕНИЯ
+        ========================== -->
+        <section
+            id="notifications-list"
+            class="card overflow-hidden"
+        >
+
+            <div class="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3.5">
+
+                <div class="flex items-center gap-3">
+
+                    <span class="grid h-9 w-9 place-items-center rounded-xl bg-blue-50 text-blue-600">
+                        <i
+                            data-lucide="bell"
+                            class="h-4 w-4"
+                        ></i>
+                    </span>
+
+
+                    <div>
+
+                        <b class="block text-sm">
+                            Уведомления
+                        </b>
+
+                        <p class="mt-0.5 text-[11px] text-slate-500">
+                            Последние события, которые касаются вас
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                {% if unread_count %}
+
+                <span class="badge bg-blue-50 text-blue-700">
+                    {{ unread_count }} новых
+                </span>
+
+                {% endif %}
+
+            </div>
+
+
+            {% if event_notifications %}
+
+            <div class="divide-y">
+
                 {% for notification in event_notifications %}
 
-                <article class="flex gap-3 p-4 {% if not notification.read_at %}bg-blue-50/60{% endif %}">
+                <article
+                    class="flex gap-3 p-4 transition hover:bg-slate-50/60
+                    {% if not notification.read_at %}
+                        bg-blue-50/40
+                    {% endif %}"
+                >
 
-                    <span class="grid h-9 w-9 shrink-0 place-items-center rounded-xl
+                    <!-- Иконка -->
+                    <span class="grid h-10 w-10 shrink-0 place-items-center rounded-xl
+
                         {% if notification.kind == 'task_completed' %}
                             bg-emerald-50 text-emerald-600
+
                         {% elif notification.kind == 'task_deleted' %}
                             bg-red-50 text-red-600
+
                         {% elif notification.kind == 'task_reopened' %}
                             bg-amber-50 text-amber-600
+
                         {% elif notification.kind == 'lead_created' %}
                             bg-cyan-50 text-cyan-600
+
                         {% elif notification.kind == 'trial_scheduled' %}
                             bg-fuchsia-50 text-fuchsia-600
+
                         {% elif notification.kind == 'subscription_expiring' %}
-                            bg-red-50 text-red-600
+                            bg-amber-50 text-amber-600
+
                         {% elif notification.kind == 'subscription_debt' %}
-                            bg-red-100 text-red-700
+                            bg-red-50 text-red-600
+
                         {% else %}
                             bg-blue-50 text-blue-600
-                        {% endif %}">
+                        {% endif %}
+                    ">
 
                         {% if notification.kind == 'task_completed' %}
-                            <i data-lucide="circle-check" class="h-4 w-4"></i>
+
+                            <i
+                                data-lucide="circle-check"
+                                class="h-4 w-4"
+                            ></i>
+
 
                         {% elif notification.kind == 'task_deleted' %}
-                            <i data-lucide="trash-2" class="h-4 w-4"></i>
+
+                            <i
+                                data-lucide="trash-2"
+                                class="h-4 w-4"
+                            ></i>
+
 
                         {% elif notification.kind == 'task_reopened' %}
-                            <i data-lucide="rotate-ccw" class="h-4 w-4"></i>
+
+                            <i
+                                data-lucide="rotate-ccw"
+                                class="h-4 w-4"
+                            ></i>
+
 
                         {% elif notification.kind == 'lead_created' %}
-                            <i data-lucide="inbox" class="h-4 w-4"></i>
+
+                            <i
+                                data-lucide="inbox"
+                                class="h-4 w-4"
+                            ></i>
+
 
                         {% elif notification.kind == 'trial_scheduled' %}
-                            <i data-lucide="user-round-check" class="h-4 w-4"></i>
+
+                            <i
+                                data-lucide="user-round-check"
+                                class="h-4 w-4"
+                            ></i>
+
 
                         {% elif notification.kind == 'subscription_expiring' %}
-                            <i data-lucide="calendar-clock" class="h-4 w-4"></i>
 
-                        {% elif notification.kind == 'subscription_expiring' %}
-                            <i data-lucide="calendar-clock" class="h-4 w-4"></i>
+                            <i
+                                data-lucide="calendar-clock"
+                                class="h-4 w-4"
+                            ></i>
+
+
+                        {% elif notification.kind == 'subscription_debt' %}
+
+                            <i
+                                data-lucide="circle-dollar-sign"
+                                class="h-4 w-4"
+                            ></i>
+
 
                         {% else %}
-                            <i data-lucide="bell" class="h-4 w-4"></i>
+
+                            <i
+                                data-lucide="bell"
+                                class="h-4 w-4"
+                            ></i>
+
                         {% endif %}
 
                     </span>
 
 
+                    <!-- Текст -->
                     <div class="min-w-0 flex-1">
 
                         <div class="flex flex-wrap items-start justify-between gap-2">
 
-                            <b class="text-sm">
-                                {{ notification.get_kind_display }}
-                            </b>
+                            <div class="flex items-center gap-2">
 
-                            <small class="shrink-0 text-slate-400">
+                                <b class="text-sm">
+                                    {{ notification.get_kind_display }}
+                                </b>
+
+
+                                {% if not notification.read_at %}
+
+                                <span class="h-2 w-2 rounded-full bg-blue-500"></span>
+
+                                {% endif %}
+
+                            </div>
+
+
+                            <small class="shrink-0 text-[10px] text-slate-400">
                                 {{ notification.created_at|date:"d.m.Y H:i" }}
                             </small>
 
                         </div>
 
 
-                        <p class="mt-1 break-words text-xs text-slate-600">
+                        <p class="mt-1 break-words text-xs leading-5 text-slate-600">
                             {{ notification.message }}
                         </p>
 
 
                         {% if notification.actor %}
+
                         <p class="mt-1 text-[10px] text-slate-400">
                             {{ notification.actor.get_full_name|default:notification.actor.username }}
                         </p>
+
                         {% endif %}
 
 
+                        <!-- Ссылка события -->
                         {% if notification.url %}
 
-                        <a href="{{ notification.url }}"
-                           class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700">
+                        <a
+                            href="{{ notification.url }}"
+                            class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#315EBC] hover:underline"
+                        >
 
                             {% if notification.kind == 'lead_created' %}
+
                                 Открыть заявку
 
+
                             {% elif notification.kind == 'trial_scheduled' %}
+
                                 Открыть новичка
 
+
                             {% elif notification.kind == 'subscription_expiring' %}
+
                                 Открыть абонемент
 
+
                             {% elif notification.kind == 'subscription_debt' %}
+
                                 Открыть спортсмена
 
+
                             {% else %}
+
                                 Открыть
+
                             {% endif %}
 
-                            <i data-lucide="arrow-right" class="h-3 w-3"></i>
+                            <i
+                                data-lucide="arrow-right"
+                                class="h-3 w-3"
+                            ></i>
+
                         </a>
 
 
                         {% elif notification.task %}
 
-                        <a href="{% url 'calendar' %}"
-                           class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-700">
+                        <a
+                            href="{% url 'calendar' %}"
+                            class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#315EBC] hover:underline"
+                        >
                             Открыть календарь
-                            <i data-lucide="arrow-right" class="h-3 w-3"></i>
+
+                            <i
+                                data-lucide="arrow-right"
+                                class="h-3 w-3"
+                            ></i>
                         </a>
 
                         {% endif %}
@@ -188,176 +655,38 @@
                 </article>
 
                 {% endfor %}
+
             </div>
+
+
+            {% else %}
+
+            <!-- Пустое состояние -->
+            <div class="flex flex-col items-center justify-center px-6 py-14 text-center">
+
+                <span class="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-50 text-emerald-500">
+                    <i
+                        data-lucide="circle-check-big"
+                        class="h-6 w-6"
+                    ></i>
+                </span>
+
+                <b class="mt-3 text-sm">
+                    Новых уведомлений нет
+                </b>
+
+                <p class="mt-1 max-w-sm text-xs text-slate-400">
+                    Задачи, заканчивающиеся абонементы, долги и пробные появятся здесь автоматически
+                </p>
+
+            </div>
+
+            {% endif %}
 
         </section>
 
-        {% else %}
-
-        <div class="card p-12 text-center">
-            <i data-lucide="circle-check-big"
-               class="mx-auto h-10 w-10 text-emerald-500"></i>
-
-            <b class="mt-3 block">Новых уведомлений нет</b>
-
-            <p class="mt-1 text-xs text-slate-500">
-                Открытые задачи, абонементы и пробные показаны слева
-            </p>
-        </div>
-
-        {% endif %}
-
-    </section>
-
-    {% if today_trials %}
-
-    <section class="card overflow-hidden">
-
-        <div class="border-b p-4">
-            <div class="flex items-center justify-between gap-3">
-
-                <div>
-                    <b>Пробные сегодня</b>
-
-                    <p class="text-xs text-slate-500">
-                        Подтвердите приход спортсменов
-                    </p>
-                </div>
-
-                <span class="badge bg-fuchsia-50 text-fuchsia-700">
-                    {{ trial_count }}
-                </span>
-
-            </div>
-        </div>
-
-
-        <div class="divide-y">
-
-            {% for newcomer in today_trials %}
-
-            <article class="flex flex-wrap items-center gap-4 p-4">
-
-                <div class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-fuchsia-50 text-fuchsia-600">
-                    <i
-                        data-lucide="user-round-check"
-                        class="h-5 w-5"
-                    ></i>
-                </div>
-
-
-                <div class="min-w-0 flex-1">
-
-                    <div class="flex flex-wrap items-center gap-2">
-
-                        <b>
-                            {{ newcomer.full_name }}
-                        </b>
-
-                        <span class="badge bg-slate-100 text-slate-600">
-                            {{ newcomer.trial_at|date:"H:i" }}
-                        </span>
-
-                    </div>
-
-
-                    <p class="mt-1 text-xs text-slate-500">
-
-                        {% if newcomer.group %}
-                            {{ newcomer.group.name }}
-                        {% endif %}
-
-                        {% if newcomer.trainer %}
-                            {% if newcomer.group %} · {% endif %}
-                            {{ newcomer.trainer.full_name }}
-                        {% endif %}
-
-                        {% if newcomer.phone %}
-                            · {{ newcomer.phone }}
-                        {% endif %}
-
-                    </p>
-
-                </div>
-
-
-                <div class="flex flex-wrap gap-2">
-
-                    <form method="post">
-
-                        {% csrf_token %}
-
-                        <input
-                            type="hidden"
-                            name="action"
-                            value="confirm_trial"
-                        >
-
-                        <input
-                            type="hidden"
-                            name="newcomer_id"
-                            value="{{ newcomer.pk }}"
-                        >
-
-                        <button class="btn btn-primary">
-
-                            <i data-lucide="check"></i>
-
-                            Пришёл
-
-                        </button>
-
-                    </form>
-
-
-                    <form
-                        method="post"
-                        onsubmit="return confirm('Отменить пробное занятие?');"
-                    >
-
-                        {% csrf_token %}
-
-                        <input
-                            type="hidden"
-                            name="action"
-                            value="cancel_trial"
-                        >
-
-                        <input
-                            type="hidden"
-                            name="newcomer_id"
-                            value="{{ newcomer.pk }}"
-                        >
-
-                        <button class="btn btn-soft">
-
-                            <i data-lucide="x"></i>
-
-                            Отменено
-
-                        </button>
-
-                    </form>
-
-
-                    <a
-                        href="{% url 'newcomers' %}?edit={{ newcomer.pk }}"
-                        class="btn btn-soft"
-                    >
-                        Подробнее
-                    </a>
-
-                </div>
-
-            </article>
-
-            {% endfor %}
-
-        </div>
-
-    </section>
-
-    {% endif %}
+    </div>
 
 </div>
+
 {% endblock %}

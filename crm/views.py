@@ -1789,7 +1789,6 @@ def notifications_page(request):
     debt_count = Notification.objects.filter(
         recipient=request.user,
         kind=Notification.Kind.SUBSCRIPTION_DEBT,
-        read_at__isnull=True,
     ).count()
 
     open_task_count = task_qs.count()

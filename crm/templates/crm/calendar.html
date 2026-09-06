@@ -1,395 +1,851 @@
 {% extends 'crm/base.html' %}
 
+
 {% block actions %}
-<button data-modal="task-modal" class="btn btn-primary">
+<button
+    data-modal="task-modal"
+    class="btn btn-primary"
+>
     <i data-lucide="plus"></i>
     Новая задача
 </button>
 {% endblock %}
 
+
 {% block content %}
 
-<div class="mb-4 flex flex-wrap items-center justify-between gap-3">
-    <div class="flex gap-2">
-        <a class="btn btn-soft"
-           href="?start={{ prev_start|date:'Y-m-d' }}&day={{ prev_start|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}">
-            <i data-lucide="chevron-left"></i>
-        </a>
+<!-- =========================
+     ПАНЕЛЬ КАЛЕНДАРЯ
+========================== -->
+<section class="card mb-4 p-3">
 
-        <a class="btn btn-soft"
-           href="?start={{ today_start|date:'Y-m-d' }}&day={{ today|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}">
-            Сегодня
-        </a>
+    <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
 
-        <a class="btn btn-soft"
-           href="?start={{ next_start|date:'Y-m-d' }}&day={{ next_start|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}">
-            <i data-lucide="chevron-right"></i>
-        </a>
-    </div>
+        <!-- Переход по периодам -->
+        <div class="flex items-center gap-2">
 
-    <div class="flex flex-wrap gap-2">
-        <div class="flex rounded-xl bg-slate-100 p-1">
-            <a href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=all&state={{ state }}"
-               class="btn {% if scope == 'all' %}btn-dark{% else %}btn-soft{% endif %}">
-                Все
+            <a
+                href="?start={{ prev_start|date:'Y-m-d' }}&day={{ prev_start|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
+                class="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white transition hover:bg-slate-50"
+                title="Предыдущие две недели"
+            >
+                <i data-lucide="chevron-left" class="h-4 w-4"></i>
             </a>
-            <a href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=mine&state={{ state }}"
-               class="btn {% if scope == 'mine' %}btn-dark{% else %}btn-soft{% endif %}">
-                Мои
+
+
+            <a
+                href="?start={{ today_start|date:'Y-m-d' }}&day={{ today|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
+                class="btn btn-soft h-10"
+            >
+                <i data-lucide="calendar-heart"></i>
+                Сегодня
             </a>
-        </div>
 
-        <div class="flex rounded-xl bg-slate-100 p-1">
-            <a href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=open"
-               class="btn {% if state == 'open' %}btn-dark{% else %}btn-soft{% endif %}">
-                Активные
+
+            <a
+                href="?start={{ next_start|date:'Y-m-d' }}&day={{ next_start|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
+                class="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white transition hover:bg-slate-50"
+                title="Следующие две недели"
+            >
+                <i data-lucide="chevron-right" class="h-4 w-4"></i>
             </a>
-            <a href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=done"
-               class="btn {% if state == 'done' %}btn-dark{% else %}btn-soft{% endif %}">
-                Выполненные
-            </a>
-            <a href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=all"
-               class="btn {% if state == 'all' %}btn-dark{% else %}btn-soft{% endif %}">
-                Все
-            </a>
-        </div>
-    </div>
-</div>
 
 
-<!-- КАЛЕНДАРЬ -->
-<section class="card mb-4 overflow-x-auto p-3">
-    <div class="grid min-w-[1050px] grid-cols-7 gap-2">
+            <div class="ml-2 hidden sm:block">
+                <b class="block text-sm">
+                    {{ window_start|date:"d E" }}
+                    —
+                    {{ next_start|date:"d E Y" }}
+                </b>
 
-        {% for day in days %}
-        <a href="?start={{ window_start|date:'Y-m-d' }}&day={{ day.date|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
-           class="min-h-36 rounded-xl border p-2.5 transition hover:border-slate-400 hover:bg-slate-50
-                  {% if day.date == selected_day %}ring-2 ring-blue-400{% endif %}
-                  {% if day.date == today %}bg-orange-50/50{% endif %}">
-
-            <div class="mb-2 flex items-start justify-between gap-2">
-                <div>
-                    <b class="text-xs">{{ day.date|date:"D" }}</b>
-                    <div class="text-lg font-extrabold">{{ day.date|date:"d" }}</div>
-                </div>
-
-                {% if day.task_count %}
-                <span class="badge bg-slate-100 text-slate-600">
-                    {{ day.task_count }}
+                <span class="text-[10px] text-slate-400">
+                    План на две недели
                 </span>
-                {% endif %}
             </div>
 
-            {% if day.workers %}
-            <div class="mb-2 flex items-center gap-1 text-[9px] font-semibold text-emerald-600">
-                <i data-lucide="users" class="h-3 w-3"></i>
-                На смене · {{ day.workers|length }}
+        </div>
+
+
+        <!-- Фильтры -->
+        <div class="flex flex-wrap items-center gap-2">
+
+            <div class="flex rounded-xl bg-slate-100 p-1">
+
+                <a
+                    href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=all&state={{ state }}"
+                    class="rounded-lg px-3 py-2 text-xs font-bold transition
+                    {% if scope == 'all' %}
+                        bg-white text-slate-900 shadow-sm
+                    {% else %}
+                        text-slate-500 hover:text-slate-900
+                    {% endif %}"
+                >
+                    Все задачи
+                </a>
+
+                <a
+                    href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=mine&state={{ state }}"
+                    class="rounded-lg px-3 py-2 text-xs font-bold transition
+                    {% if scope == 'mine' %}
+                        bg-white text-slate-900 shadow-sm
+                    {% else %}
+                        text-slate-500 hover:text-slate-900
+                    {% endif %}"
+                >
+                    Мои
+                </a>
+
             </div>
-            {% endif %}
 
-            <div class="space-y-1">
-                {% for item in day.items %}
-                <div class="flex min-w-0 items-center gap-1.5 rounded-lg px-2 py-1.5 text-[10px]
-                            {% if item.is_done %}
-                                bg-emerald-50 text-emerald-700
-                            {% elif item.is_overdue_now %}
-                                bg-red-50 text-red-700
-                            {% else %}
-                                bg-blue-50 text-slate-700
-                            {% endif %}">
 
-                    {% if item.scheduled_at %}
-                    <span class="shrink-0 font-bold">{{ item.scheduled_at|date:"H:i" }}</span>
-                    {% endif %}
+            <div class="flex rounded-xl bg-slate-100 p-1">
 
-                    <span class="truncate">{{ item.title }}</span>
-                </div>
-                {% empty %}
-                <span class="text-[10px] text-slate-300">Нет задач</span>
-                {% endfor %}
+                <a
+                    href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=open"
+                    class="rounded-lg px-3 py-2 text-xs font-bold transition
+                    {% if state == 'open' %}
+                        bg-[#17202A] text-white shadow-sm
+                    {% else %}
+                        text-slate-500 hover:text-slate-900
+                    {% endif %}"
+                >
+                    Активные
+                </a>
 
-                {% if day.more_count %}
-                <div class="px-1 pt-1 text-[10px] font-bold text-blue-600">
-                    +{{ day.more_count }} ещё
-                </div>
-                {% endif %}
+
+                <a
+                    href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=done"
+                    class="rounded-lg px-3 py-2 text-xs font-bold transition
+                    {% if state == 'done' %}
+                        bg-[#17202A] text-white shadow-sm
+                    {% else %}
+                        text-slate-500 hover:text-slate-900
+                    {% endif %}"
+                >
+                    Выполненные
+                </a>
+
+
+                <a
+                    href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=all"
+                    class="rounded-lg px-3 py-2 text-xs font-bold transition
+                    {% if state == 'all' %}
+                        bg-[#17202A] text-white shadow-sm
+                    {% else %}
+                        text-slate-500 hover:text-slate-900
+                    {% endif %}"
+                >
+                    Все
+                </a>
+
             </div>
-        </a>
-        {% endfor %}
+
+        </div>
 
     </div>
+
 </section>
 
 
-<!-- ВЫБРАННЫЙ ДЕНЬ -->
+<!-- =========================
+     14 ДНЕЙ
+========================== -->
 <section class="card mb-4 overflow-hidden">
-    <div class="flex items-center justify-between border-b p-4">
-        <div>
-            <h2 class="font-extrabold">{{ selected_day|date:"d E, l" }}</h2>
 
-            <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                <span>Задач: {{ selected_tasks|length }}</span>
+    <div class="overflow-x-auto p-3">
 
-                {% if selected_workers %}
-                <span class="flex items-center gap-1 text-emerald-700">
-                    <i data-lucide="users" class="h-3.5 w-3.5"></i>
+        <div class="grid min-w-[1050px] grid-cols-7 gap-2">
 
-                    На смене:
-                    {% for profile in selected_workers %}
-                        <b>{{ profile.user.first_name|default:profile.user.username }}</b>{% if not forloop.last %},{% endif %}
-                    {% endfor %}
-                </span>
+            {% for day in days %}
+
+            <a
+                href="?start={{ window_start|date:'Y-m-d' }}&day={{ day.date|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
+                class="group relative min-h-[150px] overflow-hidden rounded-2xl border p-3 transition-all
+
+                {% if day.date == selected_day %}
+                    border-[#315EBC] bg-blue-50/40
+                    shadow-[0_0_0_2px_rgba(49,94,188,.12)]
+                {% elif day.date == today %}
+                    border-orange-200 bg-orange-50/60
                 {% else %}
-                <span class="text-slate-400">На смене никого</span>
+                    border-slate-200 bg-white
+                    hover:-translate-y-0.5
+                    hover:border-slate-300
+                    hover:shadow-md
                 {% endif %}
-            </div>
-        </div>
+                "
+            >
 
-        <button data-modal="task-modal" class="btn btn-primary">
-            <i data-lucide="plus"></i>
-            Добавить
-        </button>
-    </div>
+                {% if day.date == today %}
+                <span class="absolute right-0 top-0 rounded-bl-xl bg-[#FF5C35] px-2 py-1 text-[9px] font-extrabold uppercase tracking-wide text-white">
+                    Сегодня
+                </span>
+                {% endif %}
 
-    <div class="divide-y">
-        {% for item in selected_tasks %}
-        <article class="p-4">
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
 
-                <div class="min-w-0 flex-1">
-                    <div class="flex flex-wrap items-center gap-2">
-                        <b>{{ item.title }}</b>
+                <div class="mb-3 flex items-start justify-between">
 
-                        {% if item.is_done %}
-                        <span class="badge bg-emerald-50 text-emerald-700">Выполнено</span>
-                        {% elif item.is_overdue_now %}
-                        <span class="badge bg-red-50 text-red-700">Просрочено</span>
-                        {% endif %}
+                    <div>
+
+                        <span class="text-[10px] font-extrabold uppercase tracking-wider text-slate-400">
+                            {{ day.date|date:"D" }}
+                        </span>
+
+                        <div class="mt-0.5 text-2xl font-extrabold tracking-tight
+                            {% if day.date == selected_day %}
+                                text-[#315EBC]
+                            {% elif day.date == today %}
+                                text-[#FF5C35]
+                            {% else %}
+                                text-slate-900
+                            {% endif %}
+                        ">
+                            {{ day.date|date:"d" }}
+                        </div>
+
                     </div>
 
-                    <p class="mt-1 text-xs text-slate-500">
-                        {% if item.scheduled_at %}
-                            {{ item.scheduled_at|date:"H:i" }}
-                            {% if item.scheduled_end_at %}–{{ item.scheduled_end_at|date:"H:i" }}{% endif %}
-                            ·
-                        {% endif %}
 
-                        {% if item.assignee %}
-                            {{ item.assignee.get_full_name|default:item.assignee.username }}
-                        {% else %}
-                            вся администрация
-                        {% endif %}
-
-                        · автор {{ item.created_by.get_full_name|default:item.created_by.username|default:"система" }}
-                    </p>
-
-                    {% if item.description %}
-                    <p class="mt-2 text-sm text-slate-600">{{ item.description }}</p>
+                    {% if day.task_count %}
+                    <span class="grid min-w-7 place-items-center rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-extrabold text-slate-600">
+                        {{ day.task_count }}
+                    </span>
                     {% endif %}
 
-                    {% if item.due_date %}
-                    <p class="mt-2 text-xs text-slate-500">
-                        Крайний срок: {{ item.due_date|date:"d.m.Y" }}
-                    </p>
-                    {% endif %}
-
-                    {% if item.is_done %}
-                    <div class="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">
-                        <b>Выполнил:</b>
-                        {{ item.completed_by.get_full_name|default:item.completed_by.username|default:"не зафиксировано" }}
-                        {% if item.done_at %}· {{ item.done_at|date:"d.m.Y H:i" }}{% endif %}
-
-                        {% if item.completion_comment %}
-                        <p class="mt-1">{{ item.completion_comment }}</p>
-                        {% endif %}
-                    </div>
-                    {% endif %}
                 </div>
 
-                <div class="flex flex-wrap gap-2">
+
+                <div class="space-y-1.5">
+
+                    {% for item in day.items %}
+
+                    <div class="
+                        flex min-w-0 items-center gap-2 rounded-lg border-l-2 px-2 py-1.5 text-[10px]
+
+                        {% if item.is_done %}
+                            border-emerald-400 bg-emerald-50 text-emerald-700
+
+                        {% elif item.is_overdue_now %}
+                            border-red-400 bg-red-50 text-red-700
+
+                        {% else %}
+                            border-blue-400 bg-blue-50 text-slate-700
+                        {% endif %}
+                    ">
+
+                        {% if item.scheduled_at %}
+                        <span class="shrink-0 font-extrabold">
+                            {{ item.scheduled_at|date:"H:i" }}
+                        </span>
+                        {% endif %}
+
+                        <span class="truncate font-semibold">
+                            {{ item.title }}
+                        </span>
+
+                    </div>
+
+                    {% empty %}
+
+                    <div class="flex min-h-12 items-center justify-center rounded-xl border border-dashed border-slate-200 text-[10px] text-slate-300">
+                        Свободно
+                    </div>
+
+                    {% endfor %}
+
+
+                    {% if day.more_count %}
+
+                    <div class="px-1 pt-1 text-[10px] font-extrabold text-[#315EBC]">
+                        + {{ day.more_count }} ещё
+                    </div>
+
+                    {% endif %}
+
+                </div>
+
+            </a>
+
+            {% endfor %}
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =========================
+     ВЫБРАННЫЙ ДЕНЬ
+========================== -->
+<section class="card mb-4 overflow-hidden">
+
+    <div class="flex flex-wrap items-center justify-between gap-4 border-b bg-slate-50/60 px-5 py-4">
+
+        <div class="flex items-center gap-3">
+
+            <div class="
+                grid h-12 w-12 shrink-0 place-items-center rounded-2xl
+
+                {% if selected_day == today %}
+                    bg-orange-100 text-[#FF5C35]
+                {% else %}
+                    bg-blue-100 text-[#315EBC]
+                {% endif %}
+            ">
+                <span class="text-lg font-extrabold">
+                    {{ selected_day|date:"d" }}
+                </span>
+            </div>
+
+
+            <div>
+
+                <h2 class="font-extrabold">
+                    {{ selected_day|date:"l, d E" }}
+                </h2>
+
+                <div class="mt-1 flex items-center gap-2 text-xs text-slate-500">
+
+                    <span>
+                        {{ selected_tasks|length }} задач
+                    </span>
+
+                    {% if selected_day == today %}
+                    <span class="badge bg-orange-50 text-[#FF5C35]">
+                        Сегодня
+                    </span>
+                    {% endif %}
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <button
+            data-modal="task-modal"
+            class="btn btn-primary"
+        >
+            <i data-lucide="plus"></i>
+            Добавить задачу
+        </button>
+
+    </div>
+
+
+    <div class="divide-y">
+
+        {% for item in selected_tasks %}
+
+        <article class="group p-5 transition hover:bg-slate-50/60">
+
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+
+                <div class="flex min-w-0 flex-1 gap-3">
+
+                    <div class="
+                        mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl
+
+                        {% if item.is_done %}
+                            bg-emerald-50 text-emerald-600
+
+                        {% elif item.is_overdue_now %}
+                            bg-red-50 text-red-600
+
+                        {% else %}
+                            bg-blue-50 text-blue-600
+                        {% endif %}
+                    ">
+
+                        {% if item.is_done %}
+                            <i data-lucide="circle-check" class="h-5 w-5"></i>
+
+                        {% elif item.is_overdue_now %}
+                            <i data-lucide="triangle-alert" class="h-5 w-5"></i>
+
+                        {% else %}
+                            <i data-lucide="circle-dot" class="h-5 w-5"></i>
+                        {% endif %}
+
+                    </div>
+
+
+                    <div class="min-w-0">
+
+                        <div class="flex flex-wrap items-center gap-2">
+
+                            <b class="text-sm">
+                                {{ item.title }}
+                            </b>
+
+
+                            {% if item.is_done %}
+                            <span class="badge bg-emerald-50 text-emerald-700">
+                                Выполнено
+                            </span>
+
+                            {% elif item.is_overdue_now %}
+                            <span class="badge bg-red-50 text-red-700">
+                                Просрочено
+                            </span>
+
+                            {% else %}
+                            <span class="badge bg-blue-50 text-blue-700">
+                                В работе
+                            </span>
+                            {% endif %}
+
+                        </div>
+
+
+                        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+
+                            {% if item.scheduled_at %}
+
+                            <span class="flex items-center gap-1">
+                                <i data-lucide="clock-3" class="h-3.5 w-3.5"></i>
+
+                                {{ item.scheduled_at|date:"H:i" }}
+
+                                {% if item.scheduled_end_at %}
+                                    – {{ item.scheduled_end_at|date:"H:i" }}
+                                {% endif %}
+                            </span>
+
+                            {% endif %}
+
+
+                            <span class="flex items-center gap-1">
+                                <i data-lucide="user-round" class="h-3.5 w-3.5"></i>
+
+                                {% if item.assignee %}
+                                    {{ item.assignee.get_full_name|default:item.assignee.username }}
+                                {% else %}
+                                    Вся администрация
+                                {% endif %}
+                            </span>
+
+
+                            {% if item.due_date %}
+                            <span class="flex items-center gap-1
+                                {% if item.is_overdue_now %}
+                                    text-red-600
+                                {% endif %}
+                            ">
+                                <i data-lucide="flag" class="h-3.5 w-3.5"></i>
+                                До {{ item.due_date|date:"d.m.Y" }}
+                            </span>
+                            {% endif %}
+
+                        </div>
+
+
+                        {% if item.description %}
+                        <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
+                            {{ item.description }}
+                        </p>
+                        {% endif %}
+
+
+                        {% if item.is_done %}
+
+                        <div class="mt-3 inline-flex flex-wrap items-center gap-1 rounded-xl bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">
+
+                            <i data-lucide="circle-check" class="h-3.5 w-3.5"></i>
+
+                            <b>
+                                {{ item.completed_by.get_full_name|default:item.completed_by.username|default:"Выполнено" }}
+                            </b>
+
+                            {% if item.done_at %}
+                                · {{ item.done_at|date:"d.m.Y H:i" }}
+                            {% endif %}
+
+                            {% if item.completion_comment %}
+                                · {{ item.completion_comment }}
+                            {% endif %}
+
+                        </div>
+
+                        {% endif %}
+
+                    </div>
+
+                </div>
+
+
+                <div class="flex shrink-0 flex-wrap gap-2">
+
                     {% if item.created_by_id == request.user.id or is_boss %}
-                    <a href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}&edit={{ item.pk }}"
-                       class="btn btn-soft">
+
+                    <a
+                        href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}&edit={{ item.pk }}"
+                        class="btn btn-soft"
+                    >
                         <i data-lucide="pencil"></i>
                         Изменить
                     </a>
 
-                    <form method="post" onsubmit="return confirm('Удалить эту задачу?');">
+
+                    <form
+                        method="post"
+                        onsubmit="return confirm('Удалить эту задачу?');"
+                    >
+
                         {% csrf_token %}
-                        <input type="hidden" name="action" value="delete">
-                        <input type="hidden" name="task_id" value="{{ item.pk }}">
-                        <button class="btn btn-soft text-red-600">
+
+                        <input
+                            type="hidden"
+                            name="action"
+                            value="delete"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="task_id"
+                            value="{{ item.pk }}"
+                        >
+
+                        <button
+                            class="btn btn-soft text-red-600"
+                            title="Удалить"
+                        >
                             <i data-lucide="trash-2"></i>
                         </button>
+
                     </form>
+
                     {% endif %}
 
+
                     {% if not item.assignee or item.assignee_id == request.user.id or is_boss %}
+
                         {% if item.is_done %}
+
                         <form method="post">
+
                             {% csrf_token %}
-                            <input type="hidden" name="action" value="toggle">
-                            <input type="hidden" name="task_id" value="{{ item.pk }}">
+
+                            <input
+                                type="hidden"
+                                name="action"
+                                value="toggle"
+                            >
+
+                            <input
+                                type="hidden"
+                                name="task_id"
+                                value="{{ item.pk }}"
+                            >
+
                             <button class="btn btn-soft">
                                 <i data-lucide="rotate-ccw"></i>
                                 Вернуть
                             </button>
+
                         </form>
+
+
                         {% else %}
+
                         <details class="relative">
+
                             <summary class="btn btn-dark cursor-pointer list-none">
                                 <i data-lucide="check"></i>
                                 Выполнить
                             </summary>
 
-                            <form method="post"
-                                  class="absolute right-0 top-full z-20 mt-2 w-80 rounded-2xl border bg-white p-3 shadow-xl">
+
+                            <form
+                                method="post"
+                                class="absolute right-0 top-full z-20 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl"
+                            >
+
                                 {% csrf_token %}
-                                <input type="hidden" name="action" value="toggle">
-                                <input type="hidden" name="task_id" value="{{ item.pk }}">
 
-                                <textarea class="field mb-2"
-                                          name="completion_comment"
-                                          rows="2"
-                                          placeholder="Комментарий — необязательно"></textarea>
+                                <input
+                                    type="hidden"
+                                    name="action"
+                                    value="toggle"
+                                >
 
-                                <button class="btn btn-dark w-full">Подтвердить выполнение</button>
+                                <input
+                                    type="hidden"
+                                    name="task_id"
+                                    value="{{ item.pk }}"
+                                >
+
+                                <textarea
+                                    class="field mb-2"
+                                    name="completion_comment"
+                                    rows="2"
+                                    placeholder="Комментарий — необязательно"
+                                ></textarea>
+
+                                <button class="btn btn-dark w-full">
+                                    Подтвердить выполнение
+                                </button>
+
                             </form>
+
                         </details>
+
                         {% endif %}
+
                     {% endif %}
+
                 </div>
 
             </div>
+
         </article>
 
+
         {% empty %}
-        <div class="p-10 text-center text-sm text-slate-400">
-            На этот день задач нет
+
+        <div class="flex flex-col items-center justify-center px-6 py-14 text-center">
+
+            <div class="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-400">
+                <i data-lucide="calendar-check-2" class="h-6 w-6"></i>
+            </div>
+
+            <b class="mt-3 text-sm">
+                На этот день задач нет
+            </b>
+
+            <p class="mt-1 text-xs text-slate-400">
+                Можно спокойно выдохнуть или запланировать новую задачу
+            </p>
+
+            <button
+                data-modal="task-modal"
+                class="btn btn-soft mt-4"
+            >
+                <i data-lucide="plus"></i>
+                Добавить задачу
+            </button>
+
         </div>
+
         {% endfor %}
+
     </div>
+
 </section>
 
 
-<!-- БЕЗ ДАТЫ -->
+<!-- =========================
+     ЗАДАЧИ БЕЗ ДАТЫ
+========================== -->
 {% if undated_tasks %}
-<details class="card mb-4">
-    <summary class="cursor-pointer p-4 font-bold">
-        Задачи без даты · {{ undated_tasks|length }}
+
+<details class="card">
+
+    <summary class="flex cursor-pointer items-center justify-between p-4">
+
+        <div class="flex items-center gap-2">
+
+            <span class="grid h-8 w-8 place-items-center rounded-lg bg-amber-50 text-amber-600">
+                <i data-lucide="calendar-x-2" class="h-4 w-4"></i>
+            </span>
+
+            <div>
+                <b class="block text-sm">
+                    Задачи без даты
+                </b>
+
+                <span class="text-[10px] text-slate-400">
+                    Лучше назначить им срок
+                </span>
+            </div>
+
+        </div>
+
+
+        <span class="badge bg-amber-50 text-amber-700">
+            {{ undated_tasks|length }}
+        </span>
+
     </summary>
 
+
     <div class="divide-y border-t">
+
         {% for item in undated_tasks %}
+
         <div class="flex flex-wrap items-center justify-between gap-3 p-4">
+
             <div>
-                <b class="text-sm">{{ item.title }}</b>
-                <p class="text-xs text-slate-500">
+
+                <b class="text-sm">
+                    {{ item.title }}
+                </b>
+
+                <p class="mt-1 text-xs text-slate-500">
+
                     {% if item.assignee %}
                         {{ item.assignee.get_full_name|default:item.assignee.username }}
                     {% else %}
-                        вся администрация
+                        Вся администрация
                     {% endif %}
+
                 </p>
+
             </div>
 
+
             {% if item.created_by_id == request.user.id or is_boss %}
-            <a href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}&edit={{ item.pk }}"
-               class="btn btn-soft">
-                Изменить
+
+            <a
+                href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}&edit={{ item.pk }}"
+                class="btn btn-soft"
+            >
+                <i data-lucide="calendar-plus"></i>
+                Назначить дату
             </a>
+
             {% endif %}
+
         </div>
+
         {% endfor %}
+
     </div>
+
 </details>
+
 {% endif %}
-
-
-<!-- ГРАФИК 2/2 -->
-<details class="card">
-    <summary class="cursor-pointer p-4 font-bold">
-        График сотрудников 2/2
-    </summary>
-
-    <div class="border-t p-4">
-        <form method="post" class="flex flex-wrap items-end gap-2">
-            {% csrf_token %}
-            <input type="hidden" name="action" value="set_shift">
-
-            <label>
-                <span class="label">Мой первый рабочий день цикла</span>
-                <input class="field"
-                       type="date"
-                       name="shift_anchor"
-                       value="{{ request.user.profile.shift_anchor|date:'Y-m-d' }}">
-            </label>
-
-            <button class="btn btn-soft">Сохранить</button>
-        </form>
-
-        <div class="mt-3 flex flex-wrap gap-2">
-            {% for row in shift_rows %}
-            <span class="badge bg-slate-100 text-slate-700">
-                {{ row.profile.user.get_full_name|default:row.profile.user.username }}
-                · {{ row.profile.branch|default:"без филиала" }}
-            </span>
-            {% endfor %}
-        </div>
-    </div>
-</details>
 
 {% endblock %}
 
 
 {% block modals %}
-<section id="task-modal" class="modal {% if editing %}open{% endif %}">
+
+<section
+    id="task-modal"
+    class="modal {% if editing %}open{% endif %}"
+>
+
     <form method="post">
+
         {% csrf_token %}
-        <input type="hidden" name="action" value="save">
+
+        <input
+            type="hidden"
+            name="action"
+            value="save"
+        >
+
 
         <div class="modal-head">
+
             <div>
-                <b>{% if editing %}Изменить задачу{% else %}Новая задача{% endif %}</b>
-                <p class="text-xs text-slate-500">Задачу увидит администрация</p>
+                <b>
+                    {% if editing %}
+                        Изменить задачу
+                    {% else %}
+                        Новая задача
+                    {% endif %}
+                </b>
+
+                <p class="text-xs text-slate-500">
+                    Задача появится в календаре и уведомлениях
+                </p>
             </div>
-            <button type="button" data-close><i data-lucide="x"></i></button>
+
+
+            <button
+                type="button"
+                data-close
+            >
+                <i data-lucide="x"></i>
+            </button>
+
         </div>
+
 
         <div class="modal-body grid gap-4">
+
             {% for field in form %}
+
             <label>
-                <span class="label">{{ field.label }}</span>
+
+                <span class="label">
+                    {{ field.label }}
+                </span>
+
                 {{ field }}
+
                 {% if field.help_text %}
-                    <small class="block text-xs text-slate-400">{{ field.help_text }}</small>
+                <small class="mt-1 block text-xs text-slate-400">
+                    {{ field.help_text }}
+                </small>
                 {% endif %}
+
                 {% if field.errors %}
-                    <small class="block text-xs text-red-600">{{ field.errors|join:", " }}</small>
+                <small class="mt-1 block text-xs text-red-600">
+                    {{ field.errors|join:", " }}
+                </small>
                 {% endif %}
+
             </label>
+
             {% endfor %}
 
+
             {% if form.non_field_errors %}
-            <div class="text-xs text-red-600">{{ form.non_field_errors }}</div>
+
+            <div class="text-xs text-red-600">
+                {{ form.non_field_errors }}
+            </div>
+
             {% endif %}
+
         </div>
 
+
         <div class="modal-foot">
-            <button type="button" data-close class="btn btn-soft">Отмена</button>
-            <button class="btn btn-primary">
-                {% if editing %}Сохранить{% else %}Создать задачу{% endif %}
+
+            <button
+                type="button"
+                data-close
+                class="btn btn-soft"
+            >
+                Отмена
             </button>
+
+
+            <button class="btn btn-primary">
+
+                {% if editing %}
+                    Сохранить
+                {% else %}
+                    Создать задачу
+                {% endif %}
+
+            </button>
+
         </div>
+
     </form>
+
 </section>
+
 {% endblock %}
 
 
 {% block scripts %}
+
 {% if editing %}
+
 <script>
-    document.querySelector("[data-modal-backdrop]")?.classList.remove("hidden");
+    document
+        .querySelector("[data-modal-backdrop]")
+        ?.classList.remove("hidden");
 </script>
+
 {% endif %}
+
 {% endblock %}
