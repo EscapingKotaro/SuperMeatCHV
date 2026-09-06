@@ -189,10 +189,16 @@ def attendance_view(request):
     else:
         group = Group.objects.filter(is_active=True).first()
         if not group:
-            return render(request, 'crm/attendance.html', {
-                'groups': Group.objects.none(),
-                'selected_group': None,
-            })
+            return render(
+                request,
+                "crm/attendance.html",
+                page_context(
+                    request,
+                    "attendance",
+                    groups=Group.objects.none(),
+                    selected_group=None,
+                ),
+            )
 
     trainer = group.trainer if group else None
     today = timezone.localdate()
@@ -211,14 +217,20 @@ def attendance_view(request):
     all_class_dates = generate_class_dates(group, start_of_week, limit=60)
 
     if not all_class_dates:
-        return render(request, 'crm/attendance.html', {
-            'groups': Group.objects.filter(is_active=True),
-            'selected_group': group,
-            'week_data': [],
-            'children_data': [],
-            'ref_date': ref_date,
-            'error': 'Нет расписания'
-        })
+        return render(
+            request,
+            "crm/attendance.html",
+            page_context(
+                request,
+                "attendance",
+                groups=Group.objects.filter(is_active=True),
+                selected_group=group,
+                week_data=[],
+                children_data=[],
+                ref_date=ref_date,
+                error="Нет расписания",
+            ),
+        )
 
     # 4. Находим индекс
     current_index = 0
@@ -330,22 +342,24 @@ def attendance_view(request):
     if show_archived:
         base_params += "&show_archived=1"
 
-    context = {
-        'groups': Group.objects.filter(is_active=True),
-        'selected_group': group,
-        'trainer': trainer,
-        'week_data': week_data,
-        'children_data': children_data,
-        'ref_date': ref_date,
-        'prev_ref': prev_ref,
-        'next_ref': next_ref,
-        'today': today,
-        'sort_by': sort_by,
-        'show_archived': show_archived,
-        'base_params': base_params,
-        'page': 'attendance'
-    }
-    return render(request, 'crm/attendance.html', context)
+    context = page_context(
+        request,
+        "attendance",
+        groups=Group.objects.filter(is_active=True),
+        selected_group=group,
+        trainer=trainer,
+        week_data=week_data,
+        children_data=children_data,
+        ref_date=ref_date,
+        prev_ref=prev_ref,
+        next_ref=next_ref,
+        today=today,
+        sort_by=sort_by,
+        show_archived=show_archived,
+        base_params=base_params,
+    )
+
+    return render(request, "crm/attendance.html", context)
 
 
 @login_required

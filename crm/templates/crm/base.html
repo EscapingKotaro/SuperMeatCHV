@@ -163,36 +163,65 @@
         </div>
 
 
-        <!-- =========================
-             МЕНЮ ПОЛЬЗОВАТЕЛЯ
-        ========================== -->
-        <div data-user-menu class="absolute right-6 top-16 hidden w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+        <!-- Пользователь -->
+        <div class="relative">
 
-            <a href="{% url 'profile' %}" class="menu-item">
-                <i data-lucide="user-round"></i>
-                Мой профиль
-            </a>
+            <button
+                type="button"
+                data-menu-toggle
+                class="flex items-center gap-2 rounded-xl p-1.5 hover:bg-slate-100"
+            >
+                <span class="grid h-8 w-8 place-items-center rounded-lg bg-[#E8F0FF] text-xs font-extrabold text-[#315EBC]">
+                    {{ request.user.username|slice:":2"|upper }}
+                </span>
 
-            {% if is_senior %}
+                <span class="hidden text-left lg:block">
+                    <b class="block text-xs">
+                        {{ request.user.get_full_name|default:request.user.username }}
+                    </b>
 
-            <a href="{% url 'users' %}" class="menu-item">
-                <i data-lucide="users-round"></i>
-                Пользователи
-            </a>
+                    <small class="block text-[10px] text-slate-500">
+                        {{ request.user.profile.get_role_display|default:"Администратор" }}
+                    </small>
+                </span>
 
-            <a href="{% url 'backup_export' %}" class="menu-item">
-                <i data-lucide="download"></i>
-                Резервная копия
-            </a>
+                <i data-lucide="chevron-down"
+                class="h-4 w-4 text-slate-400"></i>
+            </button>
 
-            {% endif %}
 
-            <hr class="my-2">
+            <div
+                data-user-menu
+                class="absolute right-0 top-full z-50 mt-2 hidden w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl"
+            >
 
-            <a href="{% url 'logout' %}" class="menu-item text-red-600">
-                <i data-lucide="log-out"></i>
-                Выйти
-            </a>
+                <a href="{% url 'profile' %}" class="menu-item">
+                    <i data-lucide="user-round"></i>
+                    Мой профиль
+                </a>
+
+                {% if is_senior %}
+
+                <a href="{% url 'users' %}" class="menu-item">
+                    <i data-lucide="users-round"></i>
+                    Пользователи
+                </a>
+
+                <a href="{% url 'backup_export' %}" class="menu-item">
+                    <i data-lucide="download"></i>
+                    Резервная копия
+                </a>
+
+                {% endif %}
+
+                <hr class="my-2">
+
+                <a href="{% url 'logout' %}" class="menu-item text-red-600">
+                    <i data-lucide="log-out"></i>
+                    Выйти
+                </a>
+
+            </div>
 
         </div>
 
