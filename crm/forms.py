@@ -163,10 +163,18 @@ class CompetitionForm(StyledFormMixin, forms.ModelForm):
 class CompetitionEntryForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = CompetitionEntry
-        fields = ("child", "category", "rank")
+        fields = ("child", "category", "rank", "place")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, competition=None, **kwargs):
         super().__init__(*args, **kwargs)
+        if competition is None and getattr(self.instance, "competition_id", None):
+            competition = self.instance.competition
+
+        # Во внутриклубном соревновании место считается автоматически.
+        # Для выездного его можно внести вручную или импортировать из Excel.
+        if competition and competition.is_internal:
+            self.fields.pop("place", None)
+
         self.apply_styles()
 
 
@@ -235,6 +243,67 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
         birth_date = cleaned.get("birth_date")
         if birth_date:
             cleaned["birth_year"] = birth_date.year
+        return cleaned
+
+
+class ChildCertificateForm(StyledFormMixin, forms.ModelForm):
+    class Meta:
+        model = Child
+        fields = ("certificate", "certificate_note")
+        widgets = {
+            "certificate": forms.ClearableFileInput(
+                attrs={"accept": "image/*"},
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["certificate"].required = True
+        self.apply_styles()
+
+
+class ChildRankForm(StyledFormMixin, forms.Form):
+    year = forms.IntegerField(
+        label="Год",
+        min_value=1900,
+        max_value=2100,
+    )
+    rank = forms.CharField(
+        label="Спортивный разряд",
+        max_length=50,
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.apply_styles()
+
+
+class CampStayForm(StyledFormMixin, forms.Form):
+    camp_name = forms.CharField(
+        label="Лагерь / сборы",
+        max_length=200,
+    )
+    start_date = forms.DateField(
+        label="Дата начала",
+        widget=forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+        input_formats=["%Y-%m-%d"],
+    )
+    end_date = forms.DateField(
+        label="Дата окончания",
+        widget=forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+        input_formats=["%Y-%m-%d"],
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.apply_styles()
+
+    def clean(self):
+        cleaned = super().clean()
+        start_date = cleaned.get("start_date")
+        end_date = cleaned.get("end_date")
+        if start_date and end_date and end_date < start_date:
+            self.add_error("end_date", "Дата окончания не может быть раньше начала")
         return cleaned
 
 

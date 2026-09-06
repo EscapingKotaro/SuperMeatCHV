@@ -132,6 +132,39 @@
 
     </div>
 
+    {% if selected and not selected.is_internal %}
+    <div class="mt-4 rounded-xl border border-blue-200 bg-blue-50 p-3">
+        <div class="mb-2 text-xs font-bold text-blue-900">
+            Импорт результатов выездного соревнования
+        </div>
+        <form
+            method="post"
+            enctype="multipart/form-data"
+            class="flex flex-wrap items-center gap-2"
+        >
+            {% csrf_token %}
+            <input type="hidden" name="action" value="import_results">
+            <input
+                type="file"
+                name="results_file"
+                accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                class="field max-w-md text-sm"
+                required
+            >
+            <button class="btn btn-soft" type="submit">
+                <i data-lucide="upload"></i>
+                Импортировать табель
+            </button>
+        </form>
+        <p class="mt-2 text-[11px] text-blue-700">
+            XLSX: обязательны «Спортсмен»/«ФИО» и «Место».
+            Дополнительно поддерживаются «Год рождения», «Разряд»,
+            «Категория» и столбцы с названиями дисциплин.
+            Кнопка «Excel» сверху выгружает совместимый формат.
+        </p>
+    </div>
+    {% endif %}
+
 
     {% if selected %}
 

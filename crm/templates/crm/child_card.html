@@ -90,12 +90,50 @@
                 <i data-lucide="file-text" class="h-4 w-4 text-slate-400"></i>Справка для занятий
             </h3>
             {% if child.certificate %}
-                <img src="{{ child.certificate.url }}" alt="Справка" class="w-full rounded-lg border border-slate-200">
+                <a href="{% url 'child_certificate' child.id %}" target="_blank" class="block">
+                    <img
+                        src="{% url 'child_certificate' child.id %}"
+                        alt="Справка"
+                        class="w-full max-h-64 object-contain rounded-lg border border-slate-200 bg-slate-50"
+                    >
+                </a>
                 {% if child.certificate_note %}
                 <p class="mt-3 text-xs text-slate-600 bg-slate-50 p-2 rounded-lg">{{ child.certificate_note }}</p>
                 {% endif %}
             {% else %}
                 <p class="text-xs text-slate-400 italic">Справка не прикреплена</p>
+            {% endif %}
+
+            <form method="post" enctype="multipart/form-data" class="mt-4 space-y-2">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="upload_certificate">
+                <div>
+                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-1">
+                        {% if child.certificate %}Заменить фото{% else %}Прикрепить фото{% endif %}
+                    </div>
+                    {{ certificate_form.certificate }}
+                    {% if certificate_form.certificate.errors %}
+                    <p class="mt-1 text-xs text-red-600">{{ certificate_form.certificate.errors.0 }}</p>
+                    {% endif %}
+                </div>
+                <div>
+                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-1">Комментарий</div>
+                    {{ certificate_form.certificate_note }}
+                </div>
+                <button class="btn btn-soft text-xs w-full" type="submit">
+                    <i data-lucide="upload" class="h-3 w-3"></i>
+                    {% if child.certificate %}Заменить справку{% else %}Прикрепить справку{% endif %}
+                </button>
+            </form>
+
+            {% if child.certificate %}
+            <form method="post" class="mt-2" onsubmit="return confirm('Удалить фото справки?')">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete_certificate">
+                <button class="text-xs font-bold text-red-600 hover:underline" type="submit">
+                    Удалить справку
+                </button>
+            </form>
             {% endif %}
         </div>
 
@@ -109,13 +147,34 @@
                 {% for rank in ranks %}
                 <div class="flex justify-between items-center text-sm bg-slate-50 px-3 py-2 rounded-lg">
                     <span class="text-slate-500 text-xs">{{ rank.year }} г.</span>
-                    <b class="text-slate-900">{{ rank.rank }}</b>
+                    <div class="flex items-center gap-2">
+                        <b class="text-slate-900">{{ rank.rank }}</b>
+                        <form method="post" onsubmit="return confirm('Удалить этот разряд?')">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete_rank">
+                            <input type="hidden" name="rank_id" value="{{ rank.id }}">
+                            <button type="submit" class="text-red-500" title="Удалить">×</button>
+                        </form>
+                    </div>
                 </div>
                 {% endfor %}
             </div>
             {% else %}
             <p class="text-xs text-slate-400 italic">Разряды не присвоены</p>
             {% endif %}
+
+            <form method="post" class="mt-4 grid grid-cols-[90px_1fr] gap-2">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_rank">
+                {{ rank_form.year }}
+                {{ rank_form.rank }}
+                <button type="submit" class="btn btn-soft text-xs col-span-2">
+                    + Добавить / обновить разряд
+                </button>
+                {% if rank_form.errors %}
+                <p class="text-xs text-red-600 col-span-2">Проверьте год и название разряда</p>
+                {% endif %}
+            </form>
         </div>
 
         <!-- Акции -->
@@ -221,6 +280,10 @@
                     {{ nearest_expiry|date:"d E Y" }}
                 </div>
             </div>
+            {% else %}
+            <div class="mt-4 pt-3 border-t border-slate-100 text-xs text-slate-400">
+                Активного абонемента нет
+            </div>
             {% endif %}
         </div>
 
@@ -295,7 +358,7 @@
                                 {% elif day.status == 'vacation' %}bg-amber-400
                                 {% elif day.status == 'excused' %}bg-yellow-400
                                 {% else %}bg-slate-200{% endif %}"
-                            title="{{ day.date|date:'d.m.Y' }}{% if day.status %}: {{ day.get_status_display }}{% else %}{% endif %}"
+                            title="{{ day.date|date:'d.m.Y' }}{% if day.status_label %}: {{ day.status_label }}{% endif %}"
                         ></div>
                     {% else %}
                         <div class="h-2.5 w-2.5"></div>
@@ -316,7 +379,7 @@
     </div>
 
     <!-- Статистика за период -->
-    <div class="grid grid-cols-3 gap-2 mt-4">
+    <div class="grid grid-cols-5 gap-2 mt-4">
         <div class="bg-emerald-50 p-2 rounded-lg text-center">
             <div class="text-lg font-extrabold text-emerald-700">{{ period_stats.present }}</div>
             <div class="text-[9px] font-bold text-emerald-600 uppercase">Пришёл</div>
@@ -328,6 +391,51 @@
         <div class="bg-blue-50 p-2 rounded-lg text-center">
             <div class="text-lg font-extrabold text-blue-700">{{ period_stats.frozen }}</div>
             <div class="text-[9px] font-bold text-blue-600 uppercase">Заморозка</div>
+        </div>
+        <div class="bg-amber-50 p-2 rounded-lg text-center">
+            <div class="text-lg font-extrabold text-amber-700">{{ period_stats.vacation }}</div>
+            <div class="text-[9px] font-bold text-amber-600 uppercase">Отпуск</div>
+        </div>
+        <div class="bg-yellow-50 p-2 rounded-lg text-center">
+            <div class="text-lg font-extrabold text-yellow-700">{{ period_stats.excused }}</div>
+            <div class="text-[9px] font-bold text-yellow-600 uppercase">Уваж.</div>
+        </div>
+    </div>
+
+    <div class="mt-4 border-t border-slate-100 pt-4">
+        <div class="mb-2 text-[10px] font-bold uppercase text-slate-400">
+            Полная история отметок
+        </div>
+        <div class="max-h-72 overflow-y-auto divide-y divide-slate-100">
+            {% for attendance in attendances %}
+            <div class="py-2 flex items-start gap-3 text-xs">
+                <div class="w-20 shrink-0 font-bold text-slate-600">
+                    {{ attendance.date|date:"d.m.Y" }}
+                </div>
+                <div class="min-w-0 flex-1">
+                    <div class="font-semibold
+                        {% if attendance.status == 'present' %}text-emerald-700
+                        {% elif attendance.status == 'absent' %}text-red-700
+                        {% elif attendance.status == 'frozen' %}text-blue-700
+                        {% else %}text-slate-700{% endif %}">
+                        {{ attendance.get_status_display }}
+                    </div>
+                    {% if attendance.comment %}
+                    <div class="mt-0.5 text-slate-500">{{ attendance.comment }}</div>
+                    {% endif %}
+                    {% if attendance.slot %}
+                    <div class="mt-0.5 text-slate-400">{{ attendance.slot }}</div>
+                    {% endif %}
+                </div>
+                {% if attendance.charge_amount %}
+                <div class="shrink-0 font-bold text-amber-700">
+                    {{ attendance.charge_amount|floatformat:0 }} ₽
+                </div>
+                {% endif %}
+            </div>
+            {% empty %}
+            <p class="py-3 text-xs text-slate-400 italic">Отметок посещения пока нет</p>
+            {% endfor %}
         </div>
     </div>
 </div>
@@ -347,7 +455,7 @@
                             class="text-sm font-bold text-slate-900 hover:text-blue-600">
                             {{ entry.competition.name }} →
                         </a>
-                        {% if entry.scores_complete and entry.place %}
+                        {% if entry.place %}
                         <span class="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 rounded">
                             {{ entry.place }} место
                         </span>
@@ -380,9 +488,17 @@
                     <div class="mt-1 text-[10px] text-slate-600">
                         Баллы: {{ entry.total_points|stringformat:".3f" }}
                     </div>
+                    {% elif not entry.competition.is_internal and entry.place %}
+                    <div class="mt-1 text-[10px] text-emerald-700">
+                        Результат внесён вручную
+                    </div>
                     {% else %}
                     <div class="mt-1 text-[10px] text-amber-600">
-                        Результат ещё не завершён
+                        {% if entry.competition.is_internal %}
+                            Результат ещё не завершён
+                        {% else %}
+                            Результат ещё не внесён
+                        {% endif %}
                     </div>
                     {% endif %}
                 </div>
@@ -402,7 +518,15 @@
             <div class="space-y-2">
                 {% for stay in camps %}
                 <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
-                    <b class="text-sm text-emerald-900">{{ stay.camp.name }}</b>
+                    <div class="flex items-start justify-between gap-2">
+                        <b class="text-sm text-emerald-900">{{ stay.camp.name }}</b>
+                        <form method="post" onsubmit="return confirm('Удалить эту поездку?')">
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="delete_camp">
+                            <input type="hidden" name="stay_id" value="{{ stay.id }}">
+                            <button type="submit" class="text-red-500" title="Удалить">×</button>
+                        </form>
+                    </div>
                     <div class="text-[10px] text-emerald-700 mt-1">
                         {{ stay.start_date|date:"d.m" }} — {{ stay.end_date|date:"d.m.Y" }}
                     </div>
@@ -415,6 +539,31 @@
             {% else %}
             <p class="text-xs text-slate-400 italic">Нет поездок в лагеря</p>
             {% endif %}
+
+            <form method="post" class="mt-4 space-y-2">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_camp">
+                <div>
+                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-1">Лагерь / сборы</div>
+                    {{ camp_form.camp_name }}
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <div class="text-[10px] font-bold uppercase text-slate-400 mb-1">Начало</div>
+                        {{ camp_form.start_date }}
+                    </div>
+                    <div>
+                        <div class="text-[10px] font-bold uppercase text-slate-400 mb-1">Окончание</div>
+                        {{ camp_form.end_date }}
+                    </div>
+                </div>
+                {% if camp_form.errors %}
+                <p class="text-xs text-red-600">Проверьте название лагеря и даты</p>
+                {% endif %}
+                <button type="submit" class="btn btn-soft text-xs w-full">
+                    + Добавить поездку
+                </button>
+            </form>
         </div>
 
         <!-- Удаление -->

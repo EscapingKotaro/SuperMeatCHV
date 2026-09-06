@@ -1,3 +1,4 @@
+import mimetypes
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
@@ -10,19 +11,22 @@ from django.contrib.auth.decorators import login_required
 from django.core.management import call_command
 from django.db.models import Count, Max, Q, Sum
 from django.db import transaction
-from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
+from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from openpyxl.utils import get_column_letter
-from openpyxl import Workbook
+from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 
 
 
 from .forms import (
     ApparatusForm,
+    CampStayForm,
     ChildForm,
+    ChildCertificateForm,
+    ChildRankForm,
     CompetitionEntryForm,
     CompetitionForm,
     ExpenseForm,
@@ -45,7 +49,10 @@ from .models import (
     ApparatusScore,
     Attendance,
     AuditEvent,
+    Camp,
+    CampStay,
     Child,
+    ChildRank,
     Competition,
     CompetitionEntry,
     Expense,
@@ -799,6 +806,170 @@ def expenses_page(request):
     )
 
 
+def _normalize_import_text(value):
+    if value is None:
+        return ""
+    return " ".join(str(value).strip().lower().replace("ё", "е").split())
+
+
+def _excel_value(row, column):
+    if not column or column > len(row):
+        return None
+    return row[column - 1]
+
+
+def _import_external_competition_results(competition, uploaded_file):
+    """Импорт выездного протокола XLSX.
+
+    Поддерживает формат экспорта самой CRM:
+    Спортсмен, Год рождения, Разряд, Категория, дисциплины..., Итого, Место.
+    Также понимает ФИО вместо Спортсмен и Год вместо Год рождения.
+    """
+    workbook = load_workbook(uploaded_file, data_only=True)
+    worksheet = workbook.active
+
+    first_row = next(
+        worksheet.iter_rows(min_row=1, max_row=1, values_only=True),
+        None,
+    )
+    if not first_row:
+        raise ValueError("Excel-файл пуст")
+
+    headers = {
+        _normalize_import_text(value): index
+        for index, value in enumerate(first_row, start=1)
+        if _normalize_import_text(value)
+    }
+
+    athlete_col = headers.get("спортсмен") or headers.get("фио")
+    year_col = headers.get("год рождения") or headers.get("год")
+    rank_col = headers.get("разряд")
+    category_col = headers.get("категория") or headers.get("категория/группа")
+    place_col = headers.get("место")
+
+    if not athlete_col or not place_col:
+        raise ValueError(
+            "В таблице обязательны столбцы «Спортсмен» (или «ФИО») и «Место»"
+        )
+
+    apparatus = list(competition.apparatus.all())
+    apparatus_columns = {
+        item.pk: headers.get(_normalize_import_text(item.name))
+        for item in apparatus
+    }
+
+    children_by_name = defaultdict(list)
+    for child in Child.objects.all():
+        aliases = {
+            _normalize_import_text(str(child)),
+            _normalize_import_text(
+                f"{child.last_name} {child.first_name} {child.patronymic}"
+            ),
+        }
+        for alias in aliases:
+            if alias:
+                children_by_name[alias].append(child)
+
+    imported = 0
+    skipped = []
+
+    for row_number, row in enumerate(
+        worksheet.iter_rows(min_row=2, values_only=True),
+        start=2,
+    ):
+        if not any(value not in (None, "") for value in row):
+            continue
+
+        raw_name = _excel_value(row, athlete_col)
+        normalized_name = _normalize_import_text(raw_name)
+        if not normalized_name:
+            skipped.append(f"Строка {row_number}: не указано ФИО")
+            continue
+
+        candidates = list(children_by_name.get(normalized_name, []))
+
+        raw_year = _excel_value(row, year_col)
+        birth_year = None
+        if raw_year not in (None, ""):
+            try:
+                birth_year = int(float(raw_year))
+            except (TypeError, ValueError):
+                skipped.append(
+                    f"Строка {row_number}: некорректный год рождения"
+                )
+                continue
+
+        if birth_year is not None:
+            candidates = [
+                child for child in candidates
+                if child.birth_year == birth_year
+            ]
+
+        if len(candidates) != 1:
+            skipped.append(
+                f"Строка {row_number}: не удалось однозначно найти «{raw_name}»"
+            )
+            continue
+
+        raw_place = _excel_value(row, place_col)
+        try:
+            place = int(float(raw_place))
+            if place <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            skipped.append(
+                f"Строка {row_number}: место должно быть положительным числом"
+            )
+            continue
+
+        child = candidates[0]
+        category = str(_excel_value(row, category_col) or "").strip()
+        rank = str(_excel_value(row, rank_col) or "").strip()
+
+        entry, _ = CompetitionEntry.objects.update_or_create(
+            child=child,
+            competition=competition,
+            category=category,
+            defaults={
+                "rank": rank,
+                "place": place,
+            },
+        )
+
+        for item in apparatus:
+            column = apparatus_columns.get(item.pk)
+            if not column:
+                continue
+
+            raw_points = _excel_value(row, column)
+            if raw_points in (None, ""):
+                continue
+
+            try:
+                points = Decimal(str(raw_points).replace(",", "."))
+            except InvalidOperation:
+                skipped.append(
+                    f"Строка {row_number}: неверный балл «{item.name}»"
+                )
+                continue
+
+            if not points.is_finite() or points < 0:
+                skipped.append(
+                    f"Строка {row_number}: неверный балл «{item.name}»"
+                )
+                continue
+
+            ApparatusScore.objects.update_or_create(
+                entry=entry,
+                apparatus=item,
+                defaults={"points": points},
+            )
+
+        imported += 1
+
+    return imported, skipped
+
+
 @login_required
 def competitions_page(request):
     competitions = Competition.objects.all()
@@ -839,6 +1010,7 @@ def competitions_page(request):
     entry_form = CompetitionEntryForm(
         prefix="entry",
         instance=editing_entry,
+        competition=selected,
     )
 
     score_draft = {}
@@ -984,7 +1156,8 @@ def competitions_page(request):
                             },
                         )
 
-                    recalculate_competition_places(selected)
+                    if selected.is_internal:
+                        recalculate_competition_places(selected)
 
                 log_action(
                     request,
@@ -1021,7 +1194,8 @@ def competitions_page(request):
 
             apparatus_item.delete()
 
-            recalculate_competition_places(selected)
+            if selected.is_internal:
+                recalculate_competition_places(selected)
 
             log_action(
                 request,
@@ -1056,6 +1230,7 @@ def competitions_page(request):
                 request.POST,
                 prefix="entry",
                 instance=target,
+                competition=selected,
             )
 
             if entry_form.is_valid():
@@ -1075,7 +1250,8 @@ def competitions_page(request):
                         },
                     )
 
-                recalculate_competition_places(selected)
+                if selected.is_internal:
+                    recalculate_competition_places(selected)
 
                 log_action(
                     request,
@@ -1122,12 +1298,63 @@ def competitions_page(request):
 
             entry.delete()
 
-            recalculate_competition_places(selected)
+            if selected.is_internal:
+                recalculate_competition_places(selected)
 
             messages.success(
                 request,
                 "Участник удалён",
             )
+
+            return redirect(
+                f"{reverse('competitions')}"
+                f"?competition={selected.pk}"
+            )
+
+        elif action == "import_results" and selected:
+            if selected.is_internal:
+                messages.error(
+                    request,
+                    "Импорт ручного протокола доступен только для выездных соревнований",
+                )
+            else:
+                results_file = request.FILES.get("results_file")
+
+                if not results_file:
+                    messages.error(request, "Выберите XLSX-файл с результатами")
+                elif not results_file.name.lower().endswith(".xlsx"):
+                    messages.error(request, "Поддерживаются только файлы .xlsx")
+                else:
+                    try:
+                        with transaction.atomic():
+                            imported, skipped = _import_external_competition_results(
+                                selected,
+                                results_file,
+                            )
+                    except (ValueError, OSError) as exc:
+                        messages.error(request, f"Не удалось импортировать таблицу: {exc}")
+                    else:
+                        messages.success(
+                            request,
+                            f"Импортировано строк: {imported}",
+                        )
+                        for warning in skipped[:5]:
+                            messages.warning(request, warning)
+                        if len(skipped) > 5:
+                            messages.warning(
+                                request,
+                                f"И ещё пропущено строк: {len(skipped) - 5}",
+                            )
+
+                        log_action(
+                            request,
+                            "competition.import",
+                            selected,
+                            (
+                                f"Импортирован выездной протокол "
+                                f"{selected.name}: {imported} строк"
+                            ),
+                        )
 
             return redirect(
                 f"{reverse('competitions')}"
@@ -1263,7 +1490,8 @@ def competitions_page(request):
                             },
                         )
 
-                    recalculate_competition_places(selected)
+                    if selected.is_internal:
+                        recalculate_competition_places(selected)
 
                 log_action(
                     request,
@@ -1277,7 +1505,11 @@ def competitions_page(request):
 
                 messages.success(
                     request,
-                    "Баллы сохранены, места пересчитаны",
+                    (
+                        "Баллы сохранены, места пересчитаны"
+                        if selected.is_internal
+                        else "Баллы сохранены. Места выездного соревнования оставлены ручными"
+                    ),
                 )
 
                 return redirect(
@@ -2850,7 +3082,12 @@ def child_card_view(request, child_id):
     child = get_object_or_404(Child, id=child_id)
 
     subscriptions = child.subscriptions.all().order_by('-start_date')
-    attendances = child.attendances.all().order_by('-date')[:50]
+    attendances = (
+        child.attendances
+        .select_related("slot")
+        .all()
+        .order_by("-date", "-id")
+    )
     ranks = child.ranks.all().order_by('-year')
     competitions = child.competition_entries.all().select_related('competition').order_by('-competition__date')[:20]
     camps = child.camp_stays.all().select_related('camp').order_by('-start_date')
@@ -2864,6 +3101,106 @@ def child_card_view(request, child_id):
     promos = child.active_promos()
     groups_list = Group.objects.filter(is_active=True)
 
+    certificate_form = ChildCertificateForm(
+        prefix="certificate",
+        instance=child,
+    )
+    rank_form = ChildRankForm(
+        prefix="rank",
+        initial={"year": timezone.localdate().year},
+    )
+    camp_form = CampStayForm(prefix="camp")
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+
+        if action == "upload_certificate":
+            certificate_form = ChildCertificateForm(
+                request.POST,
+                request.FILES,
+                prefix="certificate",
+                instance=child,
+            )
+            if certificate_form.is_valid():
+                certificate_form.save()
+                log_action(
+                    request,
+                    "child.certificate",
+                    child,
+                    f"Обновлена спортивная справка {child}",
+                )
+                messages.success(request, "Фото справки сохранено")
+                return redirect("child_card", child_id=child.pk)
+
+        elif action == "delete_certificate":
+            if child.certificate:
+                child.certificate.delete(save=False)
+                child.certificate = ""
+                child.certificate_note = ""
+                child.save(update_fields=["certificate", "certificate_note"])
+            messages.success(request, "Справка удалена")
+            return redirect("child_card", child_id=child.pk)
+
+        elif action == "add_rank":
+            rank_form = ChildRankForm(request.POST, prefix="rank")
+            if rank_form.is_valid():
+                ChildRank.objects.update_or_create(
+                    child=child,
+                    year=rank_form.cleaned_data["year"],
+                    defaults={"rank": rank_form.cleaned_data["rank"]},
+                )
+                messages.success(request, "Спортивный разряд сохранён")
+                return redirect("child_card", child_id=child.pk)
+
+        elif action == "delete_rank":
+            rank = get_object_or_404(
+                child.ranks,
+                pk=request.POST.get("rank_id"),
+            )
+            rank.delete()
+            messages.success(request, "Разряд удалён")
+            return redirect("child_card", child_id=child.pk)
+
+        elif action == "add_camp":
+            camp_form = CampStayForm(request.POST, prefix="camp")
+            if camp_form.is_valid():
+                camp_name = camp_form.cleaned_data["camp_name"].strip()
+                camp = Camp.objects.filter(name__iexact=camp_name).first()
+                if camp is None:
+                    camp = Camp.objects.create(name=camp_name)
+
+                CampStay.objects.get_or_create(
+                    child=child,
+                    camp=camp,
+                    start_date=camp_form.cleaned_data["start_date"],
+                    end_date=camp_form.cleaned_data["end_date"],
+                )
+                messages.success(request, "Поездка в лагерь сохранена")
+                return redirect("child_card", child_id=child.pk)
+
+        elif action == "delete_camp":
+            stay = get_object_or_404(
+                child.camp_stays,
+                pk=request.POST.get("stay_id"),
+            )
+            stay.delete()
+            messages.success(request, "Поездка удалена")
+            return redirect("child_card", child_id=child.pk)
+
+        elif action == "change_group" or "change_group" in request.POST:
+            new_group_id = request.POST.get("new_group")
+            if new_group_id:
+                new_group = get_object_or_404(Group, id=new_group_id)
+                child.group = new_group
+                child.save(update_fields=["group"])
+                # Личный график от старой группы не должен оставаться после перевода.
+                child.schedule.clear()
+                messages.success(
+                    request,
+                    f'Ребенок переведен в группу "{new_group.name}"',
+                )
+                return redirect("child_card", child_id=child.id)
+
     # === HEAT-MAP: последние 365 дней ===
         # === HEAT-MAP: последние 180 дней ===
     today = timezone.localdate()
@@ -2875,6 +3212,7 @@ def child_card_view(request, child_id):
         att.date: att.status
         for att in child.attendances.filter(date__gte=year_ago)
     }
+    attendance_labels = dict(Attendance.Status.choices)
 
     # Начинаем с понедельника (weekday() возвращает 0=Пн, 6=Вс)
     start_date = year_ago - timedelta(days=year_ago.weekday())
@@ -2895,6 +3233,7 @@ def child_card_view(request, child_id):
                 week.append({
                     'date': date,
                     'status': status,
+                    'status_label': attendance_labels.get(status, ''),
                     'is_future': date > today,
                 })
         weeks.append({
@@ -2914,15 +3253,6 @@ def child_card_view(request, child_id):
         'excused': sum(1 for s in period_attendances.values() if s == 'excused'),
     }
 
-    if request.method == 'POST' and 'change_group' in request.POST:
-        new_group_id = request.POST.get('new_group')
-        if new_group_id:
-            new_group = get_object_or_404(Group, id=new_group_id)
-            child.group = new_group
-            child.save(update_fields=['group'])
-            messages.success(request, f'Ребенок переведен в группу "{new_group.name}"')
-            return redirect('child_card', child_id=child.id)
-
     context = {
         'child': child,
         'subscriptions': subscriptions,
@@ -2941,9 +3271,28 @@ def child_card_view(request, child_id):
         'weeks': weeks,
         'period_stats': period_stats,
         'today': today,
+        'certificate_form': certificate_form,
+        'rank_form': rank_form,
+        'camp_form': camp_form,
         'page': 'child_card'
     }
     return render(request, 'crm/child_card.html', context)
+
+
+@login_required
+def child_certificate_view(request, child_id):
+    child = get_object_or_404(Child, id=child_id)
+    if not child.certificate:
+        raise Http404("Справка не прикреплена")
+
+    content_type = (
+        mimetypes.guess_type(child.certificate.name)[0]
+        or "application/octet-stream"
+    )
+    return FileResponse(
+        child.certificate.open("rb"),
+        content_type=content_type,
+    )
 
 
 @login_required
