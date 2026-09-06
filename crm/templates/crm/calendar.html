@@ -81,25 +81,9 @@
             </div>
 
             {% if day.workers %}
-            <div class="mb-2 rounded-lg bg-emerald-50 px-2 py-1.5 text-[9px] text-emerald-700">
-                <div class="flex items-center gap-1 font-bold">
-                    <i data-lucide="users" class="h-3 w-3"></i>
-                    На смене · {{ day.workers|length }}
-                </div>
-
-                <div class="mt-1 space-y-0.5">
-                    {% for profile in day.workers|slice:":3" %}
-                    <div class="truncate">
-                        {{ profile.user.first_name|default:profile.user.username }}
-                    </div>
-                    {% endfor %}
-
-                    {% if day.workers|length > 3 %}
-                    <div class="font-bold">
-                        +{{ day.workers|length|add:"-3" }} ещё
-                    </div>
-                    {% endif %}
-                </div>
+            <div class="mb-2 flex items-center gap-1 text-[9px] font-semibold text-emerald-600">
+                <i data-lucide="users" class="h-3 w-3"></i>
+                На смене · {{ day.workers|length }}
             </div>
             {% endif %}
 
@@ -142,9 +126,23 @@
     <div class="flex items-center justify-between border-b p-4">
         <div>
             <h2 class="font-extrabold">{{ selected_day|date:"d E, l" }}</h2>
-            <p class="text-xs text-slate-500">
-                Задач: {{ selected_tasks|length }}
-            </p>
+
+            <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                <span>Задач: {{ selected_tasks|length }}</span>
+
+                {% if selected_workers %}
+                <span class="flex items-center gap-1 text-emerald-700">
+                    <i data-lucide="users" class="h-3.5 w-3.5"></i>
+
+                    На смене:
+                    {% for profile in selected_workers %}
+                        <b>{{ profile.user.first_name|default:profile.user.username }}</b>{% if not forloop.last %},{% endif %}
+                    {% endfor %}
+                </span>
+                {% else %}
+                <span class="text-slate-400">На смене никого</span>
+                {% endif %}
+            </div>
         </div>
 
         <button data-modal="task-modal" class="btn btn-primary">

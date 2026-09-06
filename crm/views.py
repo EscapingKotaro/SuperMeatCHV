@@ -1307,6 +1307,7 @@ def calendar_page(request):
 
     selected_tasks = sort_tasks([t for t in filtered if t.calendar_date == selected_day])
     undated_tasks = [t for t in filtered if t.calendar_date is None]
+    selected_workers = work_map[selected_day]
 
     return render(request, "crm/calendar.html", page_context(
         request, "calendar",
@@ -1318,6 +1319,7 @@ def calendar_page(request):
         undated_tasks=undated_tasks,
         shift_rows=shift_rows,
         window_start=window_start,
+        selected_workers=selected_workers,
         prev_start=window_start - timedelta(days=14),
         next_start=window_start + timedelta(days=14),
         today_start=today - timedelta(days=today.weekday()),
