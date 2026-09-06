@@ -359,9 +359,12 @@ class CrmWorkflowTests(TestCase):
             },
         )
 
+        today = timezone.localdate()
+        week_start = today - timedelta(days=today.weekday())
+
         self.assertRedirects(
             response,
-            reverse("calendar"),
+            f"{reverse('calendar')}?start={week_start.isoformat()}&day={today.isoformat()}&scope=all&state=open",
         )
 
         task = ManagerTask.objects.get(
@@ -462,9 +465,12 @@ class CrmWorkflowTests(TestCase):
             },
         )
 
+        today = timezone.localdate()
+        week_start = today - timedelta(days=today.weekday())
+
         self.assertRedirects(
             response,
-            reverse("calendar"),
+            f"{reverse('calendar')}?start={week_start.isoformat()}&day={today.isoformat()}&scope=all&state=open",
         )
 
         self.assertFalse(
