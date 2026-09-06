@@ -1063,25 +1063,16 @@ def notifications_page(request):
                 "debt": debt,
             })
 
-    trials = Child.objects.filter(
-        status=Child.Status.TRIAL,
-        trial_from__lte=today,
-    )
 
     open_task_count = task_qs.count()
 
     return render(request, "crm/notifications.html", page_context(
         request, "notifications",
         alerts=alerts,
-        trials=trials,
         event_notifications=event_notifications,
         unread_count=unread_count,
         open_task_count=open_task_count,
-        open_count=(
-            open_task_count
-            + len(alerts)
-            + trials.count()
-        ),
+        open_count=open_task_count + len(alerts),
         today=today,
     ))
 
@@ -1217,6 +1208,9 @@ def newcomers_page(request):
                 )
 
             log_action(request, "newcomer.save", newcomer, f"Сохранён новичок {newcomer.full_name}")
+            messages.success(request, "Новичок сохранён")
+            return redirect("newcomers")
+
         messages.error(request, "Проверьте данные новичка")
     return render(request, "crm/newcomers.html", page_context(
         request, "newcomers", newcomers=Newcomer.objects.select_related("lead", "trainer", "group", "child"),

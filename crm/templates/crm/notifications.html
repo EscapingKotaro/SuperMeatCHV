@@ -20,11 +20,6 @@
                 <b>{{ alerts|length }}</b>
             </div>
 
-            <div class="flex justify-between">
-                <span>Пробные</span>
-                <b>{{ trials.count }}</b>
-            </div>
-
             {% if unread_count %}
             <div class="flex justify-between text-red-600">
                 <span>Новые уведомления</span>
@@ -68,6 +63,8 @@
                             bg-amber-50 text-amber-600
                         {% elif notification.kind == 'lead_created' %}
                             bg-cyan-50 text-cyan-600
+                        {% elif notification.kind == 'trial_scheduled' %}
+                            bg-fuchsia-50 text-fuchsia-600
                         {% else %}
                             bg-blue-50 text-blue-600
                         {% endif %}">
@@ -80,6 +77,8 @@
                             <i data-lucide="rotate-ccw" class="h-4 w-4"></i>
                         {% elif notification.kind == 'lead_created' %}
                             <i data-lucide="inbox" class="h-4 w-4"></i>
+                        {% elif notification.kind == 'trial_scheduled' %}
+                            <i data-lucide="user-round-check" class="h-4 w-4"></i>
                         {% else %}
                             <i data-lucide="bell" class="h-4 w-4"></i>
                         {% endif %}
@@ -111,6 +110,8 @@
                         class="mt-2 inline-block text-xs font-semibold text-blue-600">
                             {% if notification.kind == 'lead_created' %}
                                 Открыть заявку
+                            {% elif notification.kind == 'trial_scheduled' %}
+                                Открыть новичка
                             {% else %}
                                 Открыть
                             {% endif %}
@@ -147,19 +148,7 @@
         {% endfor %}
 
 
-        <!-- ПРОБНЫЕ -->
-        {% for child in trials %}
-        <article class="card border-l-4 border-l-fuchsia-500 p-4">
-            <b class="text-sm">Пробное занятие: {{ child }}</b>
-
-            <p class="mt-1 text-xs text-slate-500">
-                {{ child.group }} · {{ child.parent_phone|default:"телефон не указан" }}
-            </p>
-        </article>
-        {% endfor %}
-
-
-        {% if not event_notifications and not alerts and not trials %}
+        {% if not event_notifications and not alerts %}
         <div class="card p-12 text-center">
             <i data-lucide="circle-check-big"
                class="mx-auto h-10 w-10 text-emerald-500"></i>
