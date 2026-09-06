@@ -2740,15 +2740,38 @@ from django.http import HttpResponse
 
 def _month_range(request):
     today = timezone.localdate()
-    month_str = request.GET.get('month')
-    try:
-        month_start = datetime.strptime(month_str, '%Y-%m-%d').date()
-    except (ValueError, TypeError):
-        month_start = today.replace(day=1)
+    month_raw = (request.GET.get("month") or "").strip()
+
+    month_start = today.replace(day=1)
+
+    if month_raw:
+        for date_format in ("%Y-%m", "%Y-%m-%d"):
+            try:
+                month_start = (
+                    datetime.strptime(
+                        month_raw,
+                        date_format,
+                    )
+                    .date()
+                    .replace(day=1)
+                )
+                break
+            except ValueError:
+                continue
+
     if month_start.month == 12:
-        month_end = date(month_start.year + 1, 1, 1) - timedelta(days=1)
+        month_end = date(
+            month_start.year + 1,
+            1,
+            1,
+        ) - timedelta(days=1)
     else:
-        month_end = date(month_start.year, month_start.month + 1, 1) - timedelta(days=1)
+        month_end = date(
+            month_start.year,
+            month_start.month + 1,
+            1,
+        ) - timedelta(days=1)
+
     return month_start, month_end, today
 
 def _sessions_held(group, month_start, month_end, today):
@@ -2967,18 +2990,68 @@ def payments_table_view(request):
 
 @login_required
 def expenses_table_view(request):
-    month_start, month_end, today = _month_range(request)
-    if request.method == 'POST':
-        title = request.POST.get('title')
-        amount = request.POST.get('amount')
-        if title and amount:
-            Expense.objects.create(title=title, amount=amount, created_by=request.user)
-            messages.success(request, 'Расход добавлен')
-            return redirect('expenses_table')
-    expenses = Expense.objects.filter(
-        date__gte=month_start, date__lte=month_end).order_by('-date')
-    total = expenses.aggregate(s=Sum('amount'))['s'] or 0
-    context = {'expenses': expenses, 'total': total,
-               'month_start': month_start, 'month_end': month_end,
-               'title': 'Расходы', 'page': 'expenses_table'}
-    return render(request, 'crm/expenses_table.html', context)
+    if request.method == "POST":
+        messages.info(
+            request,
+            "Добавление и изменение расходов выполняется "
+            "в основном разделе «Расходы».",
+        )
+        return redirect("expenses")
+
+    month_start, month_end, _ = _month_range(request)
+
+    expenses = (
+        Expense.objects
+        .filter(
+            date__gte=month_start,
+            date__lte=month_end,
+        )
+        .select_related("created_by")
+        .order_by("-date", "-pk")
+    )
+
+    total = (
+        expenses.aggregate(
+            value=Sum("amount"),
+        )["value"]
+        or Decimal("0")
+    )
+
+    category_labels = dict(
+        Expense.Category.choices
+    )
+
+    category_rows = [
+        {
+            "category": row["category"],
+            "label": category_labels.get(
+                row["category"],
+                row["category"],
+            ),
+            "total": row["total"],
+        }
+        for row in (
+            expenses
+            .values("category")
+            .annotate(total=Sum("amount"))
+            .order_by("category")
+        )
+    ]
+
+    return render(
+        request,
+        "crm/expenses_table.html",
+        {
+            "expenses": expenses,
+            "total": total,
+            "operations": expenses.count(),
+            "category_rows": category_rows,
+            "month_start": month_start,
+            "month_end": month_end,
+            "selected_month": month_start.strftime(
+                "%Y-%m"
+            ),
+            "title": "Отчёт по расходам",
+            "page": "expenses_table",
+        },
+    )

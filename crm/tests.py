@@ -1646,41 +1646,108 @@ class CrmWorkflowTests(TestCase):
             [],
         )
         
-def test_statistics_forecast_ignores_cancelled_subscription(self):
+    def test_statistics_forecast_ignores_cancelled_subscription(self):
+        today = timezone.localdate()
+
+        active_child = Child.objects.create(
+            last_name="Активная",
+            first_name="Анна",
+            birth_year=2015,
+            group=self.group,
+            status=Child.Status.ACTIVE,
+        )
+
+        cancelled_child = Child.objects.create(
+            last_name="Отменённая",
+            first_name="Мария",
+            birth_year=2015,
+            group=self.group,
+            status=Child.Status.ACTIVE,
+        )
+
+        Subscription.objects.create(
+            child=active_child,
+            start_date=today - timedelta(days=5),
+            end_date=today + timedelta(days=5),
+            sessions_total=8,
+            price=Decimal("6000"),
+            is_active=True,
+        )
+
+        Subscription.objects.create(
+            child=cancelled_child,
+            start_date=today - timedelta(days=5),
+            end_date=today + timedelta(days=6),
+            sessions_total=8,
+            price=Decimal("9000"),
+            is_active=False,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("statistics"),
+            {
+                "month": today.replace(day=1).isoformat(),
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        self.assertEqual(
+            response.context["potential"],
+            Decimal("6000"),
+        )
+        
+def test_expenses_table_is_read_only(self):
+    self.client.login(
+        username="admin",
+        password="TestPass123!",
+    )
+
+    response = self.client.post(
+        reverse("expenses_table"),
+        {
+            "title": "Обходной расход",
+            "amount": "9999",
+        },
+    )
+
+    self.assertRedirects(
+        response,
+        reverse("expenses"),
+    )
+
+    self.assertFalse(
+        Expense.objects.filter(
+            title="Обходной расход",
+        ).exists()
+    )
+
+
+def test_month_reports_normalize_selected_day_to_whole_month(self):
     today = timezone.localdate()
 
-    active_child = Child.objects.create(
-        last_name="Активная",
-        first_name="Анна",
-        birth_year=2015,
-        group=self.group,
-        status=Child.Status.ACTIVE,
+    selected_day = today.replace(
+        day=min(15, today.day),
     )
 
-    cancelled_child = Child.objects.create(
-        last_name="Отменённая",
-        first_name="Мария",
-        birth_year=2015,
-        group=self.group,
-        status=Child.Status.ACTIVE,
+    first_day = selected_day.replace(
+        day=1,
     )
 
-    Subscription.objects.create(
-        child=active_child,
-        start_date=today - timedelta(days=5),
-        end_date=today + timedelta(days=5),
-        sessions_total=8,
-        price=Decimal("6000"),
-        is_active=True,
-    )
-
-    Subscription.objects.create(
-        child=cancelled_child,
-        start_date=today - timedelta(days=5),
-        end_date=today + timedelta(days=6),
-        sessions_total=8,
-        price=Decimal("9000"),
-        is_active=False,
+    Expense.objects.create(
+        title="Начало месяца",
+        category=Expense.Category.HOUSEHOLD,
+        amount=Decimal("1000"),
+        date=first_day,
+        created_by=self.admin,
     )
 
     self.client.login(
@@ -1689,9 +1756,9 @@ def test_statistics_forecast_ignores_cancelled_subscription(self):
     )
 
     response = self.client.get(
-        reverse("statistics"),
+        reverse("expenses_table"),
         {
-            "month": today.replace(day=1).isoformat(),
+            "month": selected_day.isoformat(),
         },
     )
 
@@ -1701,6 +1768,11 @@ def test_statistics_forecast_ignores_cancelled_subscription(self):
     )
 
     self.assertEqual(
-        response.context["potential"],
-        Decimal("6000"),
+        response.context["month_start"],
+        first_day,
+    )
+
+    self.assertContains(
+        response,
+        "Начало месяца",
     )
