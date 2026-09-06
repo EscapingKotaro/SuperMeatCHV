@@ -1022,12 +1022,10 @@ def notifications_page(request):
         ).update(read_at=timezone.now())
 
     # Обычный список задач
-    tasks = ManagerTask.objects.select_related(
-        "assignee", "created_by", "completed_by"
-    )
+    task_qs = ManagerTask.objects.filter(is_done=False)
 
     if user_role(request.user) != Role.BOSS:
-        tasks = tasks.filter(
+        task_qs = task_qs.filter(
             Q(assignee=request.user) | Q(assignee__isnull=True)
         )
 
@@ -1056,11 +1054,10 @@ def notifications_page(request):
         status=Lead.Status.NEW,
     )
 
-    open_task_count = tasks.filter(is_done=False).count()
+    open_task_count = task_qs.count()
 
     return render(request, "crm/notifications.html", page_context(
         request, "notifications",
-        tasks=tasks,
         alerts=alerts,
         trials=trials,
         imported_leads=imported_leads,

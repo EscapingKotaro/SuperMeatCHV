@@ -9,10 +9,11 @@
         <p class="text-xs text-slate-500">открытых событий</p>
 
         <div class="mt-5 space-y-2 text-xs">
-            <div class="flex justify-between">
+            <a href="{% url 'calendar' %}?scope=mine&state=open"
+            class="flex justify-between rounded-lg px-1 py-1 hover:bg-slate-50">
                 <span>Открытые задачи</span>
                 <b>{{ open_task_count }}</b>
-            </div>
+            </a>
 
             <div class="flex justify-between">
                 <span>Абонементы</span>
@@ -41,9 +42,9 @@
         <section class="card overflow-hidden">
             <div class="flex items-center justify-between border-b p-4">
                 <div>
-                    <b>Последние события</b>
+                    <b>Уведомления</b>
                     <p class="text-xs text-slate-500">
-                        Назначения и изменения задач
+                        Последние изменения, которые касаются вас
                     </p>
                 </div>
 
@@ -115,88 +116,6 @@
         {% endif %}
 
 
-        <!-- ЗАДАЧИ -->
-        {% for task in tasks %}
-        <article class="card border-l-4 p-4
-            {% if task.is_done %}
-                border-l-emerald-400 opacity-70
-            {% elif task.due_date and task.due_date < today %}
-                border-l-red-500
-            {% else %}
-                border-l-blue-500
-            {% endif %}">
-
-            <div class="flex justify-between gap-3">
-                <div class="min-w-0 flex-1">
-                    <b class="text-sm">{{ task.title }}</b>
-
-                    <p class="mt-1 text-xs text-slate-500">
-                        {{ task.description|default:"Без описания" }}
-                    </p>
-
-                    <p class="mt-2 text-xs text-slate-500">
-                        {% if task.assignee %}
-                            Исполнитель:
-                            {{ task.assignee.get_full_name|default:task.assignee.username }}
-                        {% else %}
-                            Исполнитель: вся администрация
-                        {% endif %}
-
-                        {% if task.scheduled_at %}
-                            · {{ task.scheduled_at|date:"d.m H:i" }}
-                            {% if task.scheduled_end_at %}
-                                –{{ task.scheduled_end_at|date:"H:i" }}
-                            {% endif %}
-                        {% elif task.due_date %}
-                            · до {{ task.due_date|date:"d.m.Y" }}
-                        {% endif %}
-                    </p>
-
-                    {% if task.is_done %}
-                    <div class="mt-3 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">
-                        <b>Выполнено</b>
-
-                        {% if task.completed_by %}
-                            · {{ task.completed_by.get_full_name|default:task.completed_by.username }}
-                        {% endif %}
-
-                        {% if task.done_at %}
-                            · {{ task.done_at|date:"d.m.Y H:i" }}
-                        {% endif %}
-
-                        {% if task.completion_comment %}
-                        <p class="mt-1">{{ task.completion_comment }}</p>
-                        {% endif %}
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-
-            <div class="mt-3 flex flex-wrap gap-2">
-                <form method="post" class="flex-1">
-                    {% csrf_token %}
-                    <input type="hidden" name="task_id" value="{{ task.pk }}">
-
-                    {% if not task.is_done %}
-                    <textarea name="completion_comment"
-                              class="field mb-2"
-                              rows="2"
-                              placeholder="Комментарий — необязательно"></textarea>
-                    {% endif %}
-
-                    <button class="btn {% if task.is_done %}btn-soft{% else %}btn-dark{% endif %}">
-                        {% if task.is_done %}Вернуть в работу{% else %}Выполнить{% endif %}
-                    </button>
-                </form>
-
-                <a href="{% url 'calendar' %}" class="btn btn-soft">
-                    <i data-lucide="calendar"></i>
-                    Календарь
-                </a>
-            </div>
-        </article>
-        {% endfor %}
-
 
         <!-- АБОНЕМЕНТЫ -->
         {% for alert in alerts %}
@@ -244,7 +163,7 @@
         {% endfor %}
 
 
-        {% if not event_notifications and not tasks and not alerts and not trials and not imported_leads %}
+        {% if not event_notifications and not alerts and not trials and not imported_leads %}
         <div class="card p-12 text-center">
             <i data-lucide="circle-check-big"
                class="mx-auto h-10 w-10 text-emerald-500"></i>
