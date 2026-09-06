@@ -1705,30 +1705,6 @@ class CrmWorkflowTests(TestCase):
             Decimal("6000"),
         )
         
-def test_expenses_table_is_read_only(self):
-    self.client.login(
-        username="admin",
-        password="TestPass123!",
-    )
-
-    response = self.client.post(
-        reverse("expenses_table"),
-        {
-            "title": "Обходной расход",
-            "amount": "9999",
-        },
-    )
-
-    self.assertRedirects(
-        response,
-        reverse("expenses"),
-    )
-
-    self.assertFalse(
-        Expense.objects.filter(
-            title="Обходной расход",
-        ).exists()
-    )
 
 
 def test_month_reports_normalize_selected_day_to_whole_month(self):
@@ -1742,21 +1718,13 @@ def test_month_reports_normalize_selected_day_to_whole_month(self):
         day=1,
     )
 
-    Expense.objects.create(
-        title="Начало месяца",
-        category=Expense.Category.HOUSEHOLD,
-        amount=Decimal("1000"),
-        date=first_day,
-        created_by=self.admin,
-    )
-
     self.client.login(
         username="admin",
         password="TestPass123!",
     )
 
     response = self.client.get(
-        reverse("expenses_table"),
+        reverse("statistics"),
         {
             "month": selected_day.isoformat(),
         },
@@ -1771,8 +1739,162 @@ def test_month_reports_normalize_selected_day_to_whole_month(self):
         response.context["month_start"],
         first_day,
     )
+    
+def test_expenses_page_has_monthly_category_summary(self):
+    today = timezone.localdate()
 
-    self.assertContains(
-        response,
-        "Начало месяца",
+    Expense.objects.create(
+        title="Вода",
+        category=Expense.Category.HOUSEHOLD,
+        amount=Decimal("1000"),
+        date=today,
+        created_by=self.admin,
+    )
+
+    Expense.objects.create(
+        title="Мячи",
+        category=Expense.Category.EQUIPMENT,
+        amount=Decimal("3000"),
+        date=today,
+        created_by=self.admin,
+    )
+
+    Expense.objects.create(
+        title="Ещё инвентарь",
+        category=Expense.Category.EQUIPMENT,
+        amount=Decimal("2000"),
+        date=today,
+        created_by=self.admin,
+    )
+
+    self.client.login(
+        username="admin",
+        password="TestPass123!",
+    )
+
+    response = self.client.get(
+        reverse("expenses"),
+        {
+            "month": today.strftime("%Y-%m"),
+        },
+    )
+
+    self.assertEqual(
+        response.status_code,
+        200,
+    )
+
+    self.assertEqual(
+        response.context["monthly_total"],
+        Decimal("6000"),
+    )
+
+    self.assertEqual(
+        response.context["monthly_operations"],
+        3,
+    )
+
+    categories = {
+        row["category"]: row
+        for row in response.context["category_rows"]
+    }
+
+    self.assertEqual(
+        categories[Expense.Category.HOUSEHOLD]["total"],
+        Decimal("1000"),
+    )
+
+    self.assertEqual(
+        categories[Expense.Category.HOUSEHOLD]["operations"],
+        1,
+    )
+
+    self.assertEqual(
+        categories[Expense.Category.EQUIPMENT]["total"],
+        Decimal("5000"),
+    )
+
+    self.assertEqual(
+        categories[Expense.Category.EQUIPMENT]["operations"],
+        2,
+    )
+
+def test_statistics_excludes_archived_and_lost_children_from_group_metrics(self):
+    today = timezone.localdate()
+
+    trial_child = Child.objects.create(
+        last_name="Пробная",
+        first_name="Мария",
+        birth_year=2015,
+        group=self.group,
+        status=Child.Status.TRIAL,
+        trial_from=today,
+    )
+
+    archived_child = Child.objects.create(
+        last_name="Архивная",
+        first_name="Елена",
+        birth_year=2015,
+        group=self.group,
+        status=Child.Status.ARCHIVED,
+        archived_at=today,
+    )
+
+    lost_child = Child.objects.create(
+        last_name="Потерянная",
+        first_name="Ольга",
+        birth_year=2015,
+        group=self.group,
+        status=Child.Status.LOST,
+        archived_at=today,
+    )
+
+    Attendance.objects.create(
+        child=archived_child,
+        date=today,
+        status=Attendance.Status.PRESENT,
+    )
+
+    Attendance.objects.create(
+        child=lost_child,
+        date=today,
+        status=Attendance.Status.ABSENT,
+    )
+
+    self.client.login(
+        username="admin",
+        password="TestPass123!",
+    )
+
+    response = self.client.get(
+        reverse("statistics"),
+        {
+            "month": today.isoformat(),
+        },
+    )
+
+    self.assertEqual(
+        response.status_code,
+        200,
+    )
+
+    group_stats = next(
+        row
+        for row in response.context["groups_stats"]
+        if row["group"].pk == self.group.pk
+    )
+
+    self.assertEqual(
+        group_stats["kids"],
+        2,
+    )
+
+    self.assertEqual(
+        group_stats["present"],
+        0,
+    )
+
+    self.assertEqual(
+        group_stats["absent"],
+        0,
     )

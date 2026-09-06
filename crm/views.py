@@ -718,14 +718,17 @@ def expenses_page(request):
             "Проверьте заполнение формы",
         )
 
-    expenses = (
+        monthly_expenses = (
         Expense.objects
         .select_related("created_by")
         .filter(
             date__gte=month_start,
             date__lte=month_end,
         )
+        .order_by("-date", "-pk")
     )
+
+    expenses = monthly_expenses
 
     if selected_category:
         expenses = expenses.filter(
@@ -733,20 +736,43 @@ def expenses_page(request):
         )
 
     total = (
-        expenses.aggregate(value=Sum("amount"))["value"]
+        expenses.aggregate(
+            value=Sum("amount"),
+        )["value"]
         or Decimal("0")
     )
 
-    household = (
-        Expense.objects
-        .filter(
-            date__gte=month_start,
-            date__lte=month_end,
-            category=Expense.Category.HOUSEHOLD,
-        )
-        .aggregate(value=Sum("amount"))["value"]
+    monthly_total = (
+        monthly_expenses.aggregate(
+            value=Sum("amount"),
+        )["value"]
         or Decimal("0")
     )
+
+    category_labels = dict(
+        Expense.Category.choices
+    )
+
+    category_rows = [
+        {
+            "category": row["category"],
+            "label": category_labels.get(
+                row["category"],
+                row["category"],
+            ),
+            "total": row["total"],
+            "operations": row["operations"],
+        }
+        for row in (
+            monthly_expenses
+            .values("category")
+            .annotate(
+                total=Sum("amount"),
+                operations=Count("id"),
+            )
+            .order_by("-total", "category")
+        )
+    ]
 
     return render(
         request,
@@ -758,9 +784,12 @@ def expenses_page(request):
             expenses=expenses,
             editing=editing,
             total=total,
-            household=household,
+            monthly_total=monthly_total,
             operations=expenses.count(),
+            monthly_operations=monthly_expenses.count(),
+            category_rows=category_rows,
             month_start=month_start,
+            month_end=month_end,
             selected_month=month_start.strftime("%Y-%m"),
             selected_category=selected_category,
             categories=Expense.Category.choices,
@@ -2852,20 +2881,61 @@ def statistics_view(request):
 
     # По группам: спортсмены, посещения, посещаемость
     groups_stats = []
-    for g in Group.objects.filter(is_active=True).select_related('trainer'):
-        kids = g.children.count()
+
+    current_statuses = (
+        Child.Status.ACTIVE,
+        Child.Status.TRIAL,
+    )
+
+    for group in (
+        Group.objects
+        .filter(is_active=True)
+        .select_related("trainer")
+    ):
+        current_children = group.children.filter(
+            status__in=current_statuses,
+        )
+
+        kids = current_children.count()
+
         present = Attendance.objects.filter(
-            child__group=g, status='present',
-            date__gte=month_start, date__lte=month_end).count()
+            child__group=group,
+            child__status__in=current_statuses,
+            status=Attendance.Status.PRESENT,
+            date__gte=month_start,
+            date__lte=month_end,
+        ).count()
+
         absent = Attendance.objects.filter(
-            child__group=g, status='absent',
-            date__gte=month_start, date__lte=month_end).count()
-        sessions = _sessions_held(g, month_start, month_end, today)
+            child__group=group,
+            child__status__in=current_statuses,
+            status=Attendance.Status.ABSENT,
+            date__gte=month_start,
+            date__lte=month_end,
+        ).count()
+
+        sessions = _sessions_held(
+            group,
+            month_start,
+            month_end,
+            today,
+        )
+
         capacity = kids * sessions
-        attendance_pct = round(present * 100 / capacity) if capacity else 0
+
+        attendance_pct = (
+            round(present * 100 / capacity)
+            if capacity
+            else 0
+        )
+
         groups_stats.append({
-            'group': g, 'kids': kids, 'present': present, 'absent': absent,
-            'sessions': sessions, 'attendance_pct': attendance_pct,
+            "group": group,
+            "kids": kids,
+            "present": present,
+            "absent": absent,
+            "sessions": sessions,
+            "attendance_pct": attendance_pct,
         })
 
     # По тренерам: ушедшие + посещаемость
@@ -2988,70 +3058,3 @@ def payments_table_view(request):
     return render(request, 'crm/payments_table.html', context)
 
 
-@login_required
-def expenses_table_view(request):
-    if request.method == "POST":
-        messages.info(
-            request,
-            "Добавление и изменение расходов выполняется "
-            "в основном разделе «Расходы».",
-        )
-        return redirect("expenses")
-
-    month_start, month_end, _ = _month_range(request)
-
-    expenses = (
-        Expense.objects
-        .filter(
-            date__gte=month_start,
-            date__lte=month_end,
-        )
-        .select_related("created_by")
-        .order_by("-date", "-pk")
-    )
-
-    total = (
-        expenses.aggregate(
-            value=Sum("amount"),
-        )["value"]
-        or Decimal("0")
-    )
-
-    category_labels = dict(
-        Expense.Category.choices
-    )
-
-    category_rows = [
-        {
-            "category": row["category"],
-            "label": category_labels.get(
-                row["category"],
-                row["category"],
-            ),
-            "total": row["total"],
-        }
-        for row in (
-            expenses
-            .values("category")
-            .annotate(total=Sum("amount"))
-            .order_by("category")
-        )
-    ]
-
-    return render(
-        request,
-        "crm/expenses_table.html",
-        {
-            "expenses": expenses,
-            "total": total,
-            "operations": expenses.count(),
-            "category_rows": category_rows,
-            "month_start": month_start,
-            "month_end": month_end,
-            "selected_month": month_start.strftime(
-                "%Y-%m"
-            ),
-            "title": "Отчёт по расходам",
-            "page": "expenses_table",
-        },
-    )

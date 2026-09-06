@@ -43,7 +43,6 @@ urlpatterns = [
 
     # Расходы
     path("expenses/", views.expenses_page, name="expenses"),
-    path("expenses/table/", views.expenses_table_view, name="expenses_table"),
 
     # Зарплаты
     path("salaries/", views.salaries_view, name="salaries"),

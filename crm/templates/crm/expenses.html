@@ -54,7 +54,7 @@
 </form>
 
 
-<div class="mb-4 grid gap-3 sm:grid-cols-3">
+<div class="mb-4 grid gap-3 lg:grid-cols-3">
 
     <div class="card metric">
         <p class="metric-label">
@@ -62,34 +62,71 @@
         </p>
 
         <p class="metric-value">
-            {{ total }} ₽
+            {{ monthly_total|floatformat:2 }} ₽
         </p>
 
         <p class="text-xs text-slate-500">
-            {{ operations }} операций
+            {{ monthly_operations }} операций
         </p>
     </div>
 
 
     <div class="card metric">
         <p class="metric-label">
-            Бытовые товары
+            По текущему фильтру
         </p>
 
         <p class="metric-value">
-            {{ household }} ₽
+            {{ total|floatformat:2 }} ₽
+        </p>
+
+        <p class="text-xs text-slate-500">
+            {{ operations }} записей
         </p>
     </div>
 
 
-    <div class="card metric">
-        <p class="metric-label">
-            Записей по фильтру
+    <div class="card p-4">
+
+        <p class="metric-label mb-3">
+            По категориям
         </p>
 
-        <p class="metric-value">
-            {{ expenses.count }}
-        </p>
+        <div class="space-y-2">
+
+            {% for row in category_rows %}
+
+            <a
+                href="{% url 'expenses' %}?month={{ selected_month }}&category={{ row.category }}"
+                class="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 hover:bg-slate-50"
+            >
+
+                <div>
+                    <span class="block text-sm font-semibold">
+                        {{ row.label }}
+                    </span>
+
+                    <span class="text-[10px] text-slate-400">
+                        {{ row.operations }} операций
+                    </span>
+                </div>
+
+                <b class="text-sm">
+                    {{ row.total|floatformat:2 }} ₽
+                </b>
+
+            </a>
+
+            {% empty %}
+
+            <span class="text-sm text-slate-400">
+                Расходов нет
+            </span>
+
+            {% endfor %}
+
+        </div>
+
     </div>
 
 </div>
