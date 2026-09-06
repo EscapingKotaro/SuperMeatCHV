@@ -1205,7 +1205,16 @@ def newcomers_page(request):
         if form.is_valid():
             newcomer = form.save()
 
-            if newcomer.trial_at and newcomer.trial_at != old_trial_at:
+            trial_changed = (
+            newcomer.trial_at
+            and (
+                not old_trial_at
+                or newcomer.trial_at.replace(second=0, microsecond=0)
+                != old_trial_at.replace(second=0, microsecond=0)
+            )
+        )
+
+        if trial_changed:
                 trial_at = timezone.localtime(newcomer.trial_at)
 
                 notify_admins(
