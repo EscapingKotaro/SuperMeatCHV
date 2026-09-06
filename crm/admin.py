@@ -336,10 +336,6 @@ class NewcomerAdmin(admin.ModelAdmin):
     search_fields = ("full_name", "phone", "comment")
 
 
-@admin.register(Reminder)
-class ReminderAdmin(admin.ModelAdmin):
-    list_display = ("title", "remind_at", "assignee", "visible_to_all", "is_done")
-    list_filter = ("is_done", "visible_to_all", "assignee")
 
 
 # ---------- Финансы: рядовой НЕ видит KPI и ЗП ----------

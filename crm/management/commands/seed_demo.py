@@ -24,7 +24,6 @@ from crm.models import (
     ManagerTask,
     Newcomer,
     Payment,
-    Reminder,
     RevenueTarget,
     Role,
     SalaryAdjustment,
@@ -880,59 +879,6 @@ class Command(BaseCommand):
                 },
             )
 
-        # ------------------------------------------------------------------
-        # Напоминания
-        # ------------------------------------------------------------------
-        reminder_rows = [
-            {
-                "title": "Позвонить по новой заявке",
-                "assignee": users["admin"],
-                "description": "Уточнить время пробного занятия.",
-                "remind_at": now + timedelta(hours=3),
-                "created_by": users["admin"],
-                "is_done": False,
-                "visible_to_all": True,
-            },
-            {
-                "title": "Напомнить об оплате Марии Кузнецовой",
-                "assignee": users["senior"],
-                "description": "По текущему абонементу внесена только часть суммы.",
-                "remind_at": now + timedelta(days=1, hours=1),
-                "created_by": users["senior"],
-                "is_done": False,
-                "visible_to_all": False,
-            },
-            {
-                "title": "Проверить просроченную задачу",
-                "assignee": users["admin2"],
-                "description": "Демо просроченного напоминания.",
-                "remind_at": now - timedelta(hours=5),
-                "created_by": users["senior"],
-                "is_done": False,
-                "visible_to_all": True,
-            },
-            {
-                "title": "Отправить расписание тренеру",
-                "assignee": users["admin"],
-                "description": "Выполненное напоминание.",
-                "remind_at": now - timedelta(days=2),
-                "created_by": users["admin"],
-                "is_done": True,
-                "visible_to_all": False,
-            },
-        ]
-        for row in reminder_rows:
-            Reminder.objects.update_or_create(
-                title=row["title"],
-                assignee=row["assignee"],
-                defaults={
-                    "description": row["description"],
-                    "remind_at": row["remind_at"],
-                    "created_by": row["created_by"],
-                    "is_done": row["is_done"],
-                    "visible_to_all": row["visible_to_all"],
-                },
-            )
 
         # ------------------------------------------------------------------
         # Лиды и новички

@@ -747,27 +747,6 @@ class ManagerTask(models.Model):
         return self.title
 
 
-class Reminder(models.Model):
-    """Личное напоминание администратора в календаре."""
-
-    title = models.CharField("Напоминание", max_length=255)
-    description = models.TextField("Описание", blank=True)
-    remind_at = models.DateTimeField("Дата и время")
-    assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
-                                 related_name="reminders", verbose_name="исполнитель")
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-                                   null=True, related_name="created_reminders", verbose_name="создал")
-    is_done = models.BooleanField("Выполнено", default=False)
-    visible_to_all = models.BooleanField("Видно всей команде", default=False)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        verbose_name = "Напоминание"
-        verbose_name_plural = "Напоминания"
-        ordering = ("is_done", "remind_at")
-
-    def __str__(self):
-        return self.title
 
 class Lead(models.Model):
     """Заявка из рекламы, звонка или сайта. Не обязана стать новичком."""

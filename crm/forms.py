@@ -14,7 +14,6 @@ from .models import (
     Lead,
     ManagerTask,
     Newcomer,
-    Reminder,
     RevenueTarget,
     Role,
     StaffProfile,
@@ -307,19 +306,6 @@ class LeadForm(StyledFormMixin, forms.ModelForm):
         self.apply_styles()
 
 
-class ReminderForm(StyledFormMixin, forms.ModelForm):
-    class Meta:
-        model = Reminder
-        fields = ("title", "description", "remind_at", "assignee", "visible_to_all")
-        widgets = {
-            "description": forms.Textarea(attrs={"rows": 3}),
-            "remind_at": forms.DateTimeInput(format="%Y-%m-%dT%H:%M", attrs={"type": "datetime-local"}),
-        }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["remind_at"].input_formats = ["%Y-%m-%dT%H:%M"]
-        self.apply_styles()
 
 
 class NewcomerForm(StyledFormMixin, forms.ModelForm):
