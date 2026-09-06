@@ -693,6 +693,12 @@ class ManagerTask(models.Model):
         blank=True,
         null=True,
     )
+    
+    scheduled_end_at = models.DateTimeField(
+    "Окончание в календаре",
+    blank=True,
+    null=True,
+)
 
     is_done = models.BooleanField(
         "Выполнена",
