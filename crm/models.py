@@ -637,69 +637,6 @@ class ApparatusScore(models.Model):
         return f"{self.entry} · {self.apparatus} · {value}"
 
 
-class Apparatus(models.Model):
-    """Снаряды соревнования (колонки таблицы как в Excel)."""
-    competition = models.ForeignKey(Competition, on_delete=models.CASCADE,
-                                    related_name="apparatus", verbose_name="соревнование")
-    name = models.CharField("Снаряд", max_length=100)
-    order = models.PositiveSmallIntegerField("Порядок", default=0)
-
-    class Meta:
-        verbose_name = "Снаряд"
-        verbose_name_plural = "Снаряды"
-        ordering = ("order",)
-
-    def __str__(self):
-        return self.name
-
-
-class CompetitionEntry(models.Model):
-    """Итог спортсмена на соревновании (в карточке ребёнка)."""
-    child = models.ForeignKey(Child, on_delete=models.CASCADE,
-                              related_name="competition_entries", verbose_name="ребёнок")
-    competition = models.ForeignKey(Competition, on_delete=models.CASCADE,
-                                    related_name="entries", verbose_name="соревнование")
-    category = models.CharField("Категория/группа", max_length=100, blank=True,
-                                  help_text="Внутри категории считается место")
-    rank = models.CharField("Выполняемый разряд", max_length=50, blank=True)
-    place = models.PositiveSmallIntegerField("Место", blank=True, null=True)
-
-    class Meta:
-        verbose_name = "Итог соревнования"
-        verbose_name_plural = "Итоги соревнований"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["child", "competition", "category"],
-                name="unique_child_competition_category",
-            ),
-        ]
-
-    def total_points(self):
-        return self.scores.aggregate(s=Sum("points"))["s"] or 0
-
-    def __str__(self):
-        return f"{self.child} · {self.competition}"
-
-
-class ApparatusScore(models.Model):
-    entry = models.ForeignKey(CompetitionEntry, on_delete=models.CASCADE,
-                              related_name="scores", verbose_name="итог")
-    apparatus = models.ForeignKey(Apparatus, on_delete=models.CASCADE, verbose_name="снаряд")
-    points = models.DecimalField("Баллы", max_digits=6, decimal_places=3)
-
-    class Meta:
-        verbose_name = "Балл за снаряд"
-        verbose_name_plural = "Баллы за снаряды"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["entry", "apparatus"], name="unique_entry_apparatus"
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.entry} · {self.apparatus} · {self.points}"
-
-
 class Camp(models.Model):
     name = models.CharField("Название лагеря", max_length=200)
 
