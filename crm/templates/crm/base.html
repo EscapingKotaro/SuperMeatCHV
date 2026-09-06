@@ -133,8 +133,17 @@
                     <i data-lucide="search" class="h-5 w-5"></i>
                 </a>
 
-                <a href="{% url 'notifications' %}" class="relative grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100" aria-label="Уведомления">
+                <a href="{% url 'notifications' %}"
+                class="relative grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"
+                aria-label="Уведомления">
+
                     <i data-lucide="bell" class="h-5 w-5"></i>
+
+                    {% if task_notification_count %}
+                    <span class="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-500 px-1.5 text-center text-[10px] font-bold leading-5 text-white">
+                        {% if task_notification_count > 99 %}99+{% else %}{{ task_notification_count }}{% endif %}
+                    </span>
+                    {% endif %}
                 </a>
 
 
@@ -206,23 +215,6 @@
     ========================== -->
     <main class="mx-auto max-w-[1500px] px-4 py-7 lg:px-7">
 
-        <!-- Django messages -->
-        {% if messages %}
-        <div class="mb-4 space-y-2">
-
-            {% for message in messages %}
-            <div class="rounded-xl border px-4 py-3 text-sm font-semibold
-                        {% if message.tags == 'error' %}
-                            border-red-200 bg-red-50 text-red-700
-                        {% else %}
-                            border-emerald-200 bg-emerald-50 text-emerald-700
-                        {% endif %}">
-                {{ message }}
-            </div>
-            {% endfor %}
-
-        </div>
-        {% endif %}
 
 
         <!-- Заголовок страницы -->
@@ -298,16 +290,32 @@
     {% endblock %}
 
 
-    <!-- =========================
-         TOAST
-    ========================== -->
-    <div id="toast" class="fixed bottom-5 right-5 z-[60] hidden items-center gap-3 rounded-2xl bg-[#17202A] px-4 py-3 text-sm font-semibold text-white shadow-2xl">
-        <i data-lucide="circle-check" class="h-5 w-5 text-emerald-400"></i>
+    {% if messages %}
+    <div class="fixed bottom-5 right-5 z-[80] flex w-[min(380px,calc(100vw-2rem))] flex-col gap-2">
+        {% for message in messages %}
+        <div data-toast
+            class="flex items-start gap-3 rounded-2xl border bg-white p-4 shadow-2xl
+                    {% if message.tags == 'error' %}
+                        border-red-200
+                    {% else %}
+                        border-emerald-200
+                    {% endif %}">
 
-        <span>
-            Изменения сохранены
-        </span>
+            <span class="mt-0.5
+                        {% if message.tags == 'error' %}text-red-500{% else %}text-emerald-500{% endif %}">
+                <i data-lucide="{% if message.tags == 'error' %}circle-alert{% else %}circle-check{% endif %}"
+                class="h-5 w-5"></i>
+            </span>
+
+            <span class="flex-1 text-sm font-semibold">{{ message }}</span>
+
+            <button type="button" data-toast-close class="text-slate-400 hover:text-slate-700">
+                <i data-lucide="x" class="h-4 w-4"></i>
+            </button>
+        </div>
+        {% endfor %}
     </div>
+    {% endif %}
 
 
     <!-- =========================

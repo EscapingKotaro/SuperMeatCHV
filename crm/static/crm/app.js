@@ -80,4 +80,16 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  document.querySelectorAll("[data-toast]").forEach((toast) => {
+    const close = () => {
+      toast.style.transition = "opacity .2s, transform .2s";
+      toast.style.opacity = "0";
+      toast.style.transform = "translateY(8px)";
+      setTimeout(() => toast.remove(), 200);
+    };
+
+    toast.querySelector("[data-toast-close]")?.addEventListener("click", close);
+    setTimeout(close, 4000);
+  });
+
 });
