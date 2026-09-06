@@ -1202,19 +1202,20 @@ def newcomers_page(request):
             log_action(request, "newcomer.convert", child, f"Новичок {newcomer.full_name} перенесён в спортсмены")
             messages.success(request, "Карточка спортсмена создана")
             return redirect("payments" if newcomer.paid else "attendance")
+            
         if form.is_valid():
             newcomer = form.save()
 
             trial_changed = (
-            newcomer.trial_at
-            and (
-                not old_trial_at
-                or newcomer.trial_at.replace(second=0, microsecond=0)
-                != old_trial_at.replace(second=0, microsecond=0)
+                newcomer.trial_at
+                and (
+                    not old_trial_at
+                    or newcomer.trial_at.replace(second=0, microsecond=0)
+                    != old_trial_at.replace(second=0, microsecond=0)
+                )
             )
-        )
 
-        if trial_changed:
+            if trial_changed:
                 trial_at = timezone.localtime(newcomer.trial_at)
 
                 notify_admins(
@@ -1227,6 +1228,9 @@ def newcomers_page(request):
             log_action(request, "newcomer.save", newcomer, f"Сохранён новичок {newcomer.full_name}")
             messages.success(request, "Новичок сохранён")
             return redirect("newcomers")
+
+        messages.error(request, "Проверьте данные новичка")
+        return redirect("newcomers")
 
         messages.error(request, "Проверьте данные новичка")
     return render(request, "crm/newcomers.html", page_context(
