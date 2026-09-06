@@ -227,6 +227,7 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["birth_date"].input_formats = ["%Y-%m-%d"]
         self.fields["trial_from"].input_formats = ["%Y-%m-%d"]
+        self.fields["address"].label = "Адрес прописки"
         self.apply_styles()
 
     def clean(self):

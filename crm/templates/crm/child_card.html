@@ -23,7 +23,7 @@
             <div class="flex flex-wrap items-center gap-3 mt-1 text-sm text-slate-500">
                 <span>{{ child.age_display }}</span>
                 <span class="h-1 w-1 rounded-full bg-slate-300"></span>
-                <span>Гр. {{ child.birth_date|date:"Y" }}</span>
+                <span>Гр. {{ child.birth_year }}</span>
                 <span class="h-1 w-1 rounded-full bg-slate-300"></span>
                 <span class="inline-flex px-2 py-0.5 text-xs font-bold rounded-lg
                     {% if child.status == 'active' %}bg-emerald-100 text-emerald-700
@@ -407,7 +407,7 @@
                         {{ stay.start_date|date:"d.m" }} — {{ stay.end_date|date:"d.m.Y" }}
                     </div>
                     <div class="text-[10px] text-emerald-600 mt-0.5">
-                        {{ stay.end_date|timeuntil:stay.start_date }} дней
+                        Длительность: {{ stay.end_date|timeuntil:stay.start_date }}
                     </div>
                 </div>
                 {% endfor %}

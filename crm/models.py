@@ -362,8 +362,11 @@ class Child(models.Model):
         return self.subscriptions.aggregate(s=Sum("price"))["s"] or Decimal(0)
 
     def balance(self):
-        """Баланс = оплаты - абонементы (положительный = переплата)."""
-        return self.total_paid() - self.total_spent()
+        """Баланс = оплаты - абонементы - занятия в долг."""
+        attendance_charges = (
+            self.attendances.aggregate(s=Sum("charge_amount"))["s"] or Decimal(0)
+        )
+        return self.total_paid() - self.total_spent() - attendance_charges
 
     def is_trial_expired(self):
         """Проверяем, истёк ли пробный период (14 дней)"""

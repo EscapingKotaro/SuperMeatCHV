@@ -65,3 +65,4 @@ _coverage
 htmlcov/
 .pytest_cache/
 .mypy_cache/
+*.patch
