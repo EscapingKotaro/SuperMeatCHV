@@ -50,21 +50,50 @@ class ExpenseForm(StyledFormMixin, forms.ModelForm):
 class ManagerTaskForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = ManagerTask
-        fields = ("title", "description", "assignee", "due_date")
+        fields = (
+            "title",
+            "description",
+            "assignee",
+            "scheduled_at",
+            "due_date",
+        )
         widgets = {
             "description": forms.Textarea(attrs={"rows": 3}),
-            "due_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "scheduled_at": forms.DateTimeInput(
+                format="%Y-%m-%dT%H:%M",
+                attrs={"type": "datetime-local"},
+            ),
+            "due_date": forms.DateInput(
+                format="%Y-%m-%d",
+                attrs={"type": "date"},
+            ),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+
         user_model = get_user_model()
-        self.fields["assignee"].queryset = user_model.objects.filter(
-            is_active=True, is_staff=True
-        ).exclude(profile__role=Role.BOSS).order_by("first_name", "last_name", "username")
+
+        self.fields["assignee"].queryset = (
+            user_model.objects
+            .filter(is_active=True, is_staff=True)
+            .exclude(profile__role=Role.BOSS)
+            .order_by("first_name", "last_name", "username")
+        )
+
         self.fields["assignee"].required = False
-        self.fields["assignee"].empty_label = "Всем администраторам"
-        self.fields["due_date"].input_formats = ["%Y-%m-%d"]
+        self.fields["assignee"].empty_label = "Общая задача для администрации"
+
+        self.fields["scheduled_at"].required = False
+        self.fields["scheduled_at"].input_formats = [
+            "%Y-%m-%dT%H:%M",
+        ]
+
+        self.fields["due_date"].required = False
+        self.fields["due_date"].input_formats = [
+            "%Y-%m-%d",
+        ]
+
         self.apply_styles()
 
 
