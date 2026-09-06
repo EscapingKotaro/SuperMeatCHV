@@ -754,6 +754,7 @@ class Notification(models.Model):
         TASK_REOPENED = "task_reopened", "Задача возвращена"
         TASK_DELETED = "task_deleted", "Задача удалена"
         LEAD_CREATED = "lead_created", "Новая заявка"
+        TRIAL_SCHEDULED = "trial_scheduled", "Пробное занятие"
 
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,

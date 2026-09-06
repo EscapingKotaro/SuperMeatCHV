@@ -1132,6 +1132,17 @@ def applications_page(request):
                 group=lead.group,
                 comment=lead.comment,
             )
+            
+            if newcomer.trial_at:
+                trial_at = timezone.localtime(newcomer.trial_at)
+
+                notify_admins(
+                    request.user,
+                    Notification.Kind.TRIAL_SCHEDULED,
+                    f"Пробное: {newcomer.full_name} · {trial_at:%d.%m.%Y %H:%M}",
+                    f"{reverse('newcomers')}?edit={newcomer.pk}",
+                )
+            
             lead.status = Lead.Status.QUALIFIED
             lead.save(update_fields=["status"])
             log_action(request, "lead.newcomer", newcomer, f"Из заявки создан новичок {newcomer.full_name}")
@@ -1162,6 +1173,7 @@ def applications_page(request):
 @login_required
 def newcomers_page(request):
     editing = Newcomer.objects.filter(pk=request.GET.get("edit")).first()
+    old_trial_at = editing.trial_at if editing else None
     form = NewcomerForm(request.POST or None, instance=editing)
     if request.method == "POST":
         action = request.POST.get("action", "save")
@@ -1193,9 +1205,18 @@ def newcomers_page(request):
             return redirect("payments" if newcomer.paid else "attendance")
         if form.is_valid():
             newcomer = form.save()
+
+            if newcomer.trial_at and newcomer.trial_at != old_trial_at:
+                trial_at = timezone.localtime(newcomer.trial_at)
+
+                notify_admins(
+                    request.user,
+                    Notification.Kind.TRIAL_SCHEDULED,
+                    f"Пробное: {newcomer.full_name} · {trial_at:%d.%m.%Y %H:%M}",
+                    f"{reverse('newcomers')}?edit={newcomer.pk}",
+                )
+
             log_action(request, "newcomer.save", newcomer, f"Сохранён новичок {newcomer.full_name}")
-            messages.success(request, "Новичок сохранён")
-            return redirect("newcomers")
         messages.error(request, "Проверьте данные новичка")
     return render(request, "crm/newcomers.html", page_context(
         request, "newcomers", newcomers=Newcomer.objects.select_related("lead", "trainer", "group", "child"),
