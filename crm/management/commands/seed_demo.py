@@ -75,6 +75,14 @@ class Command(BaseCommand):
                 "is_superuser": False,
             },
             {
+                "username": "admin",
+                "first_name": "Антон",
+                "last_name": "Соколов",
+                "user_role": "manager",
+                "profile_role": Role.MANAGER,
+                "is_superuser": False,
+            },
+            {
                 "username": "admin2",
                 "first_name": "Елена",
                 "last_name": "Романова",
