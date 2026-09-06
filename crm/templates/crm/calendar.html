@@ -13,109 +13,129 @@
      ВЕРХНЯЯ ПАНЕЛЬ
 ========================================= -->
 <section class="card mb-4 overflow-hidden">
-    <div class="flex flex-col gap-4 p-4 xl:flex-row xl:items-center xl:justify-between">
+    <div class="p-3 sm:p-4">
 
-        <div class="flex flex-wrap items-center gap-3">
-            <div class="flex items-center gap-1">
-                <a
-                    href="?start={{ prev_start|date:'Y-m-d' }}&day={{ prev_start|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
-                    class="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white transition hover:bg-slate-50"
-                    title="Предыдущий месяц"
-                >
-                    <i data-lucide="chevron-left" class="h-4 w-4"></i>
-                </a>
+        <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
 
-                <a
-                    href="?start={{ today_start|date:'Y-m-d' }}&day={{ today|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
-                    class="btn btn-soft h-10"
-                >
-                    <i data-lucide="calendar-days"></i>
-                    Сегодня
-                </a>
+            <!-- Месяц + навигация -->
+            <div class="min-w-0">
 
-                <a
-                    href="?start={{ next_start|date:'Y-m-d' }}&day={{ next_start|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
-                    class="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white transition hover:bg-slate-50"
-                    title="Следующий месяц"
-                >
-                    <i data-lucide="chevron-right" class="h-4 w-4"></i>
-                </a>
+                <div class="flex items-center justify-between gap-2 sm:justify-start">
+
+                    <div class="min-w-0">
+                        <div class="truncate text-lg font-extrabold tracking-tight sm:text-xl">
+                            {{ month_start|date:"F Y" }}
+                        </div>
+                        <div class="mt-0.5 text-[10px] text-slate-400">
+                            {{ month_task_count }} задач в этом месяце
+                        </div>
+                    </div>
+
+                    <div class="flex shrink-0 items-center gap-1">
+                        <a
+                            href="?start={{ prev_start|date:'Y-m-d' }}&day={{ prev_start|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
+                            class="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white transition hover:bg-slate-50 sm:h-10 sm:w-10"
+                            title="Предыдущий месяц"
+                        >
+                            <i data-lucide="chevron-left" class="h-4 w-4"></i>
+                        </a>
+
+                        <a
+                            href="?start={{ today_start|date:'Y-m-d' }}&day={{ today|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
+                            class="btn btn-soft h-9 px-3 text-[11px] sm:h-10 sm:text-xs"
+                        >
+                            <i data-lucide="calendar-days"></i>
+                            Сегодня
+                        </a>
+
+                        <a
+                            href="?start={{ next_start|date:'Y-m-d' }}&day={{ next_start|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
+                            class="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white transition hover:bg-slate-50 sm:h-10 sm:w-10"
+                            title="Следующий месяц"
+                        >
+                            <i data-lucide="chevron-right" class="h-4 w-4"></i>
+                        </a>
+                    </div>
+                </div>
+
             </div>
 
-            <div class="hidden h-8 w-px bg-slate-200 sm:block"></div>
 
-            <div>
-                <div class="text-lg font-extrabold tracking-tight">
-                    {{ month_start|date:"F Y" }}
+            <!-- Сегодня на смене -->
+            <div class="min-w-0">
+
+                <div class="mb-1.5 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-wide text-slate-400 sm:text-[10px]">
+                    <i data-lucide="users-round" class="h-3.5 w-3.5"></i>
+                    Сегодня на смене
                 </div>
-                <div class="mt-0.5 text-[10px] text-slate-400">
-                    {{ month_task_count }} задач в этом месяце
+
+                <div class="scrollbar-none flex gap-1.5 overflow-x-auto pb-0.5">
+                    {% if today_workers %}
+                        {% for profile in today_workers %}
+                        <span class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-emerald-50 px-2 py-1.5 text-[11px] font-bold text-emerald-700 sm:px-2.5 sm:py-2 sm:text-xs">
+                            <span class="grid h-5 w-5 place-items-center rounded-md bg-emerald-100 text-[9px] font-extrabold">
+                                {{ profile.user.first_name|default:profile.user.username|slice:":1"|upper }}
+                            </span>
+                            {{ profile.user.first_name|default:profile.user.username }}
+                        </span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] text-slate-400">
+                            Никого
+                        </span>
+                    {% endif %}
                 </div>
+
             </div>
-        </div>
-
-        <div class="flex min-w-0 flex-wrap items-center gap-2">
-            <span class="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
-                <i data-lucide="users-round" class="h-3.5 w-3.5"></i>
-                Сегодня на смене
-            </span>
-
-            {% if today_workers %}
-                {% for profile in today_workers %}
-                <span class="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-2.5 py-2 text-xs font-bold text-emerald-700">
-                    <span class="grid h-5 w-5 place-items-center rounded-md bg-emerald-100 text-[9px] font-extrabold">
-                        {{ profile.user.first_name|default:profile.user.username|slice:":1"|upper }}
-                    </span>
-                    {{ profile.user.first_name|default:profile.user.username }}
-                </span>
-                {% endfor %}
-            {% else %}
-                <span class="rounded-lg bg-slate-100 px-2.5 py-2 text-xs text-slate-400">
-                    Никого
-                </span>
-            {% endif %}
         </div>
     </div>
 
-    <div class="flex flex-wrap items-center justify-between gap-3 border-t bg-slate-50/60 px-4 py-2.5">
-        <div class="flex rounded-lg bg-slate-200/60 p-0.5">
-            <a
-                href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=all&state={{ state }}"
-                class="rounded-md px-3 py-1.5 text-[11px] font-bold transition {% if scope == 'all' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-500 hover:text-slate-900{% endif %}"
-            >
-                Все задачи
-            </a>
 
-            <a
-                href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=mine&state={{ state }}"
-                class="rounded-md px-3 py-1.5 text-[11px] font-bold transition {% if scope == 'mine' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-500 hover:text-slate-900{% endif %}"
-            >
-                Мои
-            </a>
+    <!-- Фильтры -->
+    <div class="border-t bg-slate-50/60 px-3 py-2.5 sm:px-4">
+
+        <div class="scrollbar-none flex gap-2 overflow-x-auto">
+
+            <div class="flex shrink-0 rounded-lg bg-slate-200/60 p-0.5">
+                <a
+                    href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=all&state={{ state }}"
+                    class="rounded-md px-3 py-1.5 text-[11px] font-bold transition {% if scope == 'all' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-500 hover:text-slate-900{% endif %}"
+                >
+                    Все задачи
+                </a>
+
+                <a
+                    href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=mine&state={{ state }}"
+                    class="rounded-md px-3 py-1.5 text-[11px] font-bold transition {% if scope == 'mine' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-500 hover:text-slate-900{% endif %}"
+                >
+                    Мои
+                </a>
+            </div>
+
+            <div class="flex shrink-0 items-center gap-1">
+                <a
+                    href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=open"
+                    class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition {% if state == 'open' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
+                >
+                    Активные
+                </a>
+
+                <a
+                    href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=done"
+                    class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition {% if state == 'done' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
+                >
+                    Выполненные
+                </a>
+
+                <a
+                    href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=all"
+                    class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition {% if state == 'all' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
+                >
+                    Все
+                </a>
+            </div>
         </div>
 
-        <div class="flex items-center gap-1">
-            <a
-                href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=open"
-                class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition {% if state == 'open' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
-            >
-                Активные
-            </a>
-
-            <a
-                href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=done"
-                class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition {% if state == 'done' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
-            >
-                Выполненные
-            </a>
-
-            <a
-                href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=all"
-                class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition {% if state == 'all' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
-            >
-                Все
-            </a>
-        </div>
     </div>
 </section>
 
@@ -125,17 +145,69 @@
 ========================================= -->
 <section class="card mb-4 overflow-hidden">
 
+    <!-- Заголовки дней -->
     <div class="grid grid-cols-7 border-b bg-[#FAFBFC]">
-        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Пн</div>
-        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Вт</div>
-        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Ср</div>
-        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Чт</div>
-        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Пт</div>
-        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Сб</div>
-        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Вс</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Пн</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Вт</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Ср</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Чт</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Пт</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Сб</div>
+        <div class="py-2 text-center text-[9px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:px-3 sm:text-left sm:text-[10px] sm:tracking-[0.12em]">Вс</div>
     </div>
 
-    <div class="grid grid-cols-7 gap-px bg-slate-200">
+
+    <!-- Мобильный месяц: компактная сетка -->
+    <div class="grid grid-cols-7 gap-px bg-slate-200 sm:hidden">
+
+        {% for day in days %}
+        <a
+            href="?start={{ day.month_start|date:'Y-m-d' }}&day={{ day.date|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
+            class="relative flex aspect-square min-w-0 flex-col items-center justify-center bg-white px-0.5 py-1
+            {% if not day.in_month %}bg-slate-50/80{% endif %}
+            {% if day.date == selected_day %}z-10 bg-blue-50 ring-2 ring-inset ring-[#315EBC]{% elif day.date == today %}bg-orange-50{% endif %}"
+        >
+
+            <span class="text-sm font-extrabold leading-none
+                {% if not day.in_month %}text-slate-300
+                {% elif day.date == today %}text-[#FF5C35]
+                {% elif day.date == selected_day %}text-[#315EBC]
+                {% else %}text-slate-900{% endif %}">
+                {{ day.date|date:"d" }}
+            </span>
+
+            <div class="mt-1 flex h-3 items-center justify-center gap-1">
+
+                {% if day.task_count %}
+                <span class="h-1.5 w-1.5 rounded-full
+                    {% if day.date == today %}bg-[#FF5C35]
+                    {% elif day.date == selected_day %}bg-[#315EBC]
+                    {% else %}bg-blue-400{% endif %}">
+                </span>
+                {% endif %}
+
+                {% if day.workers %}
+                <span class="flex items-center gap-0.5 text-[8px] font-bold text-emerald-600">
+                    <i data-lucide="users" class="h-2.5 w-2.5"></i>
+                    {{ day.workers|length }}
+                </span>
+                {% endif %}
+
+            </div>
+
+            {% if day.task_count %}
+            <span class="absolute right-1 top-1 rounded-full bg-slate-100 px-1 text-[7px] font-extrabold text-slate-500">
+                {{ day.task_count }}
+            </span>
+            {% endif %}
+
+        </a>
+        {% endfor %}
+    </div>
+
+
+    <!-- Desktop/tablet месяц -->
+    <div class="hidden grid-cols-7 gap-px bg-slate-200 sm:grid">
         {% for day in days %}
         <a
             href="?start={{ day.month_start|date:'Y-m-d' }}&day={{ day.date|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
@@ -204,6 +276,7 @@
         </a>
         {% endfor %}
     </div>
+
 </section>
 
 
@@ -212,19 +285,20 @@
 ========================================= -->
 <section class="card mb-4 overflow-hidden">
 
-    <div class="flex flex-col gap-4 border-b px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-        <div class="flex items-center gap-3">
+    <div class="flex flex-col gap-3 border-b px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
 
-            <div class="grid h-12 w-12 shrink-0 place-items-center rounded-xl
+        <div class="flex min-w-0 items-center gap-3">
+
+            <div class="grid h-11 w-11 shrink-0 place-items-center rounded-xl sm:h-12 sm:w-12
                 {% if selected_day == today %}bg-orange-100 text-[#FF5C35]{% else %}bg-blue-50 text-[#315EBC]{% endif %}">
-                <b class="text-lg">
+                <b class="text-base sm:text-lg">
                     {{ selected_day|date:"d" }}
                 </b>
             </div>
 
-            <div>
+            <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
-                    <h2 class="font-extrabold">
+                    <h2 class="truncate text-sm font-extrabold sm:text-base">
                         {{ selected_day|date:"l, d E" }}
                     </h2>
 
@@ -235,16 +309,18 @@
                     {% endif %}
                 </div>
 
-                <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
+                <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500 sm:text-[11px]">
                     <span>{{ selected_tasks|length }} задач</span>
 
                     {% if selected_workers %}
-                    <span class="flex items-center gap-1 text-emerald-700">
-                        <i data-lucide="users-round" class="h-3.5 w-3.5"></i>
-                        На смене:
-                        {% for profile in selected_workers %}
-                            <b>{{ profile.user.first_name|default:profile.user.username }}</b>{% if not forloop.last %},{% endif %}
-                        {% endfor %}
+                    <span class="flex min-w-0 items-center gap-1 text-emerald-700">
+                        <i data-lucide="users-round" class="h-3.5 w-3.5 shrink-0"></i>
+                        <span class="truncate">
+                            На смене:
+                            {% for profile in selected_workers %}
+                                <b>{{ profile.user.first_name|default:profile.user.username }}</b>{% if not forloop.last %},{% endif %}
+                            {% endfor %}
+                        </span>
                     </span>
                     {% else %}
                     <span class="text-slate-400">
@@ -255,18 +331,21 @@
             </div>
         </div>
 
-        <button data-modal="task-modal" class="btn btn-primary">
+        <button data-modal="task-modal" class="btn btn-primary w-full sm:w-auto">
             <i data-lucide="plus"></i>
             Добавить задачу
         </button>
     </div>
 
+
     <div class="divide-y">
         {% for item in selected_tasks %}
-        <article class="p-5 transition hover:bg-slate-50/60">
+        <article class="p-4 transition hover:bg-slate-50/60 sm:p-5">
+
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 
                 <div class="flex min-w-0 flex-1 gap-3">
+
                     <span class="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl
                         {% if item.is_done %}bg-emerald-50 text-emerald-600
                         {% elif item.is_overdue_now %}bg-red-50 text-red-600
@@ -282,8 +361,9 @@
                     </span>
 
                     <div class="min-w-0 flex-1">
+
                         <div class="flex flex-wrap items-center gap-2">
-                            <b class="text-sm">{{ item.title }}</b>
+                            <b class="break-words text-sm">{{ item.title }}</b>
 
                             {% if item.is_done %}
                                 <span class="badge bg-emerald-50 text-emerald-700">Выполнено</span>
@@ -294,7 +374,7 @@
                             {% endif %}
                         </div>
 
-                        <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+                        <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500 sm:text-[11px]">
                             {% if item.scheduled_at %}
                             <span class="flex items-center gap-1">
                                 <i data-lucide="clock-3" class="h-3.5 w-3.5"></i>
@@ -328,7 +408,7 @@
                         </div>
 
                         {% if item.description %}
-                        <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
+                        <p class="mt-3 break-words text-sm leading-6 text-slate-600">
                             {{ item.description }}
                         </p>
                         {% endif %}
@@ -345,14 +425,18 @@
                             {% endif %}
                         </div>
                         {% endif %}
+
                     </div>
                 </div>
 
-                <div class="flex shrink-0 flex-wrap gap-2">
+
+                <!-- Действия: на телефоне без вылезания за экран -->
+                <div class="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
+
                     {% if item.created_by_id == request.user.id or is_boss %}
                     <a
                         href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}&edit={{ item.pk }}"
-                        class="btn btn-soft"
+                        class="btn btn-soft min-w-0"
                     >
                         <i data-lucide="pencil"></i>
                         Изменить
@@ -362,33 +446,34 @@
                         {% csrf_token %}
                         <input type="hidden" name="action" value="delete">
                         <input type="hidden" name="task_id" value="{{ item.pk }}">
-                        <button class="btn btn-soft text-red-600" title="Удалить">
+                        <button class="btn btn-soft w-full text-red-600" title="Удалить">
                             <i data-lucide="trash-2"></i>
+                            <span class="sm:hidden">Удалить</span>
                         </button>
                     </form>
                     {% endif %}
 
                     {% if not item.assignee or item.assignee_id == request.user.id or is_boss %}
                         {% if item.is_done %}
-                        <form method="post">
+                        <form method="post" class="col-span-2 sm:col-span-1">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="toggle">
                             <input type="hidden" name="task_id" value="{{ item.pk }}">
-                            <button class="btn btn-soft">
+                            <button class="btn btn-soft w-full">
                                 <i data-lucide="rotate-ccw"></i>
                                 Вернуть
                             </button>
                         </form>
                         {% else %}
-                        <details class="relative">
-                            <summary class="btn btn-dark cursor-pointer list-none">
+                        <details class="relative col-span-2 sm:col-span-1">
+                            <summary class="btn btn-dark w-full cursor-pointer list-none">
                                 <i data-lucide="check"></i>
                                 Выполнить
                             </summary>
 
                             <form
                                 method="post"
-                                class="absolute right-0 top-full z-20 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl"
+                                class="fixed inset-x-4 bottom-4 z-50 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl sm:absolute sm:inset-auto sm:right-0 sm:top-full sm:mt-2 sm:w-80"
                             >
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="toggle">
@@ -408,12 +493,14 @@
                         </details>
                         {% endif %}
                     {% endif %}
+
                 </div>
+
             </div>
         </article>
 
         {% empty %}
-        <div class="flex flex-col items-center justify-center px-6 py-12 text-center">
+        <div class="flex flex-col items-center justify-center px-6 py-10 text-center sm:py-12">
             <span class="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-400">
                 <i data-lucide="calendar-check" class="h-5 w-5"></i>
             </span>
@@ -449,7 +536,7 @@
 
     <div class="divide-y border-t">
         {% for item in undated_tasks %}
-        <div class="flex flex-wrap items-center justify-between gap-3 p-4">
+        <div class="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
                 <b class="text-sm">{{ item.title }}</b>
                 <p class="mt-1 text-xs text-slate-500">
@@ -464,7 +551,7 @@
             {% if item.created_by_id == request.user.id or is_boss %}
             <a
                 href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}&edit={{ item.pk }}"
-                class="btn btn-soft"
+                class="btn btn-soft w-full sm:w-auto"
             >
                 Назначить дату
             </a>
