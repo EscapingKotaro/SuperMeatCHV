@@ -9,11 +9,8 @@ python manage.py runserver
 После запуска: `http://127.0.0.1:8000/login/`.
 
 Тестовые аккаунты
-("boss", "Сергей", "Андреев", Role.BOSS),
-("senior", "Мария", "Кокорина", Role.SENIOR),
-("admin", "Антон", "Соколов", Role.MANAGER)
-
-user.set_password("Demo12345!")
+Логины: boss, senior, admin, admin2
+Пароль: Demo12345!
 
 логин: admin
 Пароль: FvthbrfCjcfnm
