@@ -141,15 +141,38 @@ class CrmWorkflowTests(TestCase):
         )
 
     def test_attendance_mark_is_saved(self):
-        self.client.login(username="admin", password="TestPass123!")
-        response = self.client.post(
-            reverse("attendance"),
-            {"action": "mark", "child_id": self.child.pk, "date": timezone.localdate().isoformat(), "status": Attendance.Status.PRESENT},
-            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertTrue(Attendance.objects.filter(child=self.child, status=Attendance.Status.PRESENT).exists())
 
+        response = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "date": timezone.localdate().isoformat(),
+                "status": Attendance.Status.PRESENT,
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        self.assertEqual(
+            response.json()["status"],
+            "ok",
+        )
+
+        self.assertTrue(
+            Attendance.objects.filter(
+                child=self.child,
+                date=timezone.localdate(),
+                status=Attendance.Status.PRESENT,
+            ).exists()
+        )
+        
     def test_competition_scores_places_and_export(self):
         competition = Competition.objects.create(name="Кубок", date=timezone.localdate())
         apparatus = Apparatus.objects.create(competition=competition, name="Прыжок")
@@ -191,22 +214,58 @@ class CrmWorkflowTests(TestCase):
     def test_child_card_can_convert_trial_to_active(self):
         self.child.status = Child.Status.TRIAL
         self.child.trial_from = timezone.localdate()
-        self.child.save()
-        self.client.login(username="admin", password="TestPass123!")
-        response = self.client.post(reverse("child_edit", args=[self.child.pk]), {
-            "action": "save", "next": reverse("attendance"),
-            f"child-{self.child.pk}-last_name": "Иванова",
-            f"child-{self.child.pk}-first_name": "Анна",
-            f"child-{self.child.pk}-patronymic": "",
-            f"child-{self.child.pk}-birth_year": "2015",
-            f"child-{self.child.pk}-status": Child.Status.ACTIVE,
-            f"child-{self.child.pk}-group": self.group.pk,
-            f"child-{self.child.pk}-discount_percent": "0",
-        })
-        self.assertRedirects(response, reverse("attendance"))
+
+        self.child.save(
+            update_fields=[
+                "status",
+                "trial_from",
+            ]
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse(
+                "child_edit",
+                args=[self.child.pk],
+            ),
+            {
+                "next": reverse("attendance"),
+                "last_name": "Иванова",
+                "first_name": "Анна",
+                "patronymic": "",
+                "birth_year": "2015",
+                "birth_date": "",
+                "address": "",
+                "parent_name": "",
+                "parent_phone": "",
+                "certificate_note": "",
+                "group": self.group.pk,
+                "status": Child.Status.ACTIVE,
+                "trial_from": "",
+                "discount_percent": "0",
+                "note": "",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("attendance"),
+        )
+
         self.child.refresh_from_db()
-        self.assertEqual(self.child.status, Child.Status.ACTIVE)
-        self.assertIsNone(self.child.trial_from)
+
+        self.assertEqual(
+            self.child.status,
+            Child.Status.ACTIVE,
+        )
+
+        self.assertIsNone(
+            self.child.trial_from,
+        )
 
     def test_tariff_and_subscription_can_be_assigned(self):
         self.client.login(username="admin", password="TestPass123!")

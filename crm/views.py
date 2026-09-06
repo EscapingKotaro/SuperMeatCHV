@@ -1785,16 +1785,70 @@ def child_card_view(request, child_id):
 
 @login_required
 def child_edit_view(request, child_id):
-    child = get_object_or_404(Child, id=child_id)
-    if request.method == 'POST':
-        form = ChildForm(request.POST, request.FILES, instance=child)
+    child = get_object_or_404(
+        Child,
+        id=child_id,
+    )
+
+    if request.method == "POST":
+        form = ChildForm(
+            request.POST,
+            request.FILES,
+            instance=child,
+        )
+
         if form.is_valid():
-            form.save()
-            messages.success(request, 'Данные ребенка обновлены')
-            return redirect('child_card', child_id=child.id)
+            child = form.save(commit=False)
+
+            # Если ребёнок больше не на пробном,
+            # дата начала пробного периода больше не нужна.
+            if child.status != Child.Status.TRIAL:
+                child.trial_from = None
+
+            child.save()
+            form.save_m2m()
+
+            log_action(
+                request,
+                "child.update",
+                child,
+                f"Обновлена карточка спортсмена {child}",
+            )
+
+            messages.success(
+                request,
+                "Данные ребёнка обновлены",
+            )
+
+            next_url = (
+                request.POST.get("next")
+                or reverse(
+                    "child_card",
+                    args=[child.pk],
+                )
+            )
+
+            return redirect(next_url)
+
+        messages.error(
+            request,
+            "Проверьте заполнение карточки",
+        )
+
     else:
-        form = ChildForm(instance=child)
-    return render(request, 'crm/child_edit.html', {'form': form, 'child': child, 'page': 'child_edit'})
+        form = ChildForm(
+            instance=child,
+        )
+
+    return render(
+        request,
+        "crm/child_edit.html",
+        {
+            "form": form,
+            "child": child,
+            "page": "child_edit",
+        },
+    )
 
 
 @login_required
