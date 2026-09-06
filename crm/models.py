@@ -29,9 +29,6 @@ class StaffProfile(models.Model):
     branch = models.ForeignKey("Branch", on_delete=models.SET_NULL, blank=True, null=True,
                                related_name="staff", verbose_name="филиал")
     shift_anchor = models.DateField("Первый рабочий день смены 2/2", blank=True, null=True)
-from datetime import timedelta
-from django.utils import timezone
-
 
 def calculate_projected_end_date(group, start_date, sessions_count):
     """
@@ -53,7 +50,7 @@ def calculate_projected_end_date(group, start_date, sessions_count):
         for slot in slots:
             if current_date.weekday() == slot.weekday:
                 count += 1
-                if count > sessions_count:
+                if count >= sessions_count:
                     return current_date
         current_date += timedelta(days=1)
         max_days -= 1
@@ -181,16 +178,6 @@ class Child(models.Model):
     def __str__(self):
         return f"{self.last_name} {self.first_name}"
 
-    def age_display(self):
-        """Возраст с месяцами в формате из ТЗ: 4 г. 10 мес."""
-        today = timezone.localdate()
-        if not self.birth_date:
-            return f"{today.year - self.birth_year} лет"
-        months = (today.year - self.birth_date.year) * 12 + today.month - self.birth_date.month
-        if today.day < self.birth_date.day:
-            months -= 1
-        years, months = divmod(max(months, 0), 12)
-        return f"{years} г. {months} мес."
 
     # ---- вычисляемые поля карточки ----
     @property
@@ -202,23 +189,27 @@ class Child(models.Model):
         return self.subscriptions.filter(is_active=True, start_date__lte=today, end_date__gte=today).order_by("end_date").first()
 
     def age_display(self):
-        """Возвращает возраст в формате '4 г.' или '4 г. 6 мес.'"""
-        if self.birth_date:
-            today = timezone.localdate()
-            years = today.year - self.birth_date.year
-            months = today.month - self.birth_date.month
-            if today.day < self.birth_date.day:
-                months -= 1
-            if months < 0:
-                years -= 1
-                months += 12
-            if years == 0:
-                return f"{months} мес."
-            elif months == 0:
-                return f"{years} г."
-            else:
-                return f"{years} г. {months} мес."
-        return "—"
+        today = timezone.localdate()
+
+        if not self.birth_date:
+            return f"{max(today.year - self.birth_year, 0)} г."
+
+        years = today.year - self.birth_date.year
+        months = today.month - self.birth_date.month
+
+        if today.day < self.birth_date.day:
+            months -= 1
+
+        if months < 0:
+            years -= 1
+            months += 12
+
+        if years == 0:
+            return f"{months} мес."
+        if months == 0:
+            return f"{years} г."
+
+        return f"{years} г. {months} мес."
 
     def has_certificate(self):
         return bool(self.certificate)
