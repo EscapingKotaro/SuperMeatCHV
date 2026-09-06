@@ -53,13 +53,34 @@ class CrmWorkflowTests(TestCase):
         self.assertEqual(self.client.get(reverse("boss")).status_code, 200)
 
     def test_admin_can_create_expense(self):
-        self.client.login(username="admin", password="TestPass123!")
-        response = self.client.post(reverse("expenses"), {
-            "title": "Вода", "category": Expense.Category.HOUSEHOLD,
-            "amount": "1250.50", "date": timezone.localdate().isoformat(),
-        })
-        self.assertRedirects(response, reverse("expenses"))
-        self.assertTrue(Expense.objects.filter(title="Вода", created_by=self.admin).exists())
+        today = timezone.localdate()
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("expenses"),
+            {
+                "title": "Вода",
+                "category": Expense.Category.HOUSEHOLD,
+                "amount": "1250.50",
+                "date": today.isoformat(),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            f"{reverse('expenses')}?month={today:%Y-%m}",
+        )
+
+        self.assertTrue(
+            Expense.objects.filter(
+                title="Вода",
+                created_by=self.admin,
+            ).exists()
+        )
         
         
     def test_admin_can_edit_own_expense(self):
