@@ -1230,9 +1230,7 @@ def newcomers_page(request):
             return redirect("newcomers")
 
         messages.error(request, "Проверьте данные новичка")
-        return redirect("newcomers")
-
-        messages.error(request, "Проверьте данные новичка")
+        
     return render(request, "crm/newcomers.html", page_context(
         request, "newcomers", newcomers=Newcomer.objects.select_related("lead", "trainer", "group", "child"),
         form=form, editing=editing,
