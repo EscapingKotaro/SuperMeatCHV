@@ -1,6 +1,4 @@
-from django.db.models import Q
-
-from .models import ManagerTask, Role, user_role
+from .models import Notification, Role, user_role
 
 
 def crm_role_context(request):
@@ -9,18 +7,17 @@ def crm_role_context(request):
             "current_role": None,
             "is_boss": False,
             "is_senior": False,
-            "task_notification_count": 0,
+            "notification_count": 0,
         }
 
     role = user_role(request.user)
-    tasks = ManagerTask.objects.filter(is_done=False)
-
-    if role != Role.BOSS:
-        tasks = tasks.filter(Q(assignee=request.user) | Q(assignee__isnull=True))
 
     return {
         "current_role": role,
         "is_boss": role == Role.BOSS,
         "is_senior": role in (Role.SENIOR, Role.BOSS),
-        "task_notification_count": tasks.count(),
+        "notification_count": Notification.objects.filter(
+            recipient=request.user,
+            read_at__isnull=True,
+        ).count(),
     }

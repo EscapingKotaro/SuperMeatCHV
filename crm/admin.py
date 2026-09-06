@@ -523,3 +523,11 @@ class ManagerTaskAdmin(admin.ModelAdmin):
     ordering = (
         "-created_at",
     )
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ("recipient", "kind", "task", "actor", "read_at", "created_at")
+    list_filter = ("kind", "read_at")
+    search_fields = ("recipient__username", "message", "task__title")
+    readonly_fields = ("created_at",)
+    ordering = ("-created_at",)

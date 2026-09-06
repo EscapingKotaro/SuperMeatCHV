@@ -17,6 +17,7 @@ from .models import (
     Group,
     Lead,
     ManagerTask,
+    Notification,
     Newcomer,
     Role,
     StaffProfile,
@@ -59,6 +60,20 @@ class CrmWorkflowTests(TestCase):
         })
         self.assertRedirects(response, reverse("expenses"))
         self.assertTrue(Expense.objects.filter(title="Вода", created_by=self.admin).exists())
+        
+    def test_opening_notifications_marks_them_read(self):
+        notification = Notification.objects.create(
+            recipient=self.admin,
+            actor=self.boss,
+            kind=Notification.Kind.TASK_CREATED,
+            message="Новая задача",
+        )
+
+        self.client.login(username="admin", password="TestPass123!")
+        self.client.get(reverse("notifications"))
+
+        notification.refresh_from_db()
+        self.assertIsNotNone(notification.read_at)
 
     def test_boss_assigns_task_and_admin_completes_it(self):
         self.client.login(
@@ -88,6 +103,13 @@ class CrmWorkflowTests(TestCase):
         task = ManagerTask.objects.get(
             title="Позвонить родителю"
         )
+        
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.admin,
+            task=task,
+            kind=Notification.Kind.TASK_CREATED,
+            read_at__isnull=True,
+        ).exists())
 
         self.assertEqual(
             task.created_by,
@@ -115,6 +137,13 @@ class CrmWorkflowTests(TestCase):
                 ),
             },
         )
+        
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.boss,
+            task=task,
+            kind=Notification.Kind.TASK_COMPLETED,
+            read_at__isnull=True,
+        ).exists())
 
         self.assertRedirects(
             response,

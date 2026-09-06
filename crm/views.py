@@ -34,6 +34,7 @@ from .forms import (
 )
 from .models import (
     Apparatus,
+    Notification,
     ApparatusScore,
     Attendance,
     AuditEvent,
@@ -893,6 +894,64 @@ def competition_export(request, pk):
     log_action(request, "competition.export", competition, f"Выгружены результаты {competition.name}")
     return response
 
+
+def task_recipient_ids(task):
+    if task.assignee_id:
+        return {task.assignee_id}
+
+    return set(
+        get_user_model().objects
+        .filter(is_active=True, is_staff=True)
+        .values_list("id", flat=True)
+    )
+
+
+def boss_ids():
+    return set(
+        StaffProfile.objects
+        .filter(role=Role.BOSS, user__is_active=True)
+        .values_list("user_id", flat=True)
+    )
+
+
+def notify_task(task, actor, kind):
+    recipients = task_recipient_ids(task)
+
+    if kind == Notification.Kind.TASK_COMPLETED:
+        recipients = boss_ids()
+        if task.created_by_id:
+            recipients.add(task.created_by_id)
+
+    elif kind == Notification.Kind.TASK_REOPENED:
+        recipients |= boss_ids()
+        if task.created_by_id:
+            recipients.add(task.created_by_id)
+
+    recipients.discard(actor.pk)
+
+    if not recipients:
+        return
+
+    name = actor.get_full_name() or actor.username
+    texts = {
+        Notification.Kind.TASK_CREATED: f"Новая задача «{task.title}»",
+        Notification.Kind.TASK_UPDATED: f"{name} изменил задачу «{task.title}»",
+        Notification.Kind.TASK_COMPLETED: f"{name} выполнил задачу «{task.title}»",
+        Notification.Kind.TASK_REOPENED: f"{name} вернул задачу «{task.title}» в работу",
+        Notification.Kind.TASK_DELETED: f"{name} удалил задачу «{task.title}»",
+    }
+
+    Notification.objects.bulk_create([
+        Notification(
+            recipient_id=user_id,
+            actor=actor,
+            task=task,
+            kind=kind,
+            message=texts[kind],
+        )
+        for user_id in recipients
+    ])
+
 def can_complete_manager_task(user, task):
     return (
         task.assignee_id is None
@@ -911,84 +970,71 @@ def can_manage_manager_task(user, task):
 def toggle_manager_task(task, user, completion_comment=""):
     if task.is_done:
         task.is_done = False
-        task.done_at = None
-        task.completed_by = None
+        task.done_at = task.completed_by = None
         task.completion_comment = ""
-
+        kind = Notification.Kind.TASK_REOPENED
     else:
         task.is_done = True
         task.done_at = timezone.now()
         task.completed_by = user
         task.completion_comment = completion_comment.strip()
+        kind = Notification.Kind.TASK_COMPLETED
 
-    task.save(
-        update_fields=[
-            "is_done",
-            "done_at",
-            "completed_by",
-            "completion_comment",
-        ]
-    )
+    task.save(update_fields=["is_done", "done_at", "completed_by", "completion_comment"])
+    notify_task(task, user, kind)
 
 @login_required
 def notifications_page(request):
     if request.method == "POST":
-        task = get_object_or_404(
-            ManagerTask,
-            pk=request.POST.get("task_id"),
-        )
+        task = get_object_or_404(ManagerTask, pk=request.POST.get("task_id"))
 
-        if not can_complete_manager_task(
-            request.user,
-            task,
-        ):
-            return HttpResponseForbidden(
-                "Это задача другого пользователя"
-            )
+        if not can_complete_manager_task(request.user, task):
+            return HttpResponseForbidden("Это задача другого пользователя")
 
         toggle_manager_task(
             task,
             request.user,
-            request.POST.get(
-                "completion_comment",
-                "",
-            ),
+            request.POST.get("completion_comment", ""),
         )
 
         log_action(
-            request,
-            "task.toggle",
-            task,
-            f"Задача «{task.title}»: "
-            f"{'выполнена' if task.is_done else 'возвращена в работу'}",
+            request, "task.toggle", task,
+            f"Задача «{task.title}»: {'выполнена' if task.is_done else 'возвращена в работу'}",
         )
 
-        messages.success(
-            request,
-            "Статус задачи изменён",
-        )
-
+        messages.success(request, "Статус задачи изменён")
         return redirect("notifications")
 
+    # Последние уведомления пользователя
+    event_notifications = list(
+        Notification.objects
+        .filter(recipient=request.user)
+        .select_related("actor", "task")[:50]
+    )
+
+    unread_count = sum(n.read_at is None for n in event_notifications)
+
+    # После открытия страницы считаем уведомления прочитанными
+    if unread_count:
+        Notification.objects.filter(
+            recipient=request.user,
+            read_at__isnull=True,
+        ).update(read_at=timezone.now())
+
+    # Обычный список задач
     tasks = ManagerTask.objects.select_related(
-        "assignee",
-        "created_by",
-        "completed_by",
+        "assignee", "created_by", "completed_by"
     )
 
     if user_role(request.user) != Role.BOSS:
         tasks = tasks.filter(
-            Q(assignee=request.user)
-            | Q(assignee__isnull=True)
+            Q(assignee=request.user) | Q(assignee__isnull=True)
         )
 
     today = timezone.localdate()
-
     alerts = []
 
-    for child in Child.objects.filter(
-        status=Child.Status.ACTIVE
-    ):
+    for child in Child.objects.filter(status=Child.Status.ACTIVE):
         expiry = child.nearest_expiry()
         debt = child.debt()
 
@@ -1010,31 +1056,25 @@ def notifications_page(request):
         status=Lead.Status.NEW,
     )
 
-    open_task_count = tasks.filter(
-        is_done=False
-    ).count()
+    open_task_count = tasks.filter(is_done=False).count()
 
-    return render(
-        request,
-        "crm/notifications.html",
-        page_context(
-            request,
-            "notifications",
-            tasks=tasks,
-            alerts=alerts,
-            trials=trials,
-            imported_leads=imported_leads,
-            open_task_count=open_task_count,
-            open_count=(
-                open_task_count
-                + len(alerts)
-                + trials.count()
-                + imported_leads.count()
-            ),
-            today=today,
+    return render(request, "crm/notifications.html", page_context(
+        request, "notifications",
+        tasks=tasks,
+        alerts=alerts,
+        trials=trials,
+        imported_leads=imported_leads,
+        event_notifications=event_notifications,
+        unread_count=unread_count,
+        open_task_count=open_task_count,
+        open_count=(
+            open_task_count
+            + len(alerts)
+            + trials.count()
+            + imported_leads.count()
         ),
-    )
-
+        today=today,
+    ))
 
 @login_required
 def applications_page(request):
@@ -1210,7 +1250,9 @@ def calendar_page(request):
                 return HttpResponseForbidden("Удалить чужую задачу может только начальник")
 
             title = task.title
-            log_action(request, "task.delete", task, f"Удалена задача «{title}»")
+
+            notify_task(task, request.user, Notification.Kind.TASK_DELETED)
+            log_action(request, "task.delete", task, f"Начальник удалил задачу «{title}»")
             task.delete()
             messages.success(request, "Задача удалена")
             return back()
@@ -1220,6 +1262,12 @@ def calendar_page(request):
                 task = form.save(commit=False)
                 task.created_by = editing.created_by if editing else request.user
                 task.save()
+
+                notify_task(
+                    task,
+                    request.user,
+                    Notification.Kind.TASK_UPDATED if editing else Notification.Kind.TASK_CREATED,
+                )
 
                 log_action(
                     request, "task.save", task,
@@ -1375,6 +1423,7 @@ def boss_page(request):
                 task.created_by = request.user
                 task.save()
 
+                notify_task(task, request.user, Notification.Kind.TASK_CREATED)
                 log_action(request, "task.create", task, f"Поставлена задача «{task.title}»")
                 messages.success(request, "Задача поставлена")
                 return redirect("boss")

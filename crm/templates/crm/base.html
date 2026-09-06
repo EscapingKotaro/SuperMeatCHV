@@ -139,9 +139,9 @@
 
                     <i data-lucide="bell" class="h-5 w-5"></i>
 
-                    {% if task_notification_count %}
+                    {% if notification_count %}
                     <span class="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-500 px-1.5 text-center text-[10px] font-bold leading-5 text-white">
-                        {% if task_notification_count > 99 %}99+{% else %}{{ task_notification_count }}{% endif %}
+                        {% if notification_count > 99 %}99+{% else %}{{ notification_count }}{% endif %}
                     </span>
                     {% endif %}
                 </a>
