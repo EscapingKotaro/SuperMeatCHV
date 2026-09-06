@@ -51,17 +51,13 @@ class Command(BaseCommand):
 
         # ------------------------------------------------------------------
         # Пользователи и роли
-        # В проекте сейчас две системы ролей:
-        #   User.role: manager / senior_manager / chief / admin
-        #   StaffProfile.role: manager / senior / boss
-        # Поэтому seed заполняет обе согласованно.
+        # Роль сотрудника хранится только в StaffProfile.
         # ------------------------------------------------------------------
         account_data = [
             {
                 "username": "boss",
                 "first_name": "Сергей",
                 "last_name": "Андреев",
-                "user_role": "chief",
                 "profile_role": Role.BOSS,
                 "is_superuser": True,
             },
@@ -69,7 +65,6 @@ class Command(BaseCommand):
                 "username": "senior",
                 "first_name": "Мария",
                 "last_name": "Кокорина",
-                "user_role": "senior_manager",
                 "profile_role": Role.SENIOR,
                 "is_superuser": False,
             },
@@ -77,7 +72,6 @@ class Command(BaseCommand):
                 "username": "admin",
                 "first_name": "Антон",
                 "last_name": "Соколов",
-                "user_role": "manager",
                 "profile_role": Role.MANAGER,
                 "is_superuser": False,
             },
@@ -85,27 +79,28 @@ class Command(BaseCommand):
                 "username": "admin2",
                 "first_name": "Елена",
                 "last_name": "Романова",
-                "user_role": "manager",
                 "profile_role": Role.MANAGER,
                 "is_superuser": False,
             },
         ]
 
         users = {}
+
         for item in account_data:
             user, _ = user_model.objects.update_or_create(
                 username=item["username"],
                 defaults={
                     "first_name": item["first_name"],
                     "last_name": item["last_name"],
-                    "role": item["user_role"],
                     "is_staff": True,
                     "is_active": True,
                     "is_superuser": item["is_superuser"],
                 },
             )
+
             user.set_password(self.DEMO_PASSWORD)
             user.save()
+
             users[item["username"]] = user
 
             StaffProfile.objects.update_or_create(
