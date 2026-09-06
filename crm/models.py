@@ -341,17 +341,27 @@ class Child(models.Model):
         """Акции текущих действующих абонементов."""
         today = timezone.localdate()
 
-        return (
+        promos = []
+
+        subscriptions = (
             self.subscriptions
             .filter(
                 is_active=True,
                 start_date__lte=today,
                 end_date__gte=today,
-                promo__isnull=False,
             )
             .exclude(promo="")
-            .values_list("promo", "end_date")
+            .order_by("promo_end_date", "end_date")
         )
+
+        for sub in subscriptions:
+            # Старые акции без отдельной даты продолжают работать:
+            # для них временно используем окончание абонемента.
+            promo_end = sub.promo_end_date or sub.end_date
+            if promo_end >= today:
+                promos.append((sub.promo, promo_end))
+
+        return promos
 
     def total_paid(self):
         """Общая сумма оплат."""
@@ -451,6 +461,7 @@ class Subscription(models.Model):
     sessions_total = models.PositiveSmallIntegerField("Занятий в абонементе", default=8)
     price = models.DecimalField("Стоимость", max_digits=10, decimal_places=2)
     promo = models.CharField("Акция / промо", max_length=100, blank=True)
+    promo_end_date = models.DateField("Дата окончания акции", blank=True, null=True)
     is_active = models.BooleanField("Действует", default=True)
 
     class Meta:

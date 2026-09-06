@@ -65,6 +65,7 @@ admin.site.register(LogEntry, LogEntryAdmin)
 class SubscriptionInline(admin.TabularInline):
     model = Subscription
     extra = 0
+    fields = ("start_date", "end_date", "sessions_total", "price", "promo", "promo_end_date", "is_active")
 
 class PaymentInline(admin.TabularInline):
     model = Payment
@@ -149,6 +150,7 @@ class ChildAdmin(admin.ModelAdmin):
                     "first_name",
                     "patronymic",
                     "birth_date",
+                    "birth_year",
                     "status",
                     "group",
                 )

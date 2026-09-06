@@ -228,6 +228,9 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
         widgets = {
             "birth_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "trial_from": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "certificate": forms.ClearableFileInput(
+                attrs={"accept": "image/*"},
+            ),
             "note": forms.Textarea(attrs={"rows": 3}),
         }
 
@@ -236,6 +239,7 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
         self.fields["birth_date"].input_formats = ["%Y-%m-%d"]
         self.fields["trial_from"].input_formats = ["%Y-%m-%d"]
         self.fields["address"].label = "Адрес прописки"
+        self.fields["certificate"].label = "Справка для занятий спортом (фото)"
         self.apply_styles()
 
     def clean(self):
@@ -244,22 +248,6 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
         if birth_date:
             cleaned["birth_year"] = birth_date.year
         return cleaned
-
-
-class ChildCertificateForm(StyledFormMixin, forms.ModelForm):
-    class Meta:
-        model = Child
-        fields = ("certificate", "certificate_note")
-        widgets = {
-            "certificate": forms.ClearableFileInput(
-                attrs={"accept": "image/*"},
-            ),
-        }
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.fields["certificate"].required = True
-        self.apply_styles()
 
 
 class ChildRankForm(StyledFormMixin, forms.Form):
@@ -320,16 +308,21 @@ class TariffForm(StyledFormMixin, forms.ModelForm):
 class SubscriptionForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = Subscription
-        fields = ("child", "tariff", "start_date", "end_date", "sessions_total", "price", "promo", "is_active")
+        fields = (
+            "child", "tariff", "start_date", "end_date", "sessions_total",
+            "price", "promo", "promo_end_date", "is_active",
+        )
         widgets = {
             "start_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "end_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "promo_end_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["start_date"].input_formats = ["%Y-%m-%d"]
         self.fields["end_date"].input_formats = ["%Y-%m-%d"]
+        self.fields["promo_end_date"].input_formats = ["%Y-%m-%d"]
         self.fields["tariff"].queryset = Tariff.objects.filter(is_active=True)
         self.fields["end_date"].required = False
         self.fields["sessions_total"].required = False
@@ -346,6 +339,28 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
                 cleaned["end_date"] = cleaned["start_date"] + timedelta(days=tariff.duration_days)
         if cleaned.get("start_date") and cleaned.get("end_date") and cleaned["end_date"] < cleaned["start_date"]:
             self.add_error("end_date", "Дата окончания не может быть раньше начала")
+
+        promo = (cleaned.get("promo") or "").strip()
+        promo_end_date = cleaned.get("promo_end_date")
+        start_date = cleaned.get("start_date")
+
+        if promo and not promo_end_date:
+            self.add_error(
+                "promo_end_date",
+                "Для акции укажите дату окончания",
+            )
+        elif promo_end_date and not promo:
+            self.add_error(
+                "promo",
+                "Укажите название акции",
+            )
+
+        if promo_end_date and start_date and promo_end_date < start_date:
+            self.add_error(
+                "promo_end_date",
+                "Дата окончания акции не может быть раньше начала абонемента",
+            )
+
         return cleaned
 
 

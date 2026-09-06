@@ -25,7 +25,6 @@ from .forms import (
     ApparatusForm,
     CampStayForm,
     ChildForm,
-    ChildCertificateForm,
     ChildRankForm,
     CompetitionEntryForm,
     CompetitionForm,
@@ -3101,10 +3100,6 @@ def child_card_view(request, child_id):
     promos = child.active_promos()
     groups_list = Group.objects.filter(is_active=True)
 
-    certificate_form = ChildCertificateForm(
-        prefix="certificate",
-        instance=child,
-    )
     rank_form = ChildRankForm(
         prefix="rank",
         initial={"year": timezone.localdate().year},
@@ -3114,34 +3109,7 @@ def child_card_view(request, child_id):
     if request.method == "POST":
         action = request.POST.get("action")
 
-        if action == "upload_certificate":
-            certificate_form = ChildCertificateForm(
-                request.POST,
-                request.FILES,
-                prefix="certificate",
-                instance=child,
-            )
-            if certificate_form.is_valid():
-                certificate_form.save()
-                log_action(
-                    request,
-                    "child.certificate",
-                    child,
-                    f"Обновлена спортивная справка {child}",
-                )
-                messages.success(request, "Фото справки сохранено")
-                return redirect("child_card", child_id=child.pk)
-
-        elif action == "delete_certificate":
-            if child.certificate:
-                child.certificate.delete(save=False)
-                child.certificate = ""
-                child.certificate_note = ""
-                child.save(update_fields=["certificate", "certificate_note"])
-            messages.success(request, "Справка удалена")
-            return redirect("child_card", child_id=child.pk)
-
-        elif action == "add_rank":
+        if action == "add_rank":
             rank_form = ChildRankForm(request.POST, prefix="rank")
             if rank_form.is_valid():
                 ChildRank.objects.update_or_create(
@@ -3271,7 +3239,6 @@ def child_card_view(request, child_id):
         'weeks': weeks,
         'period_stats': period_stats,
         'today': today,
-        'certificate_form': certificate_form,
         'rank_form': rank_form,
         'camp_form': camp_form,
         'page': 'child_card'

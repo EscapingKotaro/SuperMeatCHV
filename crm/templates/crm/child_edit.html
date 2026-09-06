@@ -17,6 +17,11 @@
                         {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
                     </label>
                     {{ field }}
+                    {% if field.name == "certificate" %}
+                    <p class="mt-1 text-xs text-slate-500">
+                        Здесь можно прикрепить, заменить или очистить фото спортивной справки.
+                    </p>
+                    {% endif %}
                     {% if field.errors %}
                     <p class="mt-1 text-sm text-red-600">{{ field.errors.0 }}</p>
                     {% endif %}

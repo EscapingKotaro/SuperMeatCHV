@@ -61,26 +61,24 @@
                 <i data-lucide="user" class="h-4 w-4 text-slate-400"></i>Контактная информация
             </h3>
             <div class="space-y-3 text-sm">
-                {% if child.parent_name %}
                 <div>
                     <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Родитель</div>
-                    <div class="font-semibold">{{ child.parent_name }}</div>
+                    <div class="font-semibold">{{ child.parent_name|default:"—" }}</div>
                 </div>
-                {% endif %}
-                {% if child.parent_phone %}
                 <div>
-                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Телефон</div>
+                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Телефон родителя</div>
+                    {% if child.parent_phone %}
                     <a href="tel:{{ child.parent_phone }}" class="font-semibold text-[#FF5C35] hover:underline">
                         {{ child.parent_phone }}
                     </a>
+                    {% else %}
+                    <div class="font-semibold text-slate-400">—</div>
+                    {% endif %}
                 </div>
-                {% endif %}
-                {% if child.address %}
                 <div>
                     <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Адрес прописки</div>
-                    <div class="text-slate-700">{{ child.address }}</div>
+                    <div class="text-slate-700">{{ child.address|default:"—" }}</div>
                 </div>
-                {% endif %}
             </div>
         </div>
 
@@ -102,38 +100,6 @@
                 {% endif %}
             {% else %}
                 <p class="text-xs text-slate-400 italic">Справка не прикреплена</p>
-            {% endif %}
-
-            <form method="post" enctype="multipart/form-data" class="mt-4 space-y-2">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="upload_certificate">
-                <div>
-                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-1">
-                        {% if child.certificate %}Заменить фото{% else %}Прикрепить фото{% endif %}
-                    </div>
-                    {{ certificate_form.certificate }}
-                    {% if certificate_form.certificate.errors %}
-                    <p class="mt-1 text-xs text-red-600">{{ certificate_form.certificate.errors.0 }}</p>
-                    {% endif %}
-                </div>
-                <div>
-                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-1">Комментарий</div>
-                    {{ certificate_form.certificate_note }}
-                </div>
-                <button class="btn btn-soft text-xs w-full" type="submit">
-                    <i data-lucide="upload" class="h-3 w-3"></i>
-                    {% if child.certificate %}Заменить справку{% else %}Прикрепить справку{% endif %}
-                </button>
-            </form>
-
-            {% if child.certificate %}
-            <form method="post" class="mt-2" onsubmit="return confirm('Удалить фото справки?')">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="delete_certificate">
-                <button class="text-xs font-bold text-red-600 hover:underline" type="submit">
-                    Удалить справку
-                </button>
-            </form>
             {% endif %}
         </div>
 
@@ -178,11 +144,11 @@
         </div>
 
         <!-- Акции -->
-        {% if promos %}
         <div class="card p-5">
             <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
                 <i data-lucide="gift" class="h-4 w-4 text-slate-400"></i>Акции
             </h3>
+            {% if promos %}
             <div class="space-y-2">
                 {% for promo_name, promo_end in promos %}
                 <div class="bg-amber-50 border border-amber-200 px-3 py-2 rounded-lg">
@@ -191,8 +157,10 @@
                 </div>
                 {% endfor %}
             </div>
+            {% else %}
+            <p class="text-xs text-slate-400 italic">Нет активных акций</p>
+            {% endif %}
         </div>
-        {% endif %}
     </div>
 
     <!-- ЦЕНТРАЛЬНАЯ КОЛОНКА -->
@@ -262,7 +230,12 @@
                     <div class="flex items-center gap-3 text-[10px] text-slate-500">
                         <span>{{ sub.sessions_total }} занятий</span>
                         {% if sub.promo %}
-                        <span class="text-[#FF5C35] font-bold">{{ sub.promo }}</span>
+                        <span class="text-[#FF5C35] font-bold">
+                            {{ sub.promo }}
+                            {% if sub.promo_end_date %}
+                                · до {{ sub.promo_end_date|date:"d.m.Y" }}
+                            {% endif %}
+                        </span>
                         {% endif %}
                     </div>
                 </div>
