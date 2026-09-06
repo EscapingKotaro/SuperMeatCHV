@@ -656,23 +656,85 @@ class SalaryPayout(models.Model):
 
 
 class ManagerTask(models.Model):
-    """Задача менеджерам от начальника + системные напоминания."""
-    title = models.CharField("Задача", max_length=255)
-    description = models.TextField("Описание", blank=True)
-    assignee = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
-                                 blank=True, null=True, related_name="tasks",
-                                 verbose_name="исполнитель",
-                                 help_text="Пусто — видна всем админам")
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-                                   null=True, blank=True, related_name="created_tasks")
-    due_date = models.DateField("Срок", blank=True, null=True)
-    is_done = models.BooleanField("Выполнена", default=False)
-    done_at = models.DateTimeField(blank=True, null=True)
-    created_at = models.DateTimeField(auto_now_add=True)
+    """Единая задача CRM: руководитель, календарь и уведомления."""
+
+    title = models.CharField(
+        "Задача",
+        max_length=255,
+    )
+
+    description = models.TextField(
+        "Описание",
+        blank=True,
+    )
+
+    assignee = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="tasks",
+        verbose_name="Исполнитель",
+        help_text="Пусто — общая задача для всей администрации",
+    )
+
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_tasks",
+        verbose_name="Автор",
+    )
+
+    # Крайний срок выполнения задачи.
+    due_date = models.DateField(
+        "Крайний срок",
+        blank=True,
+        null=True,
+    )
+
+    # Конкретная дата/время, на которой задача размещается в календаре.
+    # Если поле пустое, позже календарь будет использовать due_date.
+    scheduled_at = models.DateTimeField(
+        "Дата и время в календаре",
+        blank=True,
+        null=True,
+    )
+
+    is_done = models.BooleanField(
+        "Выполнена",
+        default=False,
+    )
+
+    done_at = models.DateTimeField(
+        "Выполнена в",
+        blank=True,
+        null=True,
+    )
+
+    completed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="completed_tasks",
+        verbose_name="Выполнил",
+    )
+
+    completion_comment = models.TextField(
+        "Комментарий при выполнении",
+        blank=True,
+    )
+
+    created_at = models.DateTimeField(
+        "Создана",
+        auto_now_add=True,
+    )
 
     class Meta:
-        verbose_name = "Задача менеджеру"
-        verbose_name_plural = "Задачи менеджерам"
+        verbose_name = "Задача"
+        verbose_name_plural = "Задачи"
         ordering = ("-created_at",)
 
     def __str__(self):
