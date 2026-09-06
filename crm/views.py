@@ -1050,6 +1050,13 @@ def notifications_page(request):
 
     today = timezone.localdate()
     alerts = []
+    
+    trial_count = Newcomer.objects.filter(
+        trial_at__isnull=False,
+        attended=False,
+        lesson_cancelled=False,
+        child__isnull=True,
+    ).count()
 
     for child in Child.objects.filter(status=Child.Status.ACTIVE):
         expiry = child.nearest_expiry()
@@ -1072,7 +1079,8 @@ def notifications_page(request):
         event_notifications=event_notifications,
         unread_count=unread_count,
         open_task_count=open_task_count,
-        open_count=open_task_count + len(alerts),
+        trial_count=trial_count,
+        open_count=open_task_count + len(alerts) + trial_count,
         today=today,
     ))
 

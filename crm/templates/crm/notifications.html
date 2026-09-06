@@ -9,7 +9,7 @@
         <p class="text-xs text-slate-500">открытых событий</p>
 
         <div class="mt-5 space-y-2 text-xs">
-            <a href="{% url 'calendar' %}?scope=mine&state=open"
+            <a href="{% url 'calendar' %}?scope={% if is_boss %}all{% else %}mine{% endif %}&state=open"
             class="flex justify-between rounded-lg px-1 py-1 hover:bg-slate-50">
                 <span>Открытые задачи</span>
                 <b>{{ open_task_count }}</b>
@@ -19,6 +19,12 @@
                 <span>Абонементы</span>
                 <b>{{ alerts|length }}</b>
             </div>
+
+            <a href="{% url 'newcomers' %}"
+            class="flex justify-between rounded-lg px-1 py-1 hover:bg-slate-50">
+                <span>Пробные</span>
+                <b>{{ trial_count }}</b>
+            </a>
 
             {% if unread_count %}
             <div class="flex justify-between text-red-600">
