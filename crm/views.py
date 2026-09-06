@@ -594,33 +594,175 @@ def payments_page(request):
 
 @login_required
 def expenses_page(request):
-    editing = Expense.objects.filter(pk=request.GET.get("edit")).first()
-    form = ExpenseForm(request.POST or None, request.FILES or None, instance=editing)
+    today = timezone.localdate()
+    month_raw = request.GET.get("month", "").strip()
+
+    try:
+        month_start = (
+            datetime.strptime(month_raw, "%Y-%m").date().replace(day=1)
+            if month_raw
+            else today.replace(day=1)
+        )
+    except ValueError:
+        month_start = today.replace(day=1)
+
+    if month_start.month == 12:
+        month_end = date(month_start.year + 1, 1, 1) - timedelta(days=1)
+    else:
+        month_end = (
+            date(month_start.year, month_start.month + 1, 1)
+            - timedelta(days=1)
+        )
+
+    selected_category = request.GET.get("category", "").strip()
+    valid_categories = {
+        value for value, _ in Expense.Category.choices
+    }
+
+    if selected_category not in valid_categories:
+        selected_category = ""
+
+    filter_url = (
+        f"{reverse('expenses')}?month={month_start:%Y-%m}"
+    )
+
+    if selected_category:
+        filter_url += f"&category={selected_category}"
+
+    can_manage_all = user_role(request.user) in (
+        Role.SENIOR,
+        Role.BOSS,
+    )
+
+    editing = (
+        Expense.objects
+        .filter(pk=request.GET.get("edit"))
+        .select_related("created_by")
+        .first()
+    )
+
+    if editing and not (
+        can_manage_all
+        or editing.created_by_id == request.user.id
+    ):
+        return HttpResponseForbidden(
+            "Недостаточно прав для редактирования этого расхода"
+        )
+
+    form = ExpenseForm(
+        request.POST or None,
+        request.FILES or None,
+        instance=editing,
+    )
+
     if request.method == "POST":
-        if request.POST.get("action") == "delete":
-            expense = get_object_or_404(Expense, pk=request.POST.get("expense_id"))
-            log_action(request, "expense.delete", expense, f"Удалён расход {expense.title} на {expense.amount} ₽")
+        action = request.POST.get("action", "save")
+
+        if action == "delete":
+            expense = get_object_or_404(
+                Expense,
+                pk=request.POST.get("expense_id"),
+            )
+
+            if not can_manage_all:
+                return HttpResponseForbidden(
+                    "Удалять расходы может только старший администратор "
+                    "или начальник"
+                )
+
+            log_action(
+                request,
+                "expense.delete",
+                expense,
+                f"Удалён расход {expense.title} на {expense.amount} ₽",
+            )
+
             expense.delete()
             messages.success(request, "Расход удалён")
-            return redirect("expenses")
+
+            return redirect(filter_url)
+
         if form.is_valid():
             expense = form.save(commit=False)
-            expense.created_by = request.user
+
+            if expense.pk:
+                if not (
+                    can_manage_all
+                    or expense.created_by_id == request.user.id
+                ):
+                    return HttpResponseForbidden(
+                        "Недостаточно прав для редактирования этого расхода"
+                    )
+            else:
+                expense.created_by = request.user
+
             expense.save()
-            log_action(request, "expense.save", expense, f"Сохранён расход {expense.title} на {expense.amount} ₽")
+
+            log_action(
+                request,
+                "expense.save",
+                expense,
+                f"Сохранён расход {expense.title} на {expense.amount} ₽",
+            )
+
             messages.success(request, "Расход сохранён")
-            return redirect("expenses")
-        messages.error(request, "Проверьте заполнение формы")
-    today = timezone.localdate()
-    month_start = today.replace(day=1)
-    expenses = Expense.objects.select_related("created_by")
-    month_expenses = expenses.filter(date__gte=month_start)
-    total = month_expenses.aggregate(value=Sum("amount"))["value"] or 0
-    household = month_expenses.filter(category=Expense.Category.HOUSEHOLD).aggregate(value=Sum("amount"))["value"] or 0
-    return render(request, "crm/expenses.html", page_context(
-        request, "expenses", form=form, expenses=expenses, editing=editing,
-        total=total, household=household, operations=month_expenses.count(),
-    ))
+            return redirect(filter_url)
+
+        messages.error(
+            request,
+            "Проверьте заполнение формы",
+        )
+
+    expenses = (
+        Expense.objects
+        .select_related("created_by")
+        .filter(
+            date__gte=month_start,
+            date__lte=month_end,
+        )
+    )
+
+    if selected_category:
+        expenses = expenses.filter(
+            category=selected_category,
+        )
+
+    total = (
+        expenses.aggregate(value=Sum("amount"))["value"]
+        or Decimal("0")
+    )
+
+    household = (
+        Expense.objects
+        .filter(
+            date__gte=month_start,
+            date__lte=month_end,
+            category=Expense.Category.HOUSEHOLD,
+        )
+        .aggregate(value=Sum("amount"))["value"]
+        or Decimal("0")
+    )
+
+    return render(
+        request,
+        "crm/expenses.html",
+        page_context(
+            request,
+            "expenses",
+            form=form,
+            expenses=expenses,
+            editing=editing,
+            total=total,
+            household=household,
+            operations=expenses.count(),
+            month_start=month_start,
+            selected_month=month_start.strftime("%Y-%m"),
+            selected_category=selected_category,
+            categories=Expense.Category.choices,
+            can_manage_all=can_manage_all,
+            filter_url=filter_url,
+        ),
+    )
 
 
 def recalculate_places(competition):

@@ -61,6 +61,210 @@ class CrmWorkflowTests(TestCase):
         self.assertRedirects(response, reverse("expenses"))
         self.assertTrue(Expense.objects.filter(title="Вода", created_by=self.admin).exists())
         
+        
+    def test_admin_can_edit_own_expense(self):
+        expense = Expense.objects.create(
+            title="Вода",
+            category=Expense.Category.HOUSEHOLD,
+            amount=Decimal("1000"),
+            date=timezone.localdate(),
+            created_by=self.admin,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            f"{reverse('expenses')}?edit={expense.pk}",
+            {
+                "title": "Вода и стаканы",
+                "category": Expense.Category.HOUSEHOLD,
+                "amount": "1500",
+                "date": timezone.localdate().isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        expense.refresh_from_db()
+
+        self.assertEqual(
+            expense.title,
+            "Вода и стаканы",
+        )
+
+        self.assertEqual(
+            expense.created_by,
+            self.admin,
+        )
+
+
+    def test_admin_cannot_manage_other_expense(self):
+        expense = Expense.objects.create(
+            title="Инвентарь",
+            category=Expense.Category.EQUIPMENT,
+            amount=Decimal("3000"),
+            date=timezone.localdate(),
+            created_by=self.senior,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            f"{reverse('expenses')}?edit={expense.pk}"
+        )
+
+        self.assertEqual(
+            response.status_code,
+            403,
+        )
+
+        response = self.client.post(
+            reverse("expenses"),
+            {
+                "action": "delete",
+                "expense_id": expense.pk,
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            403,
+        )
+
+        self.assertTrue(
+            Expense.objects.filter(
+                pk=expense.pk,
+            ).exists()
+        )
+
+
+    def test_senior_can_manage_any_expense(self):
+        expense = Expense.objects.create(
+            title="Ремонт",
+            category=Expense.Category.REPAIR,
+            amount=Decimal("5000"),
+            date=timezone.localdate(),
+            created_by=self.admin,
+        )
+
+        self.client.login(
+            username="senior",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            f"{reverse('expenses')}?edit={expense.pk}",
+            {
+                "title": "Ремонт зеркала",
+                "category": Expense.Category.REPAIR,
+                "amount": "5500",
+                "date": timezone.localdate().isoformat(),
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
+
+        expense.refresh_from_db()
+
+        self.assertEqual(
+            expense.title,
+            "Ремонт зеркала",
+        )
+
+        self.assertEqual(
+            expense.created_by,
+            self.admin,
+        )
+
+        response = self.client.post(
+            reverse("expenses"),
+            {
+                "action": "delete",
+                "expense_id": expense.pk,
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            302,
+        )
+
+        self.assertFalse(
+            Expense.objects.filter(
+                pk=expense.pk,
+            ).exists()
+        )
+
+
+    def test_expenses_filter_by_month_and_category(self):
+        today = timezone.localdate()
+        previous_month = (
+            today.replace(day=1)
+            - timedelta(days=1)
+        )
+
+        household = Expense.objects.create(
+            title="Вода",
+            category=Expense.Category.HOUSEHOLD,
+            amount=Decimal("1000"),
+            date=today,
+            created_by=self.admin,
+        )
+
+        Expense.objects.create(
+            title="Ремонт",
+            category=Expense.Category.REPAIR,
+            amount=Decimal("2000"),
+            date=today,
+            created_by=self.admin,
+        )
+
+        Expense.objects.create(
+            title="Старый расход",
+            category=Expense.Category.HOUSEHOLD,
+            amount=Decimal("3000"),
+            date=previous_month,
+            created_by=self.admin,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("expenses"),
+            {
+                "month": today.strftime("%Y-%m"),
+                "category": Expense.Category.HOUSEHOLD,
+            },
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        self.assertEqual(
+            list(response.context["expenses"]),
+            [household],
+        )
+
+        self.assertEqual(
+            response.context["total"],
+            Decimal("1000"),
+        )
+
+        
     def test_opening_notifications_marks_them_read(self):
         notification = Notification.objects.create(
             recipient=self.admin,
