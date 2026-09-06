@@ -756,36 +756,36 @@ class CrmWorkflowTests(TestCase):
             kind=Notification.Kind.LEAD_CREATED,
         ).exists())
         
-        def test_editing_lead_does_not_create_notification(self):
-            lead = Lead.objects.create(
-                full_name="Старая заявка",
-                source="VK",
-                status=Lead.Status.NEW,
-            )
+    def test_editing_lead_does_not_create_notification(self):
+        lead = Lead.objects.create(
+            full_name="Старая заявка",
+            source="VK",
+            status=Lead.Status.NEW,
+        )
 
-            self.client.login(username="admin", password="TestPass123!")
+        self.client.login(username="admin", password="TestPass123!")
 
-            response = self.client.post(
-                f"{reverse('applications')}?edit={lead.pk}",
-                {
-                    "full_name": "Обновлённая заявка",
-                    "birth_date": "",
-                    "age_text": "",
-                    "source": "VK",
-                    "phone": "",
-                    "trial_at": "",
-                    "trainer": "",
-                    "group": "",
-                    "status": Lead.Status.NEW,
-                    "comment": "Изменили комментарий",
-                },
-            )
+        response = self.client.post(
+            f"{reverse('applications')}?edit={lead.pk}",
+            {
+                "full_name": "Обновлённая заявка",
+                "birth_date": "",
+                "age_text": "",
+                "source": "VK",
+                "phone": "",
+                "trial_at": "",
+                "trainer": "",
+                "group": "",
+                "status": Lead.Status.NEW,
+                "comment": "Изменили комментарий",
+            },
+        )
 
-            self.assertRedirects(response, reverse("applications"))
+        self.assertRedirects(response, reverse("applications"))
 
-            lead.refresh_from_db()
-            self.assertEqual(lead.full_name, "Обновлённая заявка")
+        lead.refresh_from_db()
+        self.assertEqual(lead.full_name, "Обновлённая заявка")
 
-            self.assertFalse(Notification.objects.filter(
-                kind=Notification.Kind.LEAD_CREATED,
-            ).exists())
+        self.assertFalse(Notification.objects.filter(
+            kind=Notification.Kind.LEAD_CREATED,
+        ).exists())
