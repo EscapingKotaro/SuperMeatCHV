@@ -1055,7 +1055,19 @@ def notifications_page(request):
         )
 
     today = timezone.localdate()
-    
+
+    subscription_count = (
+        Subscription.objects
+        .filter(
+            is_active=True,
+            child__status=Child.Status.ACTIVE,
+            end_date__range=(today, today + timedelta(days=7)),
+        )
+        .values("child_id")
+        .distinct()
+        .count()
+    )
+
     trial_count = Newcomer.objects.filter(
         trial_at__isnull=False,
         attended=False,
