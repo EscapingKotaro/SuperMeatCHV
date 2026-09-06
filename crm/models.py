@@ -1,6 +1,7 @@
 from datetime import timedelta
 from decimal import Decimal
 
+from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 from django.db import models
 from django.db.models import Sum
@@ -881,29 +882,17 @@ class AuditEvent(models.Model):
         return self.description
 
 
-from django.contrib.auth.models import AbstractUser
-from django.db import models
-
-
 class User(AbstractUser):
-    class Role(models.TextChoices):
-        MANAGER = 'manager', 'Менеджер'
-        SENIOR_MANAGER = 'senior_manager', 'Старший менеджер'
-        CHIEF = 'chief', 'Начальник'
-        ADMIN = 'admin', 'Админ'
-
-    role = models.CharField(
-        max_length=20,
-        choices=Role.choices,
-        default=Role.MANAGER,
-        verbose_name='Роль',
+    branch = models.ForeignKey(
+        "Branch",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="user_profiles",
+        verbose_name="филиал",
     )
 
-    
-    branch = models.ForeignKey("Branch", on_delete=models.SET_NULL, blank=True, null=True,
-                               related_name="user_profiles", verbose_name="филиал")
-
     def __str__(self):
-        return f"{self.username} ({self.get_role_display()})"
+        return self.get_full_name() or self.username
 
     
