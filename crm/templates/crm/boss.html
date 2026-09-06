@@ -49,6 +49,161 @@
         <p class="metric-value text-red-600">{{ overdue_tasks }}</p>
     </div>
 </div>
+
+<section id="tasks" class="card mb-4 overflow-hidden">
+    <div class="border-b p-5">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <div>
+                <h2 class="font-extrabold">Контроль задач</h2>
+                <p class="text-xs text-slate-500">Задачи администрации и результаты выполнения</p>
+            </div>
+
+            <button data-modal="task-modal" class="btn btn-dark">
+                <i data-lucide="list-plus"></i>
+                Поставить задачу
+            </button>
+        </div>
+
+        <div class="mt-4 flex flex-wrap gap-2">
+            <a href="?tasks=active#tasks" class="btn {% if task_filter == 'active' %}btn-dark{% else %}btn-soft{% endif %}">
+                В работе · {{ task_active_count }}
+            </a>
+
+            <a href="?tasks=overdue#tasks" class="btn {% if task_filter == 'overdue' %}btn-dark{% else %}btn-soft{% endif %}">
+                Просрочено · {{ task_overdue_count }}
+            </a>
+
+            <a href="?tasks=done#tasks" class="btn {% if task_filter == 'done' %}btn-dark{% else %}btn-soft{% endif %}">
+                Выполнено · {{ task_done_count }}
+            </a>
+
+            <a href="?tasks=all#tasks" class="btn {% if task_filter == 'all' %}btn-dark{% else %}btn-soft{% endif %}">
+                Все · {{ task_total_count }}
+            </a>
+        </div>
+    </div>
+
+    <div class="divide-y">
+        {% for task in displayed_tasks %}
+        <article class="p-5">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+
+                <div class="min-w-0 flex-1">
+                    <div class="flex flex-wrap items-center gap-2">
+                        <b class="text-sm">{{ task.title }}</b>
+
+                        {% if task.is_done %}
+                            <span class="badge bg-emerald-50 text-emerald-700">Выполнено</span>
+                        {% elif task.is_overdue_now %}
+                            <span class="badge bg-red-50 text-red-700">Просрочено</span>
+                        {% else %}
+                            <span class="badge bg-blue-50 text-blue-700">В работе</span>
+                        {% endif %}
+                    </div>
+
+                    {% if task.description %}
+                    <p class="mt-2 text-xs text-slate-500">{{ task.description }}</p>
+                    {% endif %}
+
+                    <div class="mt-3 grid gap-1 text-xs text-slate-500 md:grid-cols-2">
+                        <p>
+                            <b>Исполнитель:</b>
+                            {% if task.assignee %}
+                                {{ task.assignee.get_full_name|default:task.assignee.username }}
+                            {% else %}
+                                вся администрация
+                            {% endif %}
+                        </p>
+
+                        <p>
+                            <b>Автор:</b>
+                            {{ task.created_by.get_full_name|default:task.created_by.username|default:"система" }}
+                        </p>
+
+                        <p>
+                            <b>Когда:</b>
+
+                            {% if task.scheduled_at %}
+                                {{ task.scheduled_at|date:"d.m.Y H:i" }}
+                                {% if task.scheduled_end_at %}–{{ task.scheduled_end_at|date:"H:i" }}{% endif %}
+                            {% elif task.due_date %}
+                                до {{ task.due_date|date:"d.m.Y" }}
+                            {% else %}
+                                без даты
+                            {% endif %}
+                        </p>
+
+                        {% if task.due_date %}
+                        <p><b>Крайний срок:</b> {{ task.due_date|date:"d.m.Y" }}</p>
+                        {% endif %}
+                    </div>
+
+                    {% if task.is_done %}
+                    <div class="mt-4 rounded-xl bg-emerald-50 p-3 text-xs text-emerald-800">
+                        <p>
+                            <b>Выполнил:</b>
+                            {% if task.completed_by %}
+                                {{ task.completed_by.get_full_name|default:task.completed_by.username }}
+                            {% else %}
+                                не зафиксировано
+                            {% endif %}
+
+                            {% if task.done_at %}· {{ task.done_at|date:"d.m.Y H:i" }}{% endif %}
+                        </p>
+
+                        {% if task.completion_comment %}
+                        <p class="mt-2"><b>Комментарий:</b> {{ task.completion_comment }}</p>
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="flex shrink-0 flex-wrap gap-2 lg:max-w-64 lg:justify-end">
+                    <a href="{% url 'calendar' %}?edit={{ task.pk }}" class="btn btn-soft">
+                        <i data-lucide="pencil"></i>
+                        Изменить
+                    </a>
+
+                    {% if task.is_done %}
+                    <form method="post">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="reopen_task">
+                        <input type="hidden" name="task_id" value="{{ task.pk }}">
+                        <input type="hidden" name="task_filter" value="{{ task_filter }}">
+
+                        <button class="btn btn-soft">
+                            <i data-lucide="rotate-ccw"></i>
+                            Вернуть
+                        </button>
+                    </form>
+                    {% endif %}
+
+                    <form method="post" onsubmit="return confirm('Удалить задачу «{{ task.title|escapejs }}»?');">
+                        {% csrf_token %}
+                        <input type="hidden" name="action" value="delete_task">
+                        <input type="hidden" name="task_id" value="{{ task.pk }}">
+                        <input type="hidden" name="task_filter" value="{{ task_filter }}">
+
+                        <button class="btn btn-soft text-red-600">
+                            <i data-lucide="trash-2"></i>
+                            Удалить
+                        </button>
+                    </form>
+                </div>
+
+            </div>
+        </article>
+
+        {% empty %}
+        <div class="p-10 text-center">
+            <i data-lucide="circle-check-big" class="mx-auto h-9 w-9 text-emerald-500"></i>
+            <b class="mt-3 block">Задач в этой категории нет</b>
+            <p class="mt-1 text-xs text-slate-500">Используйте кнопку «Поставить задачу»</p>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
 <div class="grid gap-4 xl:grid-cols-2">
     <section class="card overflow-hidden">
         <div class="p-5">

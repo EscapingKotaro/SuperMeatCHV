@@ -1482,53 +1482,167 @@ def backup_export(request):
 @role_required(2)
 def boss_page(request):
     today = timezone.localdate()
+    now = timezone.now()
     month = today.replace(day=1)
+
     target = RevenueTarget.objects.filter(month=month).first()
     task_form = ManagerTaskForm(prefix="task")
     target_form = RevenueTargetForm(prefix="target", instance=target, initial={"month": month})
+
     if request.method == "POST":
-        if request.POST.get("action") == "create_task":
+        action = request.POST.get("action")
+
+        if action == "create_task":
             task_form = ManagerTaskForm(request.POST, prefix="task")
             if task_form.is_valid():
                 task = task_form.save(commit=False)
                 task.created_by = request.user
                 task.save()
+
                 log_action(request, "task.create", task, f"Поставлена задача «{task.title}»")
                 messages.success(request, "Задача поставлена")
                 return redirect("boss")
-        elif request.POST.get("action") == "set_target":
+
+            messages.error(request, "Проверьте заполнение задачи")
+
+        elif action == "reopen_task":
+            task = get_object_or_404(ManagerTask, pk=request.POST.get("task_id"))
+
+            if task.is_done:
+                toggle_manager_task(task, request.user)
+                log_action(request, "task.reopen", task, f"Задача «{task.title}» возвращена в работу")
+                messages.success(request, "Задача возвращена в работу")
+
+            task_filter = request.POST.get("task_filter", "done")
+            return redirect(f"{reverse('boss')}?tasks={task_filter}#tasks")
+
+        elif action == "delete_task":
+            task = get_object_or_404(ManagerTask, pk=request.POST.get("task_id"))
+            title = task.title
+
+            log_action(request, "task.delete", task, f"Начальник удалил задачу «{title}»")
+            task.delete()
+            messages.success(request, "Задача удалена")
+
+            task_filter = request.POST.get("task_filter", "active")
+            return redirect(f"{reverse('boss')}?tasks={task_filter}#tasks")
+
+        elif action == "set_target":
             target_form = RevenueTargetForm(request.POST, prefix="target", instance=target)
+
             if target_form.is_valid():
                 target = target_form.save(commit=False)
                 target.set_by = request.user
                 target.save()
+
                 log_action(request, "revenue_target.save", target, f"Цель выручки: {target.amount} ₽")
                 messages.success(request, "Цель обновлена")
                 return redirect("boss")
-        messages.error(request, "Проверьте заполнение формы")
+
+            messages.error(request, "Проверьте параметры цели")
+
+    # Задачи
+    all_tasks = list(
+        ManagerTask.objects
+        .select_related("assignee", "created_by", "completed_by")
+        .order_by("-created_at")
+    )
+
+    for task in all_tasks:
+        task.is_overdue_now = False
+
+        if task.is_done:
+            continue
+
+        if task.due_date:
+            task.is_overdue_now = task.due_date < today
+        elif task.scheduled_end_at:
+            task.is_overdue_now = task.scheduled_end_at < now
+        elif task.scheduled_at:
+            task.is_overdue_now = task.scheduled_at < now
+
+    active_tasks = [t for t in all_tasks if not t.is_done and not t.is_overdue_now]
+    overdue_tasks_list = [t for t in all_tasks if t.is_overdue_now]
+    done_tasks = [t for t in all_tasks if t.is_done]
+
+    task_filter = request.GET.get("tasks", "active")
+    if task_filter not in {"active", "overdue", "done", "all"}:
+        task_filter = "active"
+
+    displayed_tasks = {
+        "active": active_tasks,
+        "overdue": overdue_tasks_list,
+        "done": done_tasks,
+        "all": all_tasks,
+    }[task_filter]
+
+    # Финансы
     revenue = Payment.objects.filter(date__gte=month).aggregate(value=Sum("amount"))["value"] or 0
     target_amount = target.amount if target else Decimal("0")
     target_percent = min(100, round(revenue * 100 / target_amount)) if target_amount else 0
-    salaries = SalaryPayout.objects.filter(month=month).aggregate(value=Sum("amount"))["value"] or 0
+
+    salaries = (
+        SalaryPayout.objects
+        .filter(month=month)
+        .aggregate(value=Sum("amount"))["value"]
+        or 0
+    )
+
+    # KPI тренеров
     trainer_rows = []
+
     for trainer in Trainer.objects.filter(is_active=True):
         children = Child.objects.filter(group__trainer=trainer, status=Child.Status.ACTIVE)
-        marked = Attendance.objects.filter(child__in=children, date__gte=month, status__in=[Attendance.Status.PRESENT, Attendance.Status.ABSENT]).count()
-        present = Attendance.objects.filter(child__in=children, date__gte=month, status=Attendance.Status.PRESENT).count()
-        trial = Child.objects.filter(group__trainer=trainer, status=Child.Status.TRIAL).count()
-        lost = Child.objects.filter(group__trainer=trainer, status=Child.Status.LOST).count()
-        trainer_rows.append({"trainer": trainer, "children": children.count(), "trial": trial, "lost": lost, "attendance": round(present*100/marked) if marked else 0})
+
+        marked = Attendance.objects.filter(
+            child__in=children,
+            date__gte=month,
+            status__in=[Attendance.Status.PRESENT, Attendance.Status.ABSENT],
+        ).count()
+
+        present = Attendance.objects.filter(
+            child__in=children,
+            date__gte=month,
+            status=Attendance.Status.PRESENT,
+        ).count()
+
+        trainer_rows.append({
+            "trainer": trainer,
+            "children": children.count(),
+            "trial": Child.objects.filter(group__trainer=trainer, status=Child.Status.TRIAL).count(),
+            "lost": Child.objects.filter(group__trainer=trainer, status=Child.Status.LOST).count(),
+            "attendance": round(present * 100 / marked) if marked else 0,
+        })
+
     trainer_rows.sort(key=lambda row: row["attendance"], reverse=True)
+
     all_logs = request.GET.get("all_logs") == "1"
     events = AuditEvent.objects.select_related("actor")
     if not all_logs:
         events = events[:12]
+
     return render(request, "crm/boss.html", page_context(
-        request, "boss", revenue=revenue, target=target, target_amount=target_amount,
-        target_percent=target_percent, salaries=salaries, active_count=Child.objects.filter(status=Child.Status.ACTIVE).count(),
-        trainer_rows=trainer_rows, events=events, all_logs=all_logs,
-        overdue_tasks=ManagerTask.objects.filter(is_done=False, due_date__lt=today).count(),
-        task_form=task_form, target_form=target_form,
+        request, "boss",
+        revenue=revenue,
+        target=target,
+        target_amount=target_amount,
+        target_percent=target_percent,
+        salaries=salaries,
+        active_count=Child.objects.filter(status=Child.Status.ACTIVE).count(),
+        trainer_rows=trainer_rows,
+        events=events,
+        all_logs=all_logs,
+
+        overdue_tasks=len(overdue_tasks_list),
+        displayed_tasks=displayed_tasks,
+        task_filter=task_filter,
+        task_active_count=len(active_tasks),
+        task_overdue_count=len(overdue_tasks_list),
+        task_done_count=len(done_tasks),
+        task_total_count=len(all_tasks),
+
+        task_form=task_form,
+        target_form=target_form,
     ))
 
 
