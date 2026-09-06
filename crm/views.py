@@ -913,6 +913,25 @@ def boss_ids():
         .values_list("user_id", flat=True)
     )
 
+def notify_admins(actor, kind, message, url=""):
+    recipients = (
+        get_user_model().objects
+        .filter(is_active=True, is_staff=True)
+        .exclude(pk=actor.pk)
+        .values_list("id", flat=True)
+    )
+
+    Notification.objects.bulk_create([
+        Notification(
+            recipient_id=user_id,
+            actor=actor,
+            kind=kind,
+            message=message,
+            url=url,
+        )
+        for user_id in recipients
+    ])
+
 
 def notify_task(task, actor, kind):
     recipients = task_recipient_ids(task)
@@ -1049,18 +1068,12 @@ def notifications_page(request):
         trial_from__lte=today,
     )
 
-    imported_leads = Lead.objects.filter(
-        imported_from_ad=True,
-        status=Lead.Status.NEW,
-    )
-
     open_task_count = task_qs.count()
 
     return render(request, "crm/notifications.html", page_context(
         request, "notifications",
         alerts=alerts,
         trials=trials,
-        imported_leads=imported_leads,
         event_notifications=event_notifications,
         unread_count=unread_count,
         open_task_count=open_task_count,
@@ -1068,7 +1081,6 @@ def notifications_page(request):
             open_task_count
             + len(alerts)
             + trials.count()
-            + imported_leads.count()
         ),
         today=today,
     ))
@@ -1093,6 +1105,14 @@ def applications_page(request):
             if parsed.get("full_name"):
                 parsed.setdefault("source", "VK Реклама")
                 lead = Lead.objects.create(imported_from_ad=True, **parsed)
+
+                notify_admins(
+                    request.user,
+                    Notification.Kind.LEAD_CREATED,
+                    f"Новая заявка: {lead.full_name}",
+                    f"{reverse('applications')}?edit={lead.pk}",
+                )
+
                 log_action(request, "lead.import", lead, f"Импортирована рекламная заявка {lead.full_name}")
                 messages.success(request, "Заявка распознана и выделена как рекламная")
             else:
@@ -1119,6 +1139,15 @@ def applications_page(request):
             return redirect("newcomers")
         if form.is_valid():
             lead = form.save()
+
+            if not editing:
+                notify_admins(
+                    request.user,
+                    Notification.Kind.LEAD_CREATED,
+                    f"Новая заявка: {lead.full_name}",
+                    f"{reverse('applications')}?edit={lead.pk}",
+                )
+
             log_action(request, "lead.save", lead, f"Сохранена заявка {lead.full_name}")
             messages.success(request, "Заявка сохранена")
             return redirect("applications")

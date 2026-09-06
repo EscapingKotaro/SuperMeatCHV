@@ -714,3 +714,78 @@ class CrmWorkflowTests(TestCase):
         })
         self.assertRedirects(response, reverse("attendance"))
         self.assertGreater(self.client.session.get_expiry_age(), 60 * 60 * 24 * 13)
+        
+        
+    def test_new_lead_creates_notification(self):
+        self.client.login(username="admin", password="TestPass123!")
+
+        response = self.client.post(reverse("applications"), {
+            "full_name": "Соколова Мария",
+            "birth_date": "",
+            "age_text": "10 лет",
+            "source": "VK",
+            "phone": "79990000000",
+            "trial_at": "",
+            "trainer": "",
+            "group": "",
+            "status": Lead.Status.NEW,
+            "comment": "",
+        })
+
+        self.assertRedirects(response, reverse("applications"))
+
+        lead = Lead.objects.get(full_name="Соколова Мария")
+
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.boss,
+            actor=self.admin,
+            kind=Notification.Kind.LEAD_CREATED,
+            message__contains=lead.full_name,
+            url=f"{reverse('applications')}?edit={lead.pk}",
+            read_at__isnull=True,
+        ).exists())
+
+        self.assertTrue(Notification.objects.filter(
+            recipient=self.senior,
+            actor=self.admin,
+            kind=Notification.Kind.LEAD_CREATED,
+        ).exists())
+
+        self.assertFalse(Notification.objects.filter(
+            recipient=self.admin,
+            kind=Notification.Kind.LEAD_CREATED,
+        ).exists())
+        
+        def test_editing_lead_does_not_create_notification(self):
+            lead = Lead.objects.create(
+                full_name="Старая заявка",
+                source="VK",
+                status=Lead.Status.NEW,
+            )
+
+            self.client.login(username="admin", password="TestPass123!")
+
+            response = self.client.post(
+                f"{reverse('applications')}?edit={lead.pk}",
+                {
+                    "full_name": "Обновлённая заявка",
+                    "birth_date": "",
+                    "age_text": "",
+                    "source": "VK",
+                    "phone": "",
+                    "trial_at": "",
+                    "trainer": "",
+                    "group": "",
+                    "status": Lead.Status.NEW,
+                    "comment": "Изменили комментарий",
+                },
+            )
+
+            self.assertRedirects(response, reverse("applications"))
+
+            lead.refresh_from_db()
+            self.assertEqual(lead.full_name, "Обновлённая заявка")
+
+            self.assertFalse(Notification.objects.filter(
+                kind=Notification.Kind.LEAD_CREATED,
+            ).exists())

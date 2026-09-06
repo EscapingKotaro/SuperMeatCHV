@@ -66,6 +66,8 @@
                             bg-red-50 text-red-600
                         {% elif notification.kind == 'task_reopened' %}
                             bg-amber-50 text-amber-600
+                        {% elif notification.kind == 'lead_created' %}
+                            bg-cyan-50 text-cyan-600
                         {% else %}
                             bg-blue-50 text-blue-600
                         {% endif %}">
@@ -76,6 +78,8 @@
                             <i data-lucide="trash-2" class="h-4 w-4"></i>
                         {% elif notification.kind == 'task_reopened' %}
                             <i data-lucide="rotate-ccw" class="h-4 w-4"></i>
+                        {% elif notification.kind == 'lead_created' %}
+                            <i data-lucide="inbox" class="h-4 w-4"></i>
                         {% else %}
                             <i data-lucide="bell" class="h-4 w-4"></i>
                         {% endif %}
@@ -102,9 +106,18 @@
                         </p>
                         {% endif %}
 
-                        {% if notification.task %}
+                        {% if notification.url %}
+                        <a href="{{ notification.url }}"
+                        class="mt-2 inline-block text-xs font-semibold text-blue-600">
+                            {% if notification.kind == 'lead_created' %}
+                                Открыть заявку
+                            {% else %}
+                                Открыть
+                            {% endif %}
+                        </a>
+                        {% elif notification.task %}
                         <a href="{% url 'calendar' %}"
-                           class="mt-2 inline-block text-xs font-semibold text-blue-600">
+                        class="mt-2 inline-block text-xs font-semibold text-blue-600">
                             Открыть календарь
                         </a>
                         {% endif %}
@@ -146,24 +159,7 @@
         {% endfor %}
 
 
-        <!-- ЗАЯВКИ -->
-        {% for lead in imported_leads %}
-        <article class="card border-l-4 border-l-cyan-500 p-4">
-            <b>Новая заявка из рекламы: {{ lead.full_name }}</b>
-
-            <p class="text-xs text-slate-500">
-                {{ lead.phone }} · {{ lead.source }}
-            </p>
-
-            <a href="{% url 'applications' %}?edit={{ lead.pk }}"
-               class="btn btn-soft mt-2">
-                Обработать
-            </a>
-        </article>
-        {% endfor %}
-
-
-        {% if not event_notifications and not alerts and not trials and not imported_leads %}
+        {% if not event_notifications and not alerts and not trials %}
         <div class="card p-12 text-center">
             <i data-lucide="circle-check-big"
                class="mx-auto h-10 w-10 text-emerald-500"></i>

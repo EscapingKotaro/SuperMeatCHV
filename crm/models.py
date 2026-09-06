@@ -753,6 +753,7 @@ class Notification(models.Model):
         TASK_COMPLETED = "task_completed", "Задача выполнена"
         TASK_REOPENED = "task_reopened", "Задача возвращена"
         TASK_DELETED = "task_deleted", "Задача удалена"
+        LEAD_CREATED = "lead_created", "Новая заявка"
 
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
@@ -770,6 +771,7 @@ class Notification(models.Model):
     )
     kind = models.CharField("Тип", max_length=30, choices=Kind.choices)
     message = models.CharField("Текст", max_length=500)
+    url = models.CharField("Ссылка", max_length=500, blank=True)
     read_at = models.DateTimeField("Прочитано", null=True, blank=True)
     created_at = models.DateTimeField("Создано", auto_now_add=True)
 
