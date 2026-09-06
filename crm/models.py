@@ -488,8 +488,11 @@ class Competition(models.Model):
     name = models.CharField("Название", max_length=200)
     date = models.DateField("Дата")
     city = models.CharField("Город", max_length=100, blank=True)
-    is_internal = models.BooleanField("Внутриклубные", default=True,
-                                      help_text="Внутриклубные итоги попадают в карточку автоматически")
+    is_internal = models.BooleanField(
+        "Внутриклубное",
+        default=True,
+        help_text="Снимите флажок, если соревнование выездное",
+    )
 
     class Meta:
         verbose_name = "Соревнование"
@@ -498,6 +501,140 @@ class Competition(models.Model):
 
     def __str__(self):
         return f"{self.name} · {self.date:%d.%m.%y}"
+
+
+class Apparatus(models.Model):
+    competition = models.ForeignKey(
+        Competition,
+        on_delete=models.CASCADE,
+        related_name="apparatus",
+        verbose_name="соревнование",
+    )
+    name = models.CharField("Дисциплина", max_length=100)
+
+    # Техническое поле. Пользователь его не заполняет.
+    order = models.PositiveSmallIntegerField(
+        "Порядок",
+        default=0,
+    )
+
+    class Meta:
+        verbose_name = "Дисциплина"
+        verbose_name_plural = "Дисциплины"
+        ordering = ("order", "pk")
+
+    def __str__(self):
+        return self.name
+
+
+class CompetitionEntry(models.Model):
+    child = models.ForeignKey(
+        Child,
+        on_delete=models.CASCADE,
+        related_name="competition_entries",
+        verbose_name="ребёнок",
+    )
+    competition = models.ForeignKey(
+        Competition,
+        on_delete=models.CASCADE,
+        related_name="entries",
+        verbose_name="соревнование",
+    )
+    category = models.CharField(
+        "Категория/группа",
+        max_length=100,
+        blank=True,
+        help_text="Внутри категории считается место",
+    )
+    rank = models.CharField(
+        "Выполняемый разряд",
+        max_length=50,
+        blank=True,
+    )
+    place = models.PositiveSmallIntegerField(
+        "Место",
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        verbose_name = "Итог соревнования"
+        verbose_name_plural = "Итоги соревнований"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["child", "competition", "category"],
+                name="unique_child_competition_category",
+            ),
+        ]
+
+    def total_points(self):
+        apparatus_ids = list(
+            self.competition.apparatus.values_list(
+                "id",
+                flat=True,
+            )
+        )
+
+        if not apparatus_ids:
+            return None
+
+        scores = list(
+            self.scores.filter(
+                apparatus_id__in=apparatus_ids,
+            )
+        )
+
+        if len(scores) != len(apparatus_ids):
+            return None
+
+        if any(score.points is None for score in scores):
+            return None
+
+        return sum(
+            (score.points for score in scores),
+            Decimal("0"),
+        )
+
+    def scores_complete(self):
+        return self.total_points() is not None
+
+    def __str__(self):
+        return f"{self.child} · {self.competition}"
+
+
+class ApparatusScore(models.Model):
+    entry = models.ForeignKey(
+        CompetitionEntry,
+        on_delete=models.CASCADE,
+        related_name="scores",
+        verbose_name="итог",
+    )
+    apparatus = models.ForeignKey(
+        Apparatus,
+        on_delete=models.CASCADE,
+        verbose_name="дисциплина",
+    )
+    points = models.DecimalField(
+        "Баллы",
+        max_digits=12,
+        decimal_places=3,
+        blank=True,
+        null=True,
+    )
+
+    class Meta:
+        verbose_name = "Балл за дисциплину"
+        verbose_name_plural = "Баллы за дисциплины"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["entry", "apparatus"],
+                name="unique_entry_apparatus",
+            ),
+        ]
+
+    def __str__(self):
+        value = "—" if self.points is None else self.points
+        return f"{self.entry} · {self.apparatus} · {value}"
 
 
 class Apparatus(models.Model):

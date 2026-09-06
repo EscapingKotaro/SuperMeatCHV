@@ -8,13 +8,17 @@ from django.contrib import messages
 from django.contrib.auth import authenticate, get_user_model, login, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
 from django.core.management import call_command
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Max, Q, Sum
+from django.db import transaction
 from django.http import HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from openpyxl.utils import get_column_letter
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
+
+
 
 from .forms import (
     ApparatusForm,
@@ -766,128 +770,744 @@ def expenses_page(request):
 
 
 def recalculate_places(competition):
-    for category in competition.entries.values_list("category", flat=True).distinct():
-        entries = list(competition.entries.filter(category=category))
-        entries.sort(key=lambda entry: entry.total_points(), reverse=True)
+    categories = (
+        competition.entries
+        .values_list("category", flat=True)
+        .distinct()
+    )
+
+    for category in categories:
+        entries = list(
+            competition.entries
+            .filter(category=category)
+            .select_related("competition")
+        )
+
+        completed = []
+
+        for entry in entries:
+            total = entry.total_points()
+
+            if total is None:
+                CompetitionEntry.objects.filter(
+                    pk=entry.pk,
+                ).update(place=None)
+
+                entry.place = None
+                continue
+
+            completed.append((entry, total))
+
+        completed.sort(
+            key=lambda item: item[1],
+            reverse=True,
+        )
+
         last_total = None
         last_place = 0
-        for index, entry in enumerate(entries, 1):
-            total = entry.total_points()
-            place = last_place if total == last_total else index
-            CompetitionEntry.objects.filter(pk=entry.pk).update(place=place)
-            last_total, last_place = total, place
+
+        for index, (entry, total) in enumerate(
+            completed,
+            start=1,
+        ):
+            if last_total is not None and total == last_total:
+                place = last_place
+            else:
+                place = index
+
+            CompetitionEntry.objects.filter(
+                pk=entry.pk,
+            ).update(place=place)
+
+            entry.place = place
+            last_total = total
+            last_place = place
 
 
 @login_required
 def competitions_page(request):
     competitions = Competition.objects.all()
-    selected = competitions.filter(pk=request.GET.get("competition")).first() or competitions.first()
-    editing_competition = competitions.filter(pk=request.GET.get("edit_competition")).first()
-    editing_apparatus = Apparatus.objects.filter(pk=request.GET.get("edit_apparatus"), competition=selected).first() if selected else None
-    competition_form = CompetitionForm(prefix="competition", instance=editing_competition)
-    entry_form = CompetitionEntryForm(prefix="entry")
-    apparatus_form = ApparatusForm(prefix="apparatus", instance=editing_apparatus)
+
+    selected = (
+        competitions.filter(
+            pk=request.GET.get("competition"),
+        ).first()
+        or competitions.first()
+    )
+
+    editing_competition = competitions.filter(
+        pk=request.GET.get("edit_competition"),
+    ).first()
+
+    editing_apparatus = None
+    editing_entry = None
+
+    if selected:
+        editing_apparatus = selected.apparatus.filter(
+            pk=request.GET.get("edit_apparatus"),
+        ).first()
+
+        editing_entry = selected.entries.filter(
+            pk=request.GET.get("edit_entry"),
+        ).first()
+
+    competition_form = CompetitionForm(
+        prefix="competition",
+        instance=editing_competition,
+    )
+
+    apparatus_form = ApparatusForm(
+        prefix="apparatus",
+        instance=editing_apparatus,
+    )
+
+    entry_form = CompetitionEntryForm(
+        prefix="entry",
+        instance=editing_entry,
+    )
+
+    score_draft = {}
+
     if request.method == "POST":
         action = request.POST.get("action")
+
         if action == "create_competition":
-            target_competition = competitions.filter(pk=request.POST.get("competition_id")).first()
-            competition_form = CompetitionForm(request.POST, prefix="competition", instance=target_competition)
+            competition_id = request.POST.get(
+                "competition_id"
+            )
+
+            target = (
+                competitions.filter(
+                    pk=competition_id,
+                ).first()
+                if competition_id
+                else None
+            )
+
+            competition_form = CompetitionForm(
+                request.POST,
+                prefix="competition",
+                instance=target,
+            )
+
             if competition_form.is_valid():
                 selected = competition_form.save()
-                if not target_competition:
-                    for order, name in enumerate(("Прыжок", "Брусья", "Бревно", "Вольные")):
-                        Apparatus.objects.create(competition=selected, name=name, order=order)
-                log_action(request, "competition.save", selected, f"Сохранено соревнование {selected.name}")
-                messages.success(request, "Соревнование сохранено")
-                return redirect(f"{reverse('competitions')}?competition={selected.pk}")
+
+                if target is None:
+                    default_apparatus = (
+                        "Прыжок",
+                        "Брусья",
+                        "Бревно",
+                        "Вольные",
+                    )
+
+                    for order, name in enumerate(
+                        default_apparatus
+                    ):
+                        Apparatus.objects.create(
+                            competition=selected,
+                            name=name,
+                            order=order,
+                        )
+
+                log_action(
+                    request,
+                    "competition.save",
+                    selected,
+                    f"Сохранено соревнование {selected.name}",
+                )
+
+                messages.success(
+                    request,
+                    "Соревнование сохранено",
+                )
+
+                return redirect(
+                    f"{reverse('competitions')}"
+                    f"?competition={selected.pk}"
+                )
+
+            messages.error(
+                request,
+                "Проверьте данные соревнования",
+            )
+
+        elif action == "delete_competition":
+            competition = get_object_or_404(
+                Competition,
+                pk=request.POST.get("competition_id"),
+            )
+
+            name = competition.name
+
+            log_action(
+                request,
+                "competition.delete",
+                competition,
+                f"Удалено соревнование {name}",
+            )
+
+            competition.delete()
+
+            messages.success(
+                request,
+                f"Соревнование «{name}» удалено",
+            )
+
+            return redirect("competitions")
+
         elif action == "save_apparatus" and selected:
-            target_apparatus = selected.apparatus.filter(pk=request.POST.get("apparatus_id")).first()
-            apparatus_form = ApparatusForm(request.POST, prefix="apparatus", instance=target_apparatus)
+            apparatus_id = request.POST.get(
+                "apparatus_id"
+            )
+
+            target = (
+                selected.apparatus.filter(
+                    pk=apparatus_id,
+                ).first()
+                if apparatus_id
+                else None
+            )
+
+            apparatus_form = ApparatusForm(
+                request.POST,
+                prefix="apparatus",
+                instance=target,
+            )
+
             if apparatus_form.is_valid():
-                apparatus_item = apparatus_form.save(commit=False)
+                is_new = target is None
+
+                apparatus_item = apparatus_form.save(
+                    commit=False
+                )
+
                 apparatus_item.competition = selected
+
+                if is_new:
+                    max_order = (
+                        selected.apparatus.aggregate(
+                            value=Max("order")
+                        )["value"]
+                    )
+
+                    apparatus_item.order = (
+                        max_order + 1
+                        if max_order is not None
+                        else 0
+                    )
+
                 apparatus_item.save()
-                for entry in selected.entries.all():
-                    ApparatusScore.objects.get_or_create(entry=entry, apparatus=apparatus_item, defaults={"points": 0})
-                log_action(request, "competition.apparatus", apparatus_item, f"Сохранена дисциплина {apparatus_item.name}")
-                messages.success(request, "Дисциплина сохранена")
-                return redirect(f"{reverse('competitions')}?competition={selected.pk}")
+
+                if is_new:
+                    for entry in selected.entries.all():
+                        ApparatusScore.objects.get_or_create(
+                            entry=entry,
+                            apparatus=apparatus_item,
+                            defaults={
+                                "points": None,
+                            },
+                        )
+
+                    recalculate_places(selected)
+
+                log_action(
+                    request,
+                    "competition.apparatus",
+                    apparatus_item,
+                    (
+                        "Сохранена дисциплина "
+                        f"{apparatus_item.name}"
+                    ),
+                )
+
+                messages.success(
+                    request,
+                    "Дисциплина сохранена",
+                )
+
+                return redirect(
+                    f"{reverse('competitions')}"
+                    f"?competition={selected.pk}"
+                )
+
+            messages.error(
+                request,
+                "Проверьте название дисциплины",
+            )
+
         elif action == "delete_apparatus" and selected:
-            apparatus_item = get_object_or_404(selected.apparatus, pk=request.POST.get("apparatus_id"))
-            description = apparatus_item.name
+            apparatus_item = get_object_or_404(
+                selected.apparatus,
+                pk=request.POST.get("apparatus_id"),
+            )
+
+            name = apparatus_item.name
+
             apparatus_item.delete()
-            log_action(request, "competition.apparatus.delete", selected, f"Удалена дисциплина {description}")
-            messages.success(request, "Дисциплина и её баллы удалены")
-            return redirect(f"{reverse('competitions')}?competition={selected.pk}")
-        elif action == "add_entry" and selected:
-            entry_form = CompetitionEntryForm(request.POST, prefix="entry")
+
+            recalculate_places(selected)
+
+            log_action(
+                request,
+                "competition.apparatus.delete",
+                selected,
+                f"Удалена дисциплина {name}",
+            )
+
+            messages.success(
+                request,
+                "Дисциплина и её баллы удалены",
+            )
+
+            return redirect(
+                f"{reverse('competitions')}"
+                f"?competition={selected.pk}"
+            )
+
+        elif action == "save_entry" and selected:
+            entry_id = request.POST.get("entry_id")
+
+            target = (
+                get_object_or_404(
+                    selected.entries,
+                    pk=entry_id,
+                )
+                if entry_id
+                else None
+            )
+
+            entry_form = CompetitionEntryForm(
+                request.POST,
+                prefix="entry",
+                instance=target,
+            )
+
             if entry_form.is_valid():
-                entry = entry_form.save(commit=False)
+                entry = entry_form.save(
+                    commit=False
+                )
+
                 entry.competition = selected
                 entry.save()
-                for apparatus in selected.apparatus.all():
-                    ApparatusScore.objects.create(entry=entry, apparatus=apparatus, points=0)
-                log_action(request, "competition.entry", entry, f"Добавлен участник {entry.child} в {selected.name}")
-                messages.success(request, "Участник добавлен")
-                return redirect(f"{reverse('competitions')}?competition={selected.pk}")
-        elif action == "save_scores" and selected:
-            for entry in selected.entries.all():
-                for apparatus in selected.apparatus.all():
-                    key = f"score_{entry.pk}_{apparatus.pk}"
-                    try:
-                        points = Decimal(request.POST.get(key, "0").replace(",", "."))
-                    except InvalidOperation:
-                        points = Decimal("0")
-                    ApparatusScore.objects.update_or_create(entry=entry, apparatus=apparatus, defaults={"points": points})
+
+                for apparatus_item in selected.apparatus.all():
+                    ApparatusScore.objects.get_or_create(
+                        entry=entry,
+                        apparatus=apparatus_item,
+                        defaults={
+                            "points": None,
+                        },
+                    )
+
+                recalculate_places(selected)
+
+                log_action(
+                    request,
+                    "competition.entry",
+                    entry,
+                    (
+                        f"Сохранён участник "
+                        f"{entry.child} в {selected.name}"
+                    ),
+                )
+
+                messages.success(
+                    request,
+                    "Участник сохранён",
+                )
+
+                return redirect(
+                    f"{reverse('competitions')}"
+                    f"?competition={selected.pk}"
+                )
+
+            messages.error(
+                request,
+                "Проверьте данные участника",
+            )
+
+        elif action == "delete_entry" and selected:
+            entry = get_object_or_404(
+                selected.entries,
+                pk=request.POST.get("entry_id"),
+            )
+
+            child_name = str(entry.child)
+
+            log_action(
+                request,
+                "competition.entry.delete",
+                entry,
+                (
+                    f"Удалён участник {child_name} "
+                    f"из {selected.name}"
+                ),
+            )
+
+            entry.delete()
+
             recalculate_places(selected)
-            log_action(request, "competition.scores", selected, f"Обновлены результаты {selected.name}")
-            messages.success(request, "Баллы сохранены, места пересчитаны")
-            return redirect(f"{reverse('competitions')}?competition={selected.pk}")
-        messages.error(request, "Проверьте заполнение формы")
+
+            messages.success(
+                request,
+                "Участник удалён",
+            )
+
+            return redirect(
+                f"{reverse('competitions')}"
+                f"?competition={selected.pk}"
+            )
+
+        elif action == "save_scores" and selected:
+            entries = list(
+                selected.entries.all()
+            )
+
+            apparatus_items = list(
+                selected.apparatus.all()
+            )
+
+            parsed_scores = []
+            errors = []
+
+            for entry in entries:
+                for apparatus_item in apparatus_items:
+                    key = (
+                        f"score_{entry.pk}_"
+                        f"{apparatus_item.pk}"
+                    )
+
+                    raw = request.POST.get(
+                        key,
+                        "",
+                    ).strip()
+
+                    score_draft[key] = raw
+
+                    if raw == "":
+                        parsed_scores.append(
+                            (
+                                entry,
+                                apparatus_item,
+                                None,
+                            )
+                        )
+                        continue
+
+                    normalized = raw.replace(
+                        ",",
+                        ".",
+                    )
+
+                    try:
+                        points = Decimal(normalized)
+                    except InvalidOperation:
+                        errors.append(
+                            (
+                                f"{entry.child}: "
+                                f"«{apparatus_item.name}» — "
+                                "некорректный балл"
+                            )
+                        )
+                        continue
+
+                    if not points.is_finite():
+                        errors.append(
+                            (
+                                f"{entry.child}: "
+                                f"«{apparatus_item.name}» — "
+                                "некорректный балл"
+                            )
+                        )
+                        continue
+
+                    if points < 0:
+                        errors.append(
+                            (
+                                f"{entry.child}: "
+                                f"«{apparatus_item.name}» — "
+                                "балл не может быть отрицательным"
+                            )
+                        )
+                        continue
+
+                    normalized_points = points.normalize()
+
+                    decimal_places = max(
+                        -normalized_points.as_tuple().exponent,
+                        0,
+                    )
+
+                    if decimal_places > 3:
+                        errors.append(
+                            (
+                                f"{entry.child}: "
+                                f"«{apparatus_item.name}» — "
+                                "не более 3 знаков после запятой"
+                            )
+                        )
+                        continue
+
+                    parsed_scores.append(
+                        (
+                            entry,
+                            apparatus_item,
+                            points,
+                        )
+                    )
+
+            if errors:
+                for error in errors[:5]:
+                    messages.error(
+                        request,
+                        error,
+                    )
+
+                if len(errors) > 5:
+                    messages.error(
+                        request,
+                        (
+                            f"И ещё ошибок: "
+                            f"{len(errors) - 5}"
+                        ),
+                    )
+
+            else:
+                with transaction.atomic():
+                    for (
+                        entry,
+                        apparatus_item,
+                        points,
+                    ) in parsed_scores:
+                        ApparatusScore.objects.update_or_create(
+                            entry=entry,
+                            apparatus=apparatus_item,
+                            defaults={
+                                "points": points,
+                            },
+                        )
+
+                    recalculate_places(selected)
+
+                log_action(
+                    request,
+                    "competition.scores",
+                    selected,
+                    (
+                        f"Обновлены результаты "
+                        f"{selected.name}"
+                    ),
+                )
+
+                messages.success(
+                    request,
+                    "Баллы сохранены, места пересчитаны",
+                )
+
+                return redirect(
+                    f"{reverse('competitions')}"
+                    f"?competition={selected.pk}"
+                )
+
+    apparatus = (
+        list(selected.apparatus.all())
+        if selected
+        else []
+    )
+
     entry_rows = []
-    apparatus = list(selected.apparatus.all()) if selected else []
+
     if selected:
-        for entry in selected.entries.select_related("child").prefetch_related("scores"):
-            score_map = {score.apparatus_id: score for score in entry.scores.all()}
+        entries = (
+            selected.entries
+            .select_related("child", "competition")
+            .prefetch_related("scores")
+        )
+
+        for entry in entries:
+            score_map = {
+                score.apparatus_id: score
+                for score in entry.scores.all()
+            }
+
+            score_cells = []
+
+            for apparatus_item in apparatus:
+                key = (
+                    f"score_{entry.pk}_"
+                    f"{apparatus_item.pk}"
+                )
+
+                if key in score_draft:
+                    value = score_draft[key]
+                else:
+                    score = score_map.get(
+                        apparatus_item.pk
+                    )
+
+                    if (
+                        score is None
+                        or score.points is None
+                    ):
+                        value = ""
+                    else:
+                        value = f"{score.points:.3f}"
+
+                score_cells.append({
+                    "apparatus_id": apparatus_item.pk,
+                    "value": value,
+                })
+
+            total = entry.total_points()
+
             entry_rows.append({
                 "entry": entry,
-                "scores": [
-                    {"apparatus_id": item.pk, "points": score_map[item.pk].points if item.pk in score_map else Decimal("0")}
-                    for item in apparatus
-                ],
-                "total": entry.total_points(),
+                "scores": score_cells,
+                "total": total,
+                "complete": total is not None,
             })
-    return render(request, "crm/competitions.html", page_context(
-        request, "competitions", competitions=competitions, selected=selected,
-        apparatus=apparatus, entry_rows=entry_rows, competition_form=competition_form,
-        entry_form=entry_form, apparatus_form=apparatus_form,
-        editing_competition=editing_competition, editing_apparatus=editing_apparatus,
-    ))
+
+    return render(
+        request,
+        "crm/competitions.html",
+        page_context(
+            request,
+            "competitions",
+            competitions=competitions,
+            selected=selected,
+            apparatus=apparatus,
+            entry_rows=entry_rows,
+            competition_form=competition_form,
+            entry_form=entry_form,
+            apparatus_form=apparatus_form,
+            editing_competition=editing_competition,
+            editing_apparatus=editing_apparatus,
+            editing_entry=editing_entry,
+            table_colspan=7 + len(apparatus),
+        ),
+    )
 
 
 @login_required
 def competition_export(request, pk):
-    competition = get_object_or_404(Competition, pk=pk)
-    apparatus = list(competition.apparatus.all())
+    competition = get_object_or_404(
+        Competition,
+        pk=pk,
+    )
+
+    apparatus = list(
+        competition.apparatus.all()
+    )
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Результаты"
-    headers = ["Спортсмен", "Год рождения", "Разряд", "Категория", *[a.name for a in apparatus], "Итого", "Место"]
+
+    headers = [
+        "Спортсмен",
+        "Год рождения",
+        "Разряд",
+        "Категория",
+        *[item.name for item in apparatus],
+        "Итого",
+        "Место",
+    ]
+
     ws.append(headers)
+
     for cell in ws[1]:
-        cell.font = Font(bold=True, color="FFFFFF")
-        cell.fill = PatternFill("solid", fgColor="17202A")
-        cell.alignment = Alignment(horizontal="center")
-    for entry in competition.entries.select_related("child").prefetch_related("scores"):
-        score_map = {score.apparatus_id: score.points for score in entry.scores.all()}
-        ws.append([str(entry.child), entry.child.birth_year, entry.rank, entry.category, *[float(score_map.get(a.pk, 0)) for a in apparatus], float(entry.total_points()), entry.place or ""])
-    widths = [28, 14, 14, 18, *([12] * len(apparatus)), 12, 10]
-    for index, width in enumerate(widths, 1):
-        ws.column_dimensions[chr(64 + index)].width = width
-    response = HttpResponse(content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
-    response["Content-Disposition"] = f'attachment; filename="competition-{competition.pk}.xlsx"'
+        cell.font = Font(
+            bold=True,
+            color="FFFFFF",
+        )
+        cell.fill = PatternFill(
+            "solid",
+            fgColor="17202A",
+        )
+        cell.alignment = Alignment(
+            horizontal="center",
+        )
+
+    entries = (
+        competition.entries
+        .select_related("child", "competition")
+        .prefetch_related("scores")
+    )
+
+    for entry in entries:
+        score_map = {
+            score.apparatus_id: score.points
+            for score in entry.scores.all()
+        }
+
+        total = entry.total_points()
+
+        score_values = []
+
+        for apparatus_item in apparatus:
+            points = score_map.get(
+                apparatus_item.pk
+            )
+
+            score_values.append(
+                float(points)
+                if points is not None
+                else ""
+            )
+
+        ws.append([
+            str(entry.child),
+            entry.child.birth_year,
+            entry.rank,
+            entry.category,
+            *score_values,
+            (
+                float(total)
+                if total is not None
+                else ""
+            ),
+            entry.place or "",
+        ])
+
+    widths = [
+        28,
+        14,
+        14,
+        18,
+        *([12] * len(apparatus)),
+        12,
+        10,
+    ]
+
+    for index, width in enumerate(
+        widths,
+        start=1,
+    ):
+        ws.column_dimensions[
+            get_column_letter(index)
+        ].width = width
+
+    response = HttpResponse(
+        content_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        )
+    )
+
+    response["Content-Disposition"] = (
+        f'attachment; filename="competition-{competition.pk}.xlsx"'
+    )
+
     wb.save(response)
-    log_action(request, "competition.export", competition, f"Выгружены результаты {competition.name}")
+
+    log_action(
+        request,
+        "competition.export",
+        competition,
+        f"Выгружены результаты {competition.name}",
+    )
+
     return response
 
 

@@ -342,7 +342,11 @@
                 {% for entry in competitions %}
                 <div class="border border-slate-200 rounded-xl p-3">
                     <div class="flex items-center justify-between mb-1">
-                        <b class="text-sm">{{ entry.competition.name }}</b>
+                        <a
+                            href="{% url 'competitions' %}?competition={{ entry.competition.pk }}"
+                            class="text-sm font-bold text-slate-900 hover:text-blue-600">
+                            {{ entry.competition.name }} →
+                        </a>
                         {% if entry.place %}
                         <span class="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 rounded">
                             {{ entry.place }} место
@@ -351,9 +355,20 @@
                     </div>
                     <div class="flex items-center gap-2 text-[10px] text-slate-500">
                         <span>{{ entry.competition.date|date:"d.m.Y" }}</span>
+
                         {% if entry.competition.city %}
                         <span>· {{ entry.competition.city }}</span>
                         {% endif %}
+
+                        <span>
+                            ·
+                            {% if entry.competition.is_internal %}
+                                Внутриклубное
+                            {% else %}
+                                Выездное
+                            {% endif %}
+                        </span>
+
                         {% if entry.category %}
                         <span>· {{ entry.category }}</span>
                         {% endif %}
@@ -361,8 +376,14 @@
                     {% if entry.rank %}
                     <div class="mt-1 text-[10px] text-violet-700 font-bold">Разряд: {{ entry.rank }}</div>
                     {% endif %}
-                    {% if entry.total_points %}
-                    <div class="mt-1 text-[10px] text-slate-600">Баллы: {{ entry.total_points }}</div>
+                    {% if entry.scores_complete %}
+                    <div class="mt-1 text-[10px] text-slate-600">
+                        Баллы: {{ entry.total_points|stringformat:".3f" }}
+                    </div>
+                    {% else %}
+                    <div class="mt-1 text-[10px] text-amber-600">
+                        Результат ещё не завершён
+                    </div>
                     {% endif %}
                 </div>
                 {% endfor %}

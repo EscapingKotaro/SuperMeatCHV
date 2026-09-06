@@ -447,6 +447,498 @@ class CrmWorkflowTests(TestCase):
         self.assertEqual(export.status_code, 200)
         self.assertIn("spreadsheetml", export["Content-Type"])
 
+    def test_blank_score_differs_from_zero(self):
+        competition = Competition.objects.create(
+            name="Кубок",
+            date=timezone.localdate(),
+        )
+
+        apparatus = Apparatus.objects.create(
+            competition=competition,
+            name="Прыжок",
+            order=0,
+        )
+
+        other = Child.objects.create(
+            last_name="Петрова",
+            first_name="Мария",
+            birth_year=2015,
+            group=self.group,
+        )
+
+        first = CompetitionEntry.objects.create(
+            child=self.child,
+            competition=competition,
+            category="2015",
+        )
+
+        second = CompetitionEntry.objects.create(
+            child=other,
+            competition=competition,
+            category="2015",
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            f"{reverse('competitions')}?competition={competition.pk}",
+            {
+                "action": "save_scores",
+                f"score_{first.pk}_{apparatus.pk}": "",
+                f"score_{second.pk}_{apparatus.pk}": "0",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        first.refresh_from_db()
+        second.refresh_from_db()
+
+        self.assertIsNone(first.place)
+        self.assertEqual(second.place, 1)
+
+        self.assertIsNone(
+            ApparatusScore.objects.get(
+                entry=first,
+                apparatus=apparatus,
+            ).points
+        )
+
+        self.assertEqual(
+            ApparatusScore.objects.get(
+                entry=second,
+                apparatus=apparatus,
+            ).points,
+            Decimal("0.000"),
+        )
+
+        export = self.client.get(
+            reverse(
+                "competition_export",
+                args=[competition.pk],
+            )
+        )
+
+        self.assertEqual(export.status_code, 200)
+
+
+    def test_invalid_score_does_not_overwrite_saved_score(self):
+        competition = Competition.objects.create(
+            name="Кубок",
+            date=timezone.localdate(),
+        )
+
+        apparatus = Apparatus.objects.create(
+            competition=competition,
+            name="Прыжок",
+        )
+
+        entry = CompetitionEntry.objects.create(
+            child=self.child,
+            competition=competition,
+            category="2015",
+        )
+
+        score = ApparatusScore.objects.create(
+            entry=entry,
+            apparatus=apparatus,
+            points=Decimal("9.500"),
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            f"{reverse('competitions')}?competition={competition.pk}",
+            {
+                "action": "save_scores",
+                f"score_{entry.pk}_{apparatus.pk}": "9,5а",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        score.refresh_from_db()
+
+        self.assertEqual(
+            score.points,
+            Decimal("9.500"),
+        )
+
+        response = self.client.post(
+            f"{reverse('competitions')}?competition={competition.pk}",
+            {
+                "action": "save_scores",
+                f"score_{entry.pk}_{apparatus.pk}": "-1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        score.refresh_from_db()
+
+        self.assertEqual(
+            score.points,
+            Decimal("9.500"),
+        )
+
+
+    def test_competition_places_support_ties_and_categories(self):
+        competition = Competition.objects.create(
+            name="Кубок",
+            date=timezone.localdate(),
+        )
+
+        apparatus = Apparatus.objects.create(
+            competition=competition,
+            name="Прыжок",
+        )
+
+        children = [
+            self.child,
+            Child.objects.create(
+                last_name="Петрова",
+                first_name="Мария",
+                birth_year=2015,
+                group=self.group,
+            ),
+            Child.objects.create(
+                last_name="Сидорова",
+                first_name="Анна",
+                birth_year=2015,
+                group=self.group,
+            ),
+            Child.objects.create(
+                last_name="Орлова",
+                first_name="Ева",
+                birth_year=2016,
+                group=self.group,
+            ),
+        ]
+
+        entries = [
+            CompetitionEntry.objects.create(
+                child=children[0],
+                competition=competition,
+                category="2015",
+            ),
+            CompetitionEntry.objects.create(
+                child=children[1],
+                competition=competition,
+                category="2015",
+            ),
+            CompetitionEntry.objects.create(
+                child=children[2],
+                competition=competition,
+                category="2015",
+            ),
+            CompetitionEntry.objects.create(
+                child=children[3],
+                competition=competition,
+                category="2016",
+            ),
+        ]
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            f"{reverse('competitions')}?competition={competition.pk}",
+            {
+                "action": "save_scores",
+                f"score_{entries[0].pk}_{apparatus.pk}": "10",
+                f"score_{entries[1].pk}_{apparatus.pk}": "10",
+                f"score_{entries[2].pk}_{apparatus.pk}": "9",
+                f"score_{entries[3].pk}_{apparatus.pk}": "5",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        for entry in entries:
+            entry.refresh_from_db()
+
+        self.assertEqual(entries[0].place, 1)
+        self.assertEqual(entries[1].place, 1)
+        self.assertEqual(entries[2].place, 3)
+        self.assertEqual(entries[3].place, 1)
+
+
+    def test_competition_entry_can_be_edited_and_deleted(self):
+        competition = Competition.objects.create(
+            name="Кубок",
+            date=timezone.localdate(),
+        )
+
+        apparatus = Apparatus.objects.create(
+            competition=competition,
+            name="Прыжок",
+        )
+
+        other = Child.objects.create(
+            last_name="Петрова",
+            first_name="Мария",
+            birth_year=2015,
+            group=self.group,
+        )
+
+        first = CompetitionEntry.objects.create(
+            child=self.child,
+            competition=competition,
+            category="2015",
+        )
+
+        second = CompetitionEntry.objects.create(
+            child=other,
+            competition=competition,
+            category="2015",
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        self.client.post(
+            f"{reverse('competitions')}?competition={competition.pk}",
+            {
+                "action": "save_scores",
+                f"score_{first.pk}_{apparatus.pk}": "10",
+                f"score_{second.pk}_{apparatus.pk}": "9",
+            },
+        )
+
+        response = self.client.post(
+            f"{reverse('competitions')}?competition={competition.pk}",
+            {
+                "action": "save_entry",
+                "entry_id": first.pk,
+                "entry-child": self.child.pk,
+                "entry-category": "2016",
+                "entry-rank": "2 юн.",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        first.refresh_from_db()
+        second.refresh_from_db()
+
+        self.assertEqual(first.category, "2016")
+        self.assertEqual(first.rank, "2 юн.")
+        self.assertEqual(first.place, 1)
+
+        self.assertEqual(second.place, 1)
+
+        response = self.client.post(
+            f"{reverse('competitions')}?competition={competition.pk}",
+            {
+                "action": "delete_entry",
+                "entry_id": first.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        self.assertFalse(
+            CompetitionEntry.objects.filter(
+                pk=first.pk,
+            ).exists()
+        )
+
+
+    def test_adding_apparatus_invalidates_places_and_delete_recalculates(self):
+        competition = Competition.objects.create(
+            name="Кубок",
+            date=timezone.localdate(),
+        )
+
+        first_apparatus = Apparatus.objects.create(
+            competition=competition,
+            name="Прыжок",
+            order=0,
+        )
+
+        entry = CompetitionEntry.objects.create(
+            child=self.child,
+            competition=competition,
+            category="2015",
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        self.client.post(
+            f"{reverse('competitions')}?competition={competition.pk}",
+            {
+                "action": "save_scores",
+                f"score_{entry.pk}_{first_apparatus.pk}": "10",
+            },
+        )
+
+        entry.refresh_from_db()
+        self.assertEqual(entry.place, 1)
+
+        response = self.client.post(
+            f"{reverse('competitions')}?competition={competition.pk}",
+            {
+                "action": "save_apparatus",
+                "apparatus-name": "Брусья",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        second_apparatus = Apparatus.objects.get(
+            competition=competition,
+            name="Брусья",
+        )
+
+        self.assertEqual(
+            second_apparatus.order,
+            1,
+        )
+
+        new_score = ApparatusScore.objects.get(
+            entry=entry,
+            apparatus=second_apparatus,
+        )
+
+        self.assertIsNone(new_score.points)
+
+        entry.refresh_from_db()
+        self.assertIsNone(entry.place)
+
+        response = self.client.post(
+            f"{reverse('competitions')}?competition={competition.pk}",
+            {
+                "action": "delete_apparatus",
+                "apparatus_id": second_apparatus.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+
+        entry.refresh_from_db()
+
+        self.assertEqual(entry.place, 1)
+
+
+    def test_competition_can_be_deleted_with_related_results(self):
+        competition = Competition.objects.create(
+            name="Удаляемый кубок",
+            date=timezone.localdate(),
+        )
+
+        apparatus = Apparatus.objects.create(
+            competition=competition,
+            name="Прыжок",
+        )
+
+        entry = CompetitionEntry.objects.create(
+            child=self.child,
+            competition=competition,
+            category="2015",
+        )
+
+        score = ApparatusScore.objects.create(
+            entry=entry,
+            apparatus=apparatus,
+            points=Decimal("9"),
+        )
+
+        competition_id = competition.pk
+        apparatus_id = apparatus.pk
+        entry_id = entry.pk
+        score_id = score.pk
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            f"{reverse('competitions')}?competition={competition.pk}",
+            {
+                "action": "delete_competition",
+                "competition_id": competition.pk,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("competitions"),
+        )
+
+        self.assertFalse(
+            Competition.objects.filter(
+                pk=competition_id,
+            ).exists()
+        )
+
+        self.assertFalse(
+            Apparatus.objects.filter(
+                pk=apparatus_id,
+            ).exists()
+        )
+
+        self.assertFalse(
+            CompetitionEntry.objects.filter(
+                pk=entry_id,
+            ).exists()
+        )
+
+        self.assertFalse(
+            ApparatusScore.objects.filter(
+                pk=score_id,
+            ).exists()
+        )
+
+
+    def test_child_card_links_to_competition(self):
+        competition = Competition.objects.create(
+            name="Кубок Москвы",
+            date=timezone.localdate(),
+            is_internal=False,
+        )
+
+        CompetitionEntry.objects.create(
+            child=self.child,
+            competition=competition,
+            category="2015",
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse(
+                "child_card",
+                args=[self.child.pk],
+            )
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertContains(
+            response,
+            (
+                f"{reverse('competitions')}"
+                f"?competition={competition.pk}"
+            ),
+        )
+
     def test_senior_can_create_staff_account(self):
         self.client.login(username="senior", password="TestPass123!")
         response = self.client.post(reverse("users"), {

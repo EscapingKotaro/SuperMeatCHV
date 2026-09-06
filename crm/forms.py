@@ -282,7 +282,7 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
 class ApparatusForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = Apparatus
-        fields = ("name", "order")
+        fields = ("name",)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
