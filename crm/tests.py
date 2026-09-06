@@ -1,4 +1,4 @@
-from datetime import time, timedelta
+from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -1707,194 +1707,313 @@ class CrmWorkflowTests(TestCase):
         
 
 
-def test_month_reports_normalize_selected_day_to_whole_month(self):
-    today = timezone.localdate()
+    def test_month_reports_normalize_selected_day_to_whole_month(self):
+        today = timezone.localdate()
 
-    selected_day = today.replace(
-        day=min(15, today.day),
-    )
+        selected_day = today.replace(
+            day=min(15, today.day),
+        )
 
-    first_day = selected_day.replace(
-        day=1,
-    )
+        first_day = selected_day.replace(
+            day=1,
+        )
 
-    self.client.login(
-        username="admin",
-        password="TestPass123!",
-    )
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
 
-    response = self.client.get(
-        reverse("statistics"),
-        {
-            "month": selected_day.isoformat(),
-        },
-    )
+        response = self.client.get(
+            reverse("statistics"),
+            {
+                "month": selected_day.isoformat(),
+            },
+        )
 
-    self.assertEqual(
-        response.status_code,
-        200,
-    )
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
 
-    self.assertEqual(
-        response.context["month_start"],
-        first_day,
-    )
-    
-def test_expenses_page_has_monthly_category_summary(self):
-    today = timezone.localdate()
+        self.assertEqual(
+            response.context["month_start"],
+            first_day,
+        )
+        
+    def test_expenses_page_has_monthly_category_summary(self):
+        today = timezone.localdate()
 
-    Expense.objects.create(
-        title="Вода",
-        category=Expense.Category.HOUSEHOLD,
-        amount=Decimal("1000"),
-        date=today,
-        created_by=self.admin,
-    )
+        Expense.objects.create(
+            title="Вода",
+            category=Expense.Category.HOUSEHOLD,
+            amount=Decimal("1000"),
+            date=today,
+            created_by=self.admin,
+        )
 
-    Expense.objects.create(
-        title="Мячи",
-        category=Expense.Category.EQUIPMENT,
-        amount=Decimal("3000"),
-        date=today,
-        created_by=self.admin,
-    )
+        Expense.objects.create(
+            title="Мячи",
+            category=Expense.Category.EQUIPMENT,
+            amount=Decimal("3000"),
+            date=today,
+            created_by=self.admin,
+        )
 
-    Expense.objects.create(
-        title="Ещё инвентарь",
-        category=Expense.Category.EQUIPMENT,
-        amount=Decimal("2000"),
-        date=today,
-        created_by=self.admin,
-    )
+        Expense.objects.create(
+            title="Ещё инвентарь",
+            category=Expense.Category.EQUIPMENT,
+            amount=Decimal("2000"),
+            date=today,
+            created_by=self.admin,
+        )
 
-    self.client.login(
-        username="admin",
-        password="TestPass123!",
-    )
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
 
-    response = self.client.get(
-        reverse("expenses"),
-        {
-            "month": today.strftime("%Y-%m"),
-        },
-    )
+        response = self.client.get(
+            reverse("expenses"),
+            {
+                "month": today.strftime("%Y-%m"),
+            },
+        )
 
-    self.assertEqual(
-        response.status_code,
-        200,
-    )
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
 
-    self.assertEqual(
-        response.context["monthly_total"],
-        Decimal("6000"),
-    )
+        self.assertEqual(
+            response.context["monthly_total"],
+            Decimal("6000"),
+        )
 
-    self.assertEqual(
-        response.context["monthly_operations"],
-        3,
-    )
+        self.assertEqual(
+            response.context["monthly_operations"],
+            3,
+        )
 
-    categories = {
-        row["category"]: row
-        for row in response.context["category_rows"]
-    }
+        categories = {
+            row["category"]: row
+            for row in response.context["category_rows"]
+        }
 
-    self.assertEqual(
-        categories[Expense.Category.HOUSEHOLD]["total"],
-        Decimal("1000"),
-    )
+        self.assertEqual(
+            categories[Expense.Category.HOUSEHOLD]["total"],
+            Decimal("1000"),
+        )
 
-    self.assertEqual(
-        categories[Expense.Category.HOUSEHOLD]["operations"],
-        1,
-    )
+        self.assertEqual(
+            categories[Expense.Category.HOUSEHOLD]["operations"],
+            1,
+        )
 
-    self.assertEqual(
-        categories[Expense.Category.EQUIPMENT]["total"],
-        Decimal("5000"),
-    )
+        self.assertEqual(
+            categories[Expense.Category.EQUIPMENT]["total"],
+            Decimal("5000"),
+        )
 
-    self.assertEqual(
-        categories[Expense.Category.EQUIPMENT]["operations"],
-        2,
-    )
+        self.assertEqual(
+            categories[Expense.Category.EQUIPMENT]["operations"],
+            2,
+        )
 
-def test_statistics_excludes_archived_and_lost_children_from_group_metrics(self):
-    today = timezone.localdate()
+    def test_statistics_excludes_archived_and_lost_children_from_group_metrics(self):
+        today = timezone.localdate()
 
-    trial_child = Child.objects.create(
-        last_name="Пробная",
-        first_name="Мария",
-        birth_year=2015,
-        group=self.group,
-        status=Child.Status.TRIAL,
-        trial_from=today,
-    )
+        trial_child = Child.objects.create(
+            last_name="Пробная",
+            first_name="Мария",
+            birth_year=2015,
+            group=self.group,
+            status=Child.Status.TRIAL,
+            trial_from=today,
+        )
 
-    archived_child = Child.objects.create(
-        last_name="Архивная",
-        first_name="Елена",
-        birth_year=2015,
-        group=self.group,
-        status=Child.Status.ARCHIVED,
-        archived_at=today,
-    )
+        archived_child = Child.objects.create(
+            last_name="Архивная",
+            first_name="Елена",
+            birth_year=2015,
+            group=self.group,
+            status=Child.Status.ARCHIVED,
+            archived_at=today,
+        )
 
-    lost_child = Child.objects.create(
-        last_name="Потерянная",
-        first_name="Ольга",
-        birth_year=2015,
-        group=self.group,
-        status=Child.Status.LOST,
-        archived_at=today,
-    )
+        lost_child = Child.objects.create(
+            last_name="Потерянная",
+            first_name="Ольга",
+            birth_year=2015,
+            group=self.group,
+            status=Child.Status.LOST,
+            archived_at=today,
+        )
 
-    Attendance.objects.create(
-        child=archived_child,
-        date=today,
-        status=Attendance.Status.PRESENT,
-    )
+        Attendance.objects.create(
+            child=archived_child,
+            date=today,
+            status=Attendance.Status.PRESENT,
+        )
 
-    Attendance.objects.create(
-        child=lost_child,
-        date=today,
-        status=Attendance.Status.ABSENT,
-    )
+        Attendance.objects.create(
+            child=lost_child,
+            date=today,
+            status=Attendance.Status.ABSENT,
+        )
 
-    self.client.login(
-        username="admin",
-        password="TestPass123!",
-    )
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
 
-    response = self.client.get(
-        reverse("statistics"),
-        {
-            "month": today.isoformat(),
-        },
-    )
+        response = self.client.get(
+            reverse("statistics"),
+            {
+                "month": today.isoformat(),
+            },
+        )
 
-    self.assertEqual(
-        response.status_code,
-        200,
-    )
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
 
-    group_stats = next(
-        row
-        for row in response.context["groups_stats"]
-        if row["group"].pk == self.group.pk
-    )
+        group_stats = next(
+            row
+            for row in response.context["groups_stats"]
+            if row["group"].pk == self.group.pk
+        )
 
-    self.assertEqual(
-        group_stats["kids"],
-        2,
-    )
+        self.assertEqual(
+            group_stats["kids"],
+            2,
+        )
 
-    self.assertEqual(
-        group_stats["present"],
-        0,
-    )
+        self.assertEqual(
+            group_stats["present"],
+            0,
+        )
 
-    self.assertEqual(
-        group_stats["absent"],
-        0,
-    )
+        self.assertEqual(
+            group_stats["absent"],
+            0,
+        )
+        
+        
+    def test_expired_subscription_with_debt_creates_notification(self):
+        today = timezone.localdate()
+
+        Subscription.objects.create(
+            child=self.child,
+            start_date=today - timedelta(days=40),
+            end_date=today - timedelta(days=2),
+            sessions_total=8,
+            price=Decimal("6000"),
+            is_active=True,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("notifications"),
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        notification = Notification.objects.get(
+            recipient=self.admin,
+            kind=Notification.Kind.SUBSCRIPTION_DEBT,
+        )
+
+        self.assertIn(
+            "6000",
+            notification.message,
+        )
+
+        self.assertIn(
+            self.child.last_name,
+            notification.message,
+        )
+
+        # Повторное открытие страницы не создаёт дубль.
+        self.client.get(
+            reverse("notifications"),
+        )
+
+        self.assertEqual(
+            Notification.objects.filter(
+                recipient=self.admin,
+                kind=Notification.Kind.SUBSCRIPTION_DEBT,
+            ).count(),
+            1,
+        )
+        
+    def test_admin_can_confirm_today_trial_from_notifications(self):
+        today = timezone.localdate()
+
+        trial_at = timezone.make_aware(
+            datetime.combine(
+                today,
+                time(18, 0),
+            )
+        )
+
+        newcomer = Newcomer.objects.create(
+            full_name="Петрова Алиса",
+            trial_at=trial_at,
+            trainer=self.trainer,
+            group=self.group,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("notifications"),
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        self.assertContains(
+            response,
+            "Петрова Алиса",
+        )
+
+        response = self.client.post(
+            reverse("notifications"),
+            {
+                "action": "confirm_trial",
+                "newcomer_id": newcomer.pk,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("notifications"),
+        )
+
+        newcomer.refresh_from_db()
+
+        self.assertTrue(
+            newcomer.attended,
+        )
+
+        response = self.client.get(
+            reverse("notifications"),
+        )
+
+        self.assertNotContains(
+            response,
+            "Подтвердите приход спортсменов",
+        )

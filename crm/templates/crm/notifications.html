@@ -22,6 +22,15 @@
                 <b>{{ subscription_count }}</b>
             </a>
 
+            <a
+                href="{% url 'payments' %}"
+                class="flex justify-between rounded-lg px-1 py-1 hover:bg-slate-50">
+                <span>Долги</span>
+                <b class="{% if debt_count %}text-red-600{% endif %}">
+                    {{ debt_count }}
+                </b>
+            </a>
+
             <a href="{% url 'newcomers' %}"
                class="flex justify-between rounded-lg px-1 py-1 hover:bg-slate-50">
                 <span>Пробные</span>
@@ -78,6 +87,8 @@
                             bg-fuchsia-50 text-fuchsia-600
                         {% elif notification.kind == 'subscription_expiring' %}
                             bg-red-50 text-red-600
+                        {% elif notification.kind == 'subscription_debt' %}
+                            bg-red-100 text-red-700
                         {% else %}
                             bg-blue-50 text-blue-600
                         {% endif %}">
@@ -96,6 +107,9 @@
 
                         {% elif notification.kind == 'trial_scheduled' %}
                             <i data-lucide="user-round-check" class="h-4 w-4"></i>
+
+                        {% elif notification.kind == 'subscription_expiring' %}
+                            <i data-lucide="calendar-clock" class="h-4 w-4"></i>
 
                         {% elif notification.kind == 'subscription_expiring' %}
                             <i data-lucide="calendar-clock" class="h-4 w-4"></i>
@@ -148,6 +162,9 @@
                             {% elif notification.kind == 'subscription_expiring' %}
                                 Открыть абонемент
 
+                            {% elif notification.kind == 'subscription_debt' %}
+                                Открыть спортсмена
+
                             {% else %}
                                 Открыть
                             {% endif %}
@@ -191,6 +208,156 @@
         {% endif %}
 
     </section>
+
+    {% if today_trials %}
+
+    <section class="card overflow-hidden">
+
+        <div class="border-b p-4">
+            <div class="flex items-center justify-between gap-3">
+
+                <div>
+                    <b>Пробные сегодня</b>
+
+                    <p class="text-xs text-slate-500">
+                        Подтвердите приход спортсменов
+                    </p>
+                </div>
+
+                <span class="badge bg-fuchsia-50 text-fuchsia-700">
+                    {{ trial_count }}
+                </span>
+
+            </div>
+        </div>
+
+
+        <div class="divide-y">
+
+            {% for newcomer in today_trials %}
+
+            <article class="flex flex-wrap items-center gap-4 p-4">
+
+                <div class="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-fuchsia-50 text-fuchsia-600">
+                    <i
+                        data-lucide="user-round-check"
+                        class="h-5 w-5"
+                    ></i>
+                </div>
+
+
+                <div class="min-w-0 flex-1">
+
+                    <div class="flex flex-wrap items-center gap-2">
+
+                        <b>
+                            {{ newcomer.full_name }}
+                        </b>
+
+                        <span class="badge bg-slate-100 text-slate-600">
+                            {{ newcomer.trial_at|date:"H:i" }}
+                        </span>
+
+                    </div>
+
+
+                    <p class="mt-1 text-xs text-slate-500">
+
+                        {% if newcomer.group %}
+                            {{ newcomer.group.name }}
+                        {% endif %}
+
+                        {% if newcomer.trainer %}
+                            {% if newcomer.group %} · {% endif %}
+                            {{ newcomer.trainer.full_name }}
+                        {% endif %}
+
+                        {% if newcomer.phone %}
+                            · {{ newcomer.phone }}
+                        {% endif %}
+
+                    </p>
+
+                </div>
+
+
+                <div class="flex flex-wrap gap-2">
+
+                    <form method="post">
+
+                        {% csrf_token %}
+
+                        <input
+                            type="hidden"
+                            name="action"
+                            value="confirm_trial"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="newcomer_id"
+                            value="{{ newcomer.pk }}"
+                        >
+
+                        <button class="btn btn-primary">
+
+                            <i data-lucide="check"></i>
+
+                            Пришёл
+
+                        </button>
+
+                    </form>
+
+
+                    <form
+                        method="post"
+                        onsubmit="return confirm('Отменить пробное занятие?');"
+                    >
+
+                        {% csrf_token %}
+
+                        <input
+                            type="hidden"
+                            name="action"
+                            value="cancel_trial"
+                        >
+
+                        <input
+                            type="hidden"
+                            name="newcomer_id"
+                            value="{{ newcomer.pk }}"
+                        >
+
+                        <button class="btn btn-soft">
+
+                            <i data-lucide="x"></i>
+
+                            Отменено
+
+                        </button>
+
+                    </form>
+
+
+                    <a
+                        href="{% url 'newcomers' %}?edit={{ newcomer.pk }}"
+                        class="btn btn-soft"
+                    >
+                        Подробнее
+                    </a>
+
+                </div>
+
+            </article>
+
+            {% endfor %}
+
+        </div>
+
+    </section>
+
+    {% endif %}
 
 </div>
 {% endblock %}

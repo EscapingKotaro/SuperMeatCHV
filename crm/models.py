@@ -901,6 +901,7 @@ class Notification(models.Model):
         LEAD_CREATED = "lead_created", "Новая заявка"
         TRIAL_SCHEDULED = "trial_scheduled", "Пробное занятие"
         SUBSCRIPTION_EXPIRING = "subscription_expiring", "Заканчивается абонемент"
+        SUBSCRIPTION_DEBT = "subscription_debt", "Абонемент закончился — есть долг"
 
     recipient = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE,

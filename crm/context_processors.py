@@ -13,6 +13,9 @@ def sync_subscription_notifications(user):
     today = timezone.localdate()
     limit = today + timedelta(days=7)
 
+    # -------------------------
+    # Заканчиваются в течение 7 дней
+    # -------------------------
     subscriptions = (
         Subscription.objects
         .filter(
@@ -23,11 +26,16 @@ def sync_subscription_notifications(user):
         .select_related("child")
     )
 
-    active_keys = []
+    expiring_keys = []
 
     for subscription in subscriptions:
-        key = f"subscription_expiring:{subscription.pk}:{subscription.end_date.isoformat()}"
-        active_keys.append(key)
+        key = (
+            f"subscription_expiring:"
+            f"{subscription.pk}:"
+            f"{subscription.end_date.isoformat()}"
+        )
+
+        expiring_keys.append(key)
 
         Notification.objects.get_or_create(
             recipient=user,
@@ -38,7 +46,10 @@ def sync_subscription_notifications(user):
                     f"Абонемент {subscription.child} заканчивается "
                     f"{subscription.end_date:%d.%m.%Y}"
                 ),
-                "url": f"{reverse('payments')}?edit_subscription={subscription.pk}",
+                "url": (
+                    f"{reverse('payments')}"
+                    f"?edit_subscription={subscription.pk}"
+                ),
             },
         )
 
@@ -46,7 +57,80 @@ def sync_subscription_notifications(user):
         recipient=user,
         kind=Notification.Kind.SUBSCRIPTION_EXPIRING,
         read_at__isnull=True,
-    ).exclude(event_key__in=active_keys).update(read_at=timezone.now())
+    ).exclude(
+        event_key__in=expiring_keys,
+    ).update(
+        read_at=timezone.now(),
+    )
+
+    # -------------------------
+    # Уже закончились + есть долг
+    # -------------------------
+    expired_subscriptions = (
+        Subscription.objects
+        .filter(
+            is_active=True,
+            child__status=Child.Status.ACTIVE,
+            end_date__lt=today,
+        )
+        .select_related("child")
+        .order_by(
+            "child_id",
+            "-end_date",
+            "-pk",
+        )
+    )
+
+    debt_keys = []
+    processed_children = set()
+
+    for subscription in expired_subscriptions:
+        child = subscription.child
+
+        if child.pk in processed_children:
+            continue
+
+        processed_children.add(child.pk)
+
+        debt = child.debt()
+
+        if debt <= 0:
+            continue
+
+        key = (
+            f"subscription_debt:"
+            f"{subscription.pk}:"
+            f"{subscription.end_date.isoformat()}"
+        )
+
+        debt_keys.append(key)
+
+        Notification.objects.update_or_create(
+            recipient=user,
+            event_key=key,
+            defaults={
+                "kind": Notification.Kind.SUBSCRIPTION_DEBT,
+                "message": (
+                    f"{child} · абонемент закончился "
+                    f"{subscription.end_date:%d.%m.%Y} · "
+                    f"долг {debt:.2f} ₽"
+                ),
+                "url": reverse(
+                    "child_card",
+                    args=[child.pk],
+                ),
+            },
+        )
+
+    Notification.objects.filter(
+        recipient=user,
+        kind=Notification.Kind.SUBSCRIPTION_DEBT,
+        read_at__isnull=True,
+    ).exclude(
+        event_key__in=debt_keys,
+    ).update(
+        read_at=timezone.now(),
+    )
 
 
 def crm_role_context(request):

@@ -1596,24 +1596,137 @@ def toggle_manager_task(task, user, completion_comment=""):
 @login_required
 def notifications_page(request):
     if request.method == "POST":
-        task = get_object_or_404(ManagerTask, pk=request.POST.get("task_id"))
+        action = request.POST.get(
+            "action",
+            "toggle_task",
+        )
 
-        if not can_complete_manager_task(request.user, task):
-            return HttpResponseForbidden("Это задача другого пользователя")
+        if action == "confirm_trial":
+            newcomer = get_object_or_404(
+                Newcomer,
+                pk=request.POST.get("newcomer_id"),
+            )
+
+            if not newcomer.trial_at:
+                messages.error(
+                    request,
+                    "У пробного занятия не указана дата",
+                )
+                return redirect("notifications")
+
+            trial_date = timezone.localtime(
+                newcomer.trial_at
+            ).date()
+
+            if trial_date != timezone.localdate():
+                messages.error(
+                    request,
+                    "Подтверждать можно пробное занятие на сегодня",
+                )
+                return redirect("notifications")
+
+            newcomer.attended = True
+            newcomer.lesson_cancelled = False
+
+            newcomer.save(
+                update_fields=[
+                    "attended",
+                    "lesson_cancelled",
+                ]
+            )
+
+            log_action(
+                request,
+                "newcomer.trial_attended",
+                newcomer,
+                (
+                    f"Подтверждён приход на пробное: "
+                    f"{newcomer.full_name}"
+                ),
+            )
+
+            messages.success(
+                request,
+                f"{newcomer.full_name}: приход подтверждён",
+            )
+
+            return redirect("notifications")
+
+        if action == "cancel_trial":
+            newcomer = get_object_or_404(
+                Newcomer,
+                pk=request.POST.get("newcomer_id"),
+            )
+
+            newcomer.attended = False
+            newcomer.lesson_cancelled = True
+
+            newcomer.save(
+                update_fields=[
+                    "attended",
+                    "lesson_cancelled",
+                ]
+            )
+
+            log_action(
+                request,
+                "newcomer.trial_cancelled",
+                newcomer,
+                (
+                    f"Пробное занятие отменено: "
+                    f"{newcomer.full_name}"
+                ),
+            )
+
+            messages.success(
+                request,
+                f"{newcomer.full_name}: пробное отменено",
+            )
+
+            return redirect("notifications")
+
+        task = get_object_or_404(
+            ManagerTask,
+            pk=request.POST.get("task_id"),
+        )
+
+        if not can_complete_manager_task(
+            request.user,
+            task,
+        ):
+            return HttpResponseForbidden(
+                "Это задача другого пользователя"
+            )
 
         toggle_manager_task(
             task,
             request.user,
-            request.POST.get("completion_comment", ""),
+            request.POST.get(
+                "completion_comment",
+                "",
+            ),
         )
 
         log_action(
-            request, "task.toggle", task,
-            f"Задача «{task.title}»: {'выполнена' if task.is_done else 'возвращена в работу'}",
+            request,
+            "task.toggle",
+            task,
+            (
+                f"Задача «{task.title}»: "
+                f"{'выполнена' if task.is_done else 'возвращена в работу'}"
+            ),
         )
 
-        messages.success(request, "Статус задачи изменён")
+        messages.success(
+            request,
+            "Статус задачи изменён",
+        )
+
         return redirect("notifications")
+
+    sync_subscription_notifications(
+        request.user
+    )
 
     sync_subscription_notifications(request.user)
     
@@ -1656,13 +1769,28 @@ def notifications_page(request):
         .count()
     )
 
-    trial_count = Newcomer.objects.filter(
-        trial_at__isnull=False,
-        attended=False,
-        lesson_cancelled=False,
-        child__isnull=True,
-    ).count()
+    today_trials = (
+        Newcomer.objects
+        .filter(
+            trial_at__date=today,
+            attended=False,
+            lesson_cancelled=False,
+            child__isnull=True,
+        )
+        .select_related(
+            "trainer",
+            "group",
+        )
+        .order_by("trial_at")
+    )
 
+    trial_count = today_trials.count()
+
+    debt_count = Notification.objects.filter(
+        recipient=request.user,
+        kind=Notification.Kind.SUBSCRIPTION_DEBT,
+        read_at__isnull=True,
+    ).count()
 
     open_task_count = task_qs.count()
 
@@ -1671,9 +1799,16 @@ def notifications_page(request):
         subscription_count=subscription_count,
         event_notifications=event_notifications,
         unread_count=unread_count,
+        debt_count=debt_count,
+        today_trials=today_trials,
         open_task_count=open_task_count,
         trial_count=trial_count,
-        open_count=open_task_count + subscription_count + trial_count,
+        open_count=(
+            open_task_count
+            + subscription_count
+            + trial_count
+            + debt_count
+        ),
         today=today,
     ))
 
