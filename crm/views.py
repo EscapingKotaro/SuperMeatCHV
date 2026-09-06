@@ -2152,9 +2152,30 @@ def calendar_page(request):
             ),
         })
 
-    selected_tasks = sort_tasks([t for t in filtered if t.calendar_date == selected_day])
-    undated_tasks = [t for t in filtered if t.calendar_date is None]
+    selected_tasks = sort_tasks(
+        [
+            task
+            for task in filtered
+            if task.calendar_date == selected_day
+        ]
+    )
+
+    undated_tasks = [
+        task
+        for task in filtered
+        if task.calendar_date is None
+    ]
+
     selected_workers = work_map[selected_day]
+
+    today_workers = []
+
+    for profile in profiles:
+        if not profile.shift_anchor:
+            continue
+
+        if (today - profile.shift_anchor).days % 4 in (0, 1):
+            today_workers.append(profile)
 
     return render(request, "crm/calendar.html", page_context(
         request, "calendar",
@@ -2165,6 +2186,8 @@ def calendar_page(request):
         selected_tasks=selected_tasks,
         undated_tasks=undated_tasks,
         shift_rows=shift_rows,
+        window_end=window_end,
+        today_workers=today_workers,
         window_start=window_start,
         selected_workers=selected_workers,
         prev_start=window_start - timedelta(days=14),
