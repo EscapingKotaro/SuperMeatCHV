@@ -81,10 +81,25 @@
             </div>
 
             {% if day.workers %}
-            <div class="mb-2 flex items-center gap-1 text-[9px] text-emerald-600"
-                 title="{{ day.working_names }}">
-                <i data-lucide="users" class="h-3 w-3"></i>
-                Смена: {{ day.workers|length }}
+            <div class="mb-2 rounded-lg bg-emerald-50 px-2 py-1.5 text-[9px] text-emerald-700">
+                <div class="flex items-center gap-1 font-bold">
+                    <i data-lucide="users" class="h-3 w-3"></i>
+                    На смене · {{ day.workers|length }}
+                </div>
+
+                <div class="mt-1 space-y-0.5">
+                    {% for profile in day.workers|slice:":3" %}
+                    <div class="truncate">
+                        {{ profile.user.first_name|default:profile.user.username }}
+                    </div>
+                    {% endfor %}
+
+                    {% if day.workers|length > 3 %}
+                    <div class="font-bold">
+                        +{{ day.workers|length|add:"-3" }} ещё
+                    </div>
+                    {% endif %}
+                </div>
             </div>
             {% endif %}
 
