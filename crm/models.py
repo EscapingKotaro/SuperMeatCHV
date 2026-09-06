@@ -310,15 +310,32 @@ class Child(models.Model):
 
     def missed_percent(self):
         """Процент пропущенных занятий."""
-        present = self.attendances.filter(status="present").count()
-        absent = self.attendances.filter(status="absent").count()
-        total = present + absent
-        return round(absent * 100 / total) if total else 0
+        present = self.attendances.filter(
+            status="present"
+        ).count()
 
-        def nearest_expiry(self):
-            """Дата окончания текущего активного абонемента."""
-            sub = self.active_subscription()
-            return sub.end_date if sub else None
+        absent = self.attendances.filter(
+            status="absent"
+        ).count()
+
+        total = present + absent
+
+        return (
+            round(absent * 100 / total)
+            if total
+            else 0
+        )
+
+
+    def nearest_expiry(self):
+        """Дата окончания текущего активного абонемента."""
+        sub = self.active_subscription()
+
+        return (
+            sub.end_date
+            if sub
+            else None
+        )
 
     def active_promos(self):
         """Акции текущих действующих абонементов."""

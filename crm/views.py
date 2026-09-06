@@ -713,12 +713,12 @@ def expenses_page(request):
             messages.success(request, "Расход сохранён")
             return redirect(filter_url)
 
-        messages.error(
-            request,
-            "Проверьте заполнение формы",
-        )
+    messages.error(
+        request,
+        "Проверьте заполнение формы",
+    )
 
-        monthly_expenses = (
+    monthly_expenses = (
         Expense.objects
         .select_related("created_by")
         .filter(
