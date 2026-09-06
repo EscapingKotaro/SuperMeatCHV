@@ -347,7 +347,7 @@
                             class="text-sm font-bold text-slate-900 hover:text-blue-600">
                             {{ entry.competition.name }} →
                         </a>
-                        {% if entry.place %}
+                        {% if entry.scores_complete and entry.place %}
                         <span class="px-2 py-0.5 text-[10px] font-bold bg-amber-100 text-amber-700 rounded">
                             {{ entry.place }} место
                         </span>
