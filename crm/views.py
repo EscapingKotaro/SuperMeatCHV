@@ -1967,197 +1967,492 @@ def newcomers_page(request):
 @login_required
 def calendar_page(request):
     today = timezone.localdate()
-    
-    subscription_count = (
-    Subscription.objects
-    .filter(
-        is_active=True,
-        child__status=Child.Status.ACTIVE,
-        end_date__range=(today, today + timedelta(days=7)),
-    )
-    .values("child_id")
-    .distinct()
-    .count())  
-    
     now = timezone.now()
 
     try:
-        anchor = date.fromisoformat(request.GET.get("start", ""))
-    except ValueError:
+        anchor = date.fromisoformat(
+            request.GET.get("start", "")
+        )
+    except (ValueError, TypeError):
         anchor = today
 
-    window_start = anchor - timedelta(days=anchor.weekday())
-    window_end = window_start + timedelta(days=13)
+    month_start = anchor.replace(day=1)
+
+    if month_start.month == 12:
+        next_start = date(
+            month_start.year + 1,
+            1,
+            1,
+        )
+    else:
+        next_start = date(
+            month_start.year,
+            month_start.month + 1,
+            1,
+        )
+
+    month_end = next_start - timedelta(days=1)
+
+    if month_start.month == 1:
+        prev_start = date(
+            month_start.year - 1,
+            12,
+            1,
+        )
+    else:
+        prev_start = date(
+            month_start.year,
+            month_start.month - 1,
+            1,
+        )
+
+    # Календарная сетка начинается с понедельника
+    # и заканчивается воскресеньем.
+    grid_start = month_start - timedelta(
+        days=month_start.weekday()
+    )
+
+    grid_end = month_end + timedelta(
+        days=6 - month_end.weekday()
+    )
+
+    grid_days_count = (
+        grid_end - grid_start
+    ).days + 1
 
     try:
-        selected_day = date.fromisoformat(request.GET.get("day", ""))
-    except ValueError:
-        selected_day = today if window_start <= today <= window_end else window_start
+        selected_day = date.fromisoformat(
+            request.GET.get("day", "")
+        )
+    except (ValueError, TypeError):
+        selected_day = (
+            today
+            if month_start <= today <= month_end
+            else month_start
+        )
 
-    if not window_start <= selected_day <= window_end:
-        selected_day = today if window_start <= today <= window_end else window_start
+    scope = request.GET.get(
+        "scope",
+        "all",
+    )
 
-    scope = request.GET.get("scope", "all")
-    state = request.GET.get("state", "open")
-    if scope not in {"all", "mine"}:
+    state = request.GET.get(
+        "state",
+        "open",
+    )
+
+    if scope not in {
+        "all",
+        "mine",
+    }:
         scope = "all"
-    if state not in {"open", "done", "all"}:
+
+    if state not in {
+        "open",
+        "done",
+        "all",
+    }:
         state = "open"
 
     def back():
-        url = reverse("calendar")
         return redirect(
-            f"{url}?start={window_start.isoformat()}&day={selected_day.isoformat()}"
-            f"&scope={scope}&state={state}"
+            f"{reverse('calendar')}"
+            f"?start={month_start.isoformat()}"
+            f"&day={selected_day.isoformat()}"
+            f"&scope={scope}"
+            f"&state={state}"
         )
 
-    editing = ManagerTask.objects.filter(pk=request.GET.get("edit")).first()
-    if editing and not can_manage_manager_task(request.user, editing):
-        return HttpResponseForbidden("Редактировать чужую задачу может только начальник")
+    editing = (
+        ManagerTask.objects
+        .filter(
+            pk=request.GET.get("edit")
+        )
+        .first()
+    )
 
-    form = ManagerTaskForm(request.POST or None, instance=editing)
+    if (
+        editing
+        and not can_manage_manager_task(
+            request.user,
+            editing,
+        )
+    ):
+        return HttpResponseForbidden(
+            "Редактировать чужую задачу "
+            "может только начальник"
+        )
+
+    form = ManagerTaskForm(
+        request.POST or None,
+        instance=editing,
+    )
 
     if request.method == "POST":
-        action = request.POST.get("action", "save")
+        action = request.POST.get(
+            "action",
+            "save",
+        )
 
         if action == "set_shift":
-            profile, _ = StaffProfile.objects.get_or_create(user=request.user)
+            profile, _ = (
+                StaffProfile.objects
+                .get_or_create(
+                    user=request.user
+                )
+            )
+
             try:
-                profile.shift_anchor = date.fromisoformat(request.POST.get("shift_anchor", ""))
-                profile.save(update_fields=["shift_anchor"])
-                messages.success(request, "График 2/2 пересчитан")
-            except (ValueError, TypeError):
-                messages.error(request, "Укажите первый рабочий день")
+                profile.shift_anchor = (
+                    date.fromisoformat(
+                        request.POST.get(
+                            "shift_anchor",
+                            "",
+                        )
+                    )
+                )
+
+                profile.save(
+                    update_fields=[
+                        "shift_anchor"
+                    ]
+                )
+
+                messages.success(
+                    request,
+                    "График 2/2 пересчитан",
+                )
+
+            except (
+                ValueError,
+                TypeError,
+            ):
+                messages.error(
+                    request,
+                    "Укажите первый рабочий день",
+                )
+
             return back()
 
         if action == "toggle":
-            task = get_object_or_404(ManagerTask, pk=request.POST.get("task_id"))
-            if not can_complete_manager_task(request.user, task):
-                return HttpResponseForbidden("Это задача другого пользователя")
-
-            toggle_manager_task(task, request.user, request.POST.get("completion_comment", ""))
-            log_action(
-                request, "task.toggle", task,
-                f"Задача «{task.title}»: {'выполнена' if task.is_done else 'возвращена в работу'}",
+            task = get_object_or_404(
+                ManagerTask,
+                pk=request.POST.get(
+                    "task_id"
+                ),
             )
-            messages.success(request, "Задача выполнена" if task.is_done else "Задача возвращена в работу")
+
+            if not can_complete_manager_task(
+                request.user,
+                task,
+            ):
+                return HttpResponseForbidden(
+                    "Это задача другого пользователя"
+                )
+
+            toggle_manager_task(
+                task,
+                request.user,
+                request.POST.get(
+                    "completion_comment",
+                    "",
+                ),
+            )
+
+            log_action(
+                request,
+                "task.toggle",
+                task,
+                (
+                    f"Задача «{task.title}»: "
+                    f"{'выполнена' if task.is_done else 'возвращена в работу'}"
+                ),
+            )
+
+            messages.success(
+                request,
+                (
+                    "Задача выполнена"
+                    if task.is_done
+                    else "Задача возвращена в работу"
+                ),
+            )
+
             return back()
 
         if action == "delete":
-            task = get_object_or_404(ManagerTask, pk=request.POST.get("task_id"))
-            if not can_manage_manager_task(request.user, task):
-                return HttpResponseForbidden("Удалить чужую задачу может только начальник")
+            task = get_object_or_404(
+                ManagerTask,
+                pk=request.POST.get(
+                    "task_id"
+                ),
+            )
+
+            if not can_manage_manager_task(
+                request.user,
+                task,
+            ):
+                return HttpResponseForbidden(
+                    "Удалить чужую задачу "
+                    "может только начальник"
+                )
 
             title = task.title
 
-            notify_task(task, request.user, Notification.Kind.TASK_DELETED)
-            log_action(request, "task.delete", task, f"Начальник удалил задачу «{title}»")
+            notify_task(
+                task,
+                request.user,
+                Notification.Kind.TASK_DELETED,
+            )
+
+            log_action(
+                request,
+                "task.delete",
+                task,
+                (
+                    f"Начальник удалил "
+                    f"задачу «{title}»"
+                ),
+            )
+
             task.delete()
-            messages.success(request, "Задача удалена")
+
+            messages.success(
+                request,
+                "Задача удалена",
+            )
+
             return back()
 
         if action == "save":
             if form.is_valid():
-                task = form.save(commit=False)
-                task.created_by = editing.created_by if editing else request.user
+                task = form.save(
+                    commit=False
+                )
+
+                task.created_by = (
+                    editing.created_by
+                    if editing
+                    else request.user
+                )
+
                 task.save()
 
                 notify_task(
                     task,
                     request.user,
-                    Notification.Kind.TASK_UPDATED if editing else Notification.Kind.TASK_CREATED,
+                    (
+                        Notification.Kind.TASK_UPDATED
+                        if editing
+                        else Notification.Kind.TASK_CREATED
+                    ),
                 )
 
                 log_action(
-                    request, "task.save", task,
-                    f"{'Изменена' if editing else 'Создана'} задача «{task.title}»",
+                    request,
+                    "task.save",
+                    task,
+                    (
+                        f"{'Изменена' if editing else 'Создана'} "
+                        f"задача «{task.title}»"
+                    ),
                 )
-                messages.success(request, "Задача изменена" if editing else "Задача создана")
+
+                messages.success(
+                    request,
+                    (
+                        "Задача изменена"
+                        if editing
+                        else "Задача создана"
+                    ),
+                )
+
                 return back()
 
-            messages.error(request, "Проверьте поля задачи")
+            messages.error(
+                request,
+                "Проверьте поля задачи",
+            )
 
     tasks = list(
         ManagerTask.objects
-        .select_related("assignee", "created_by", "completed_by")
-        .order_by("scheduled_at", "due_date", "-created_at")
+        .select_related(
+            "assignee",
+            "created_by",
+            "completed_by",
+        )
+        .order_by(
+            "scheduled_at",
+            "due_date",
+            "-created_at",
+        )
     )
 
     def task_date(task):
         if task.scheduled_at:
-            return timezone.localtime(task.scheduled_at).date()
+            return timezone.localtime(
+                task.scheduled_at
+            ).date()
+
         return task.due_date
 
     for task in tasks:
-        task.calendar_date = task_date(task)
+        task.calendar_date = task_date(
+            task
+        )
+
         if task.is_done:
             task.is_overdue_now = False
+
         elif task.due_date:
-            task.is_overdue_now = task.due_date < today
+            task.is_overdue_now = (
+                task.due_date < today
+            )
+
         elif task.scheduled_end_at:
-            task.is_overdue_now = task.scheduled_end_at < now
+            task.is_overdue_now = (
+                task.scheduled_end_at < now
+            )
+
         else:
-            task.is_overdue_now = bool(task.scheduled_at and task.scheduled_at < now)
+            task.is_overdue_now = bool(
+                task.scheduled_at
+                and task.scheduled_at < now
+            )
 
     filtered = tasks
+
     if scope == "mine":
-        filtered = [t for t in filtered if t.assignee_id in (None, request.user.id)]
+        filtered = [
+            task
+            for task in filtered
+            if task.assignee_id in (
+                None,
+                request.user.id,
+            )
+        ]
 
     if state == "open":
-        filtered = [t for t in filtered if not t.is_done]
+        filtered = [
+            task
+            for task in filtered
+            if not task.is_done
+        ]
+
     elif state == "done":
-        filtered = [t for t in filtered if t.is_done]
+        filtered = [
+            task
+            for task in filtered
+            if task.is_done
+        ]
 
     def sort_tasks(items):
-        return sorted(items, key=lambda t: (
-            timezone.localtime(t.scheduled_at).time() if t.scheduled_at else datetime.max.time(),
-            t.created_at,
-        ))
+        return sorted(
+            items,
+            key=lambda task: (
+                (
+                    timezone.localtime(
+                        task.scheduled_at
+                    ).time()
+                    if task.scheduled_at
+                    else datetime.max.time()
+                ),
+                task.created_at,
+            ),
+        )
 
     profiles = list(
         StaffProfile.objects
-        .select_related("user", "branch")
-        .filter(user__is_active=True)
-        .exclude(role=Role.BOSS)
+        .select_related(
+            "user",
+            "branch",
+        )
+        .filter(
+            user__is_active=True
+        )
+        .exclude(
+            role=Role.BOSS
+        )
     )
 
     work_map = defaultdict(list)
-    shift_rows = []
 
     for profile in profiles:
-        work_days = set()
-        if profile.shift_anchor:
-            for offset in range(14):
-                day = window_start + timedelta(days=offset)
-                if (day - profile.shift_anchor).days % 4 in (0, 1):
-                    work_days.add(day)
-                    work_map[day].append(profile)
+        if not profile.shift_anchor:
+            continue
 
-        shift_rows.append({"profile": profile, "work_days": work_days})
+        for offset in range(
+            grid_days_count
+        ):
+            day = (
+                grid_start
+                + timedelta(days=offset)
+            )
+
+            if (
+                day
+                - profile.shift_anchor
+            ).days % 4 in (0, 1):
+                work_map[day].append(
+                    profile
+                )
 
     days = []
-    for offset in range(14):
-        day = window_start + timedelta(days=offset)
-        items = sort_tasks([t for t in filtered if t.calendar_date == day])
+
+    for offset in range(
+        grid_days_count
+    ):
+        day = (
+            grid_start
+            + timedelta(days=offset)
+        )
+
+        items = sort_tasks([
+            task
+            for task in filtered
+            if task.calendar_date == day
+        ])
+
         workers = work_map[day]
 
         days.append({
             "date": day,
-            "items": items[:3],
+            "month_start": day.replace(
+                day=1
+            ),
+            "in_month": (
+                day.month == month_start.month
+                and day.year == month_start.year
+            ),
+            "items": items[:2],
             "task_count": len(items),
-            "more_count": max(0, len(items) - 3),
+            "more_count": max(
+                0,
+                len(items) - 2,
+            ),
             "workers": workers,
             "working_names": ", ".join(
-                p.user.get_full_name() or p.user.username for p in workers
+                (
+                    profile.user.get_full_name()
+                    or profile.user.username
+                )
+                for profile in workers
             ),
         })
 
-    selected_tasks = sort_tasks(
-        [
-            task
-            for task in filtered
-            if task.calendar_date == selected_day
-        ]
+    selected_tasks = sort_tasks([
+        task
+        for task in filtered
+        if task.calendar_date
+        == selected_day
+    ])
+
+    selected_workers = (
+        work_map[selected_day]
+    )
+
+    today_workers = (
+        work_map[today]
     )
 
     undated_tasks = [
@@ -2166,37 +2461,44 @@ def calendar_page(request):
         if task.calendar_date is None
     ]
 
-    selected_workers = work_map[selected_day]
+    month_task_count = sum(
+        1
+        for task in filtered
+        if (
+            task.calendar_date
+            and month_start
+            <= task.calendar_date
+            <= month_end
+        )
+    )
 
-    today_workers = []
-
-    for profile in profiles:
-        if not profile.shift_anchor:
-            continue
-
-        if (today - profile.shift_anchor).days % 4 in (0, 1):
-            today_workers.append(profile)
-
-    return render(request, "crm/calendar.html", page_context(
-        request, "calendar",
-        form=form,
-        editing=editing,
-        days=days,
-        selected_day=selected_day,
-        selected_tasks=selected_tasks,
-        undated_tasks=undated_tasks,
-        shift_rows=shift_rows,
-        window_end=window_end,
-        today_workers=today_workers,
-        window_start=window_start,
-        selected_workers=selected_workers,
-        prev_start=window_start - timedelta(days=14),
-        next_start=window_start + timedelta(days=14),
-        today_start=today - timedelta(days=today.weekday()),
-        today=today,
-        scope=scope,
-        state=state,
-    ))
+    return render(
+        request,
+        "crm/calendar.html",
+        page_context(
+            request,
+            "calendar",
+            form=form,
+            editing=editing,
+            days=days,
+            month_start=month_start,
+            month_end=month_end,
+            selected_day=selected_day,
+            selected_tasks=selected_tasks,
+            selected_workers=selected_workers,
+            today_workers=today_workers,
+            undated_tasks=undated_tasks,
+            month_task_count=month_task_count,
+            prev_start=prev_start,
+            next_start=next_start,
+            today_start=today.replace(
+                day=1
+            ),
+            today=today,
+            scope=scope,
+            state=state,
+        ),
+    )
 
 
 @login_required

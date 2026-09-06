@@ -1,39 +1,29 @@
 {% extends 'crm/base.html' %}
 
-
 {% block actions %}
-<button
-    data-modal="task-modal"
-    class="btn btn-primary"
->
+<button data-modal="task-modal" class="btn btn-primary">
     <i data-lucide="plus"></i>
     Новая задача
 </button>
 {% endblock %}
 
-
 {% block content %}
 
-<!-- ==================================================
+<!-- =========================================
      ВЕРХНЯЯ ПАНЕЛЬ
-================================================== -->
+========================================= -->
 <section class="card mb-4 overflow-hidden">
-
     <div class="flex flex-col gap-4 p-4 xl:flex-row xl:items-center xl:justify-between">
 
-        <!-- Навигация -->
         <div class="flex flex-wrap items-center gap-3">
-
             <div class="flex items-center gap-1">
-
                 <a
                     href="?start={{ prev_start|date:'Y-m-d' }}&day={{ prev_start|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
                     class="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white transition hover:bg-slate-50"
-                    title="Предыдущие две недели"
+                    title="Предыдущий месяц"
                 >
                     <i data-lucide="chevron-left" class="h-4 w-4"></i>
                 </a>
-
 
                 <a
                     href="?start={{ today_start|date:'Y-m-d' }}&day={{ today|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
@@ -43,315 +33,197 @@
                     Сегодня
                 </a>
 
-
                 <a
                     href="?start={{ next_start|date:'Y-m-d' }}&day={{ next_start|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
                     class="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white transition hover:bg-slate-50"
-                    title="Следующие две недели"
+                    title="Следующий месяц"
                 >
                     <i data-lucide="chevron-right" class="h-4 w-4"></i>
                 </a>
-
             </div>
-
 
             <div class="hidden h-8 w-px bg-slate-200 sm:block"></div>
 
-
-            <!-- Период -->
             <div>
-                <b class="block text-sm">
-                    {{ window_start|date:"d E" }}
-                    —
-                    {{ window_end|date:"d E Y" }}
-                </b>
-
-                <span class="text-[10px] text-slate-400">
-                    Две недели
-                </span>
+                <div class="text-lg font-extrabold tracking-tight">
+                    {{ month_start|date:"F Y" }}
+                </div>
+                <div class="mt-0.5 text-[10px] text-slate-400">
+                    {{ month_task_count }} задач в этом месяце
+                </div>
             </div>
-
         </div>
 
-
-        <!-- Кто сегодня работает -->
         <div class="flex min-w-0 flex-wrap items-center gap-2">
-
             <span class="flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wide text-slate-400">
                 <i data-lucide="users-round" class="h-3.5 w-3.5"></i>
                 Сегодня на смене
             </span>
 
-
             {% if today_workers %}
-
                 {% for profile in today_workers %}
-
                 <span class="inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-2.5 py-2 text-xs font-bold text-emerald-700">
-
                     <span class="grid h-5 w-5 place-items-center rounded-md bg-emerald-100 text-[9px] font-extrabold">
                         {{ profile.user.first_name|default:profile.user.username|slice:":1"|upper }}
                     </span>
-
                     {{ profile.user.first_name|default:profile.user.username }}
-
                 </span>
-
                 {% endfor %}
-
             {% else %}
-
                 <span class="rounded-lg bg-slate-100 px-2.5 py-2 text-xs text-slate-400">
                     Никого
                 </span>
-
             {% endif %}
-
         </div>
-
     </div>
 
-
-    <!-- Фильтры -->
     <div class="flex flex-wrap items-center justify-between gap-3 border-t bg-slate-50/60 px-4 py-2.5">
-
         <div class="flex rounded-lg bg-slate-200/60 p-0.5">
-
             <a
-                href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=all&state={{ state }}"
-                class="rounded-md px-3 py-1.5 text-[11px] font-bold transition
-                {% if scope == 'all' %}
-                    bg-white text-slate-900 shadow-sm
-                {% else %}
-                    text-slate-500
-                {% endif %}"
+                href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=all&state={{ state }}"
+                class="rounded-md px-3 py-1.5 text-[11px] font-bold transition {% if scope == 'all' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-500 hover:text-slate-900{% endif %}"
             >
                 Все задачи
             </a>
 
             <a
-                href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=mine&state={{ state }}"
-                class="rounded-md px-3 py-1.5 text-[11px] font-bold transition
-                {% if scope == 'mine' %}
-                    bg-white text-slate-900 shadow-sm
-                {% else %}
-                    text-slate-500
-                {% endif %}"
+                href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=mine&state={{ state }}"
+                class="rounded-md px-3 py-1.5 text-[11px] font-bold transition {% if scope == 'mine' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-500 hover:text-slate-900{% endif %}"
             >
                 Мои
             </a>
-
         </div>
 
-
         <div class="flex items-center gap-1">
-
             <a
-                href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=open"
-                class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition
-                {% if state == 'open' %}
-                    bg-[#17202A] text-white
-                {% else %}
-                    text-slate-500 hover:bg-white
-                {% endif %}"
+                href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=open"
+                class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition {% if state == 'open' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
             >
                 Активные
             </a>
 
             <a
-                href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=done"
-                class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition
-                {% if state == 'done' %}
-                    bg-[#17202A] text-white
-                {% else %}
-                    text-slate-500 hover:bg-white
-                {% endif %}"
+                href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=done"
+                class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition {% if state == 'done' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
             >
                 Выполненные
             </a>
 
             <a
-                href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=all"
-                class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition
-                {% if state == 'all' %}
-                    bg-[#17202A] text-white
-                {% else %}
-                    text-slate-500 hover:bg-white
-                {% endif %}"
+                href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=all"
+                class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition {% if state == 'all' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
             >
                 Все
             </a>
-
         </div>
-
     </div>
-
 </section>
 
 
-<!-- ==================================================
-     КАЛЕНДАРЬ 14 ДНЕЙ
-================================================== -->
+<!-- =========================================
+     МЕСЯЦ
+========================================= -->
 <section class="card mb-4 overflow-hidden">
 
-    <div class="overflow-x-auto p-3">
+    <div class="grid grid-cols-7 border-b bg-[#FAFBFC]">
+        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Пн</div>
+        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Вт</div>
+        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Ср</div>
+        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Чт</div>
+        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Пт</div>
+        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Сб</div>
+        <div class="px-3 py-2 text-[10px] font-extrabold uppercase tracking-[0.12em] text-slate-400">Вс</div>
+    </div>
 
-        <div class="grid min-w-[1050px] grid-cols-7 gap-px overflow-hidden rounded-xl bg-slate-200">
-
-            {% for day in days %}
-
-            <a
-                href="?start={{ window_start|date:'Y-m-d' }}&day={{ day.date|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
-                class="relative min-h-[135px] bg-white p-3 transition
-
-                {% if day.date == selected_day %}
-                    z-10 bg-blue-50/70 ring-2 ring-inset ring-[#315EBC]
-                {% elif day.date == today %}
-                    bg-orange-50/50
-                {% else %}
-                    hover:bg-slate-50
-                {% endif %}
-                "
-            >
-
-                <!-- Верх дня -->
-                <div class="mb-2.5 flex items-start justify-between">
-
-                    <div>
-
-                        <span class="block text-[9px] font-extrabold uppercase tracking-wider text-slate-400">
-                            {{ day.date|date:"D" }}
-                        </span>
-
-                        <span class="mt-0.5 block text-xl font-extrabold tracking-tight
-                            {% if day.date == today %}
-                                text-[#FF5C35]
-                            {% elif day.date == selected_day %}
-                                text-[#315EBC]
-                            {% else %}
-                                text-slate-900
-                            {% endif %}
-                        ">
-                            {{ day.date|date:"d" }}
-                        </span>
-
+    <div class="grid grid-cols-7 gap-px bg-slate-200">
+        {% for day in days %}
+        <a
+            href="?start={{ day.month_start|date:'Y-m-d' }}&day={{ day.date|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
+            class="relative min-h-[132px] bg-white p-3 transition
+            {% if not day.in_month %}bg-slate-50/70 text-slate-300{% else %}hover:bg-slate-50{% endif %}
+            {% if day.date == selected_day %}z-10 bg-blue-50/70 ring-2 ring-inset ring-[#315EBC]{% elif day.date == today %}bg-orange-50/45{% endif %}"
+        >
+            <div class="mb-2 flex items-start justify-between gap-2">
+                <div>
+                    <div class="text-xl font-extrabold tracking-tight
+                        {% if not day.in_month %}text-slate-300{% elif day.date == today %}text-[#FF5C35]{% elif day.date == selected_day %}text-[#315EBC]{% else %}text-slate-900{% endif %}">
+                        {{ day.date|date:"d" }}
                     </div>
 
-
-                    <div class="flex items-center gap-1">
-
-                        {% if day.workers %}
-                        <span
-                            class="flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-1 text-[9px] font-bold text-emerald-600"
-                            title="{{ day.working_names }}"
-                        >
-                            <i data-lucide="users" class="h-3 w-3"></i>
-                            {{ day.workers|length }}
-                        </span>
-                        {% endif %}
-
-
-                        {% if day.task_count %}
-                        <span class="grid min-w-6 place-items-center rounded-md bg-slate-100 px-1.5 py-1 text-[9px] font-extrabold text-slate-600">
-                            {{ day.task_count }}
-                        </span>
-                        {% endif %}
-
+                    {% if day.date == today %}
+                    <div class="mt-0.5 text-[8px] font-extrabold uppercase tracking-wide text-[#FF5C35]">
+                        Сегодня
                     </div>
-
+                    {% endif %}
                 </div>
 
-
-                <!-- Задачи дня -->
-                <div class="space-y-1">
-
-                    {% for item in day.items %}
-
-                    <div class="
-                        flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-[9px]
-
-                        {% if item.is_done %}
-                            bg-emerald-50 text-emerald-700
-
-                        {% elif item.is_overdue_now %}
-                            bg-red-50 text-red-700
-
-                        {% else %}
-                            bg-blue-50 text-slate-700
-                        {% endif %}
-                    ">
-
-                        {% if item.scheduled_at %}
-                        <b class="shrink-0">
-                            {{ item.scheduled_at|date:"H:i" }}
-                        </b>
-                        {% endif %}
-
-                        <span class="truncate font-semibold">
-                            {{ item.title }}
-                        </span>
-
-                    </div>
-
-                    {% empty %}
-
-                    <span class="mt-4 block text-[9px] text-slate-300">
-                        Нет задач
+                <div class="flex items-center gap-1">
+                    {% if day.workers %}
+                    <span
+                        class="flex items-center gap-1 rounded-md bg-emerald-50 px-1.5 py-1 text-[9px] font-bold text-emerald-600"
+                        title="На смене: {{ day.working_names }}"
+                    >
+                        <i data-lucide="users" class="h-3 w-3"></i>
+                        {{ day.workers|length }}
                     </span>
-
-                    {% endfor %}
-
-
-                    {% if day.more_count %}
-
-                    <span class="block px-1 pt-1 text-[9px] font-bold text-[#315EBC]">
-                        +{{ day.more_count }} ещё
-                    </span>
-
                     {% endif %}
 
+                    {% if day.task_count %}
+                    <span class="grid min-w-6 place-items-center rounded-md bg-slate-100 px-1.5 py-1 text-[9px] font-extrabold text-slate-600">
+                        {{ day.task_count }}
+                    </span>
+                    {% endif %}
                 </div>
+            </div>
 
-            </a>
+            <div class="space-y-1">
+                {% for item in day.items %}
+                <div class="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-[9px]
+                    {% if item.is_done %}bg-emerald-50 text-emerald-700
+                    {% elif item.is_overdue_now %}bg-red-50 text-red-700
+                    {% else %}bg-blue-50 text-slate-700{% endif %}">
 
-            {% endfor %}
+                    {% if item.scheduled_at %}
+                    <b class="shrink-0">
+                        {{ item.scheduled_at|date:"H:i" }}
+                    </b>
+                    {% endif %}
 
-        </div>
+                    <span class="truncate font-semibold">
+                        {{ item.title }}
+                    </span>
+                </div>
+                {% endfor %}
 
+                {% if day.more_count %}
+                <span class="block px-1 pt-1 text-[9px] font-bold text-[#315EBC]">
+                    +{{ day.more_count }} ещё
+                </span>
+                {% endif %}
+            </div>
+        </a>
+        {% endfor %}
     </div>
-
 </section>
 
 
-<!-- ==================================================
+<!-- =========================================
      ВЫБРАННЫЙ ДЕНЬ
-================================================== -->
+========================================= -->
 <section class="card mb-4 overflow-hidden">
 
-    <!-- Шапка дня -->
     <div class="flex flex-col gap-4 border-b px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
-
         <div class="flex items-center gap-3">
 
-            <div class="
-                grid h-12 w-12 shrink-0 place-items-center rounded-xl
-
-                {% if selected_day == today %}
-                    bg-orange-100 text-[#FF5C35]
-                {% else %}
-                    bg-blue-50 text-[#315EBC]
-                {% endif %}
-            ">
+            <div class="grid h-12 w-12 shrink-0 place-items-center rounded-xl
+                {% if selected_day == today %}bg-orange-100 text-[#FF5C35]{% else %}bg-blue-50 text-[#315EBC]{% endif %}">
                 <b class="text-lg">
                     {{ selected_day|date:"d" }}
                 </b>
             </div>
 
-
             <div>
-
                 <div class="flex flex-wrap items-center gap-2">
-
                     <h2 class="font-extrabold">
                         {{ selected_day|date:"l, d E" }}
                     </h2>
@@ -361,151 +233,78 @@
                         Сегодня
                     </span>
                     {% endif %}
-
                 </div>
 
-
                 <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-slate-500">
-
-                    <span>
-                        {{ selected_tasks|length }} задач
-                    </span>
-
+                    <span>{{ selected_tasks|length }} задач</span>
 
                     {% if selected_workers %}
-
                     <span class="flex items-center gap-1 text-emerald-700">
-
                         <i data-lucide="users-round" class="h-3.5 w-3.5"></i>
-
                         На смене:
-
                         {% for profile in selected_workers %}
-                            <b>
-                                {{ profile.user.first_name|default:profile.user.username }}
-                            </b>{% if not forloop.last %},{% endif %}
+                            <b>{{ profile.user.first_name|default:profile.user.username }}</b>{% if not forloop.last %},{% endif %}
                         {% endfor %}
-
                     </span>
-
                     {% else %}
-
                     <span class="text-slate-400">
                         На смене никого
                     </span>
-
                     {% endif %}
-
                 </div>
-
             </div>
-
         </div>
 
-
-        <button
-            data-modal="task-modal"
-            class="btn btn-primary"
-        >
+        <button data-modal="task-modal" class="btn btn-primary">
             <i data-lucide="plus"></i>
             Добавить задачу
         </button>
-
     </div>
 
-
-    <!-- Задачи выбранного дня -->
     <div class="divide-y">
-
         {% for item in selected_tasks %}
-
         <article class="p-5 transition hover:bg-slate-50/60">
-
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 
                 <div class="flex min-w-0 flex-1 gap-3">
-
-                    <!-- Статус -->
-                    <span class="
-                        mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl
-
-                        {% if item.is_done %}
-                            bg-emerald-50 text-emerald-600
-
-                        {% elif item.is_overdue_now %}
-                            bg-red-50 text-red-600
-
-                        {% else %}
-                            bg-blue-50 text-[#315EBC]
-                        {% endif %}
-                    ">
+                    <span class="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl
+                        {% if item.is_done %}bg-emerald-50 text-emerald-600
+                        {% elif item.is_overdue_now %}bg-red-50 text-red-600
+                        {% else %}bg-blue-50 text-[#315EBC]{% endif %}">
 
                         {% if item.is_done %}
                             <i data-lucide="check" class="h-4 w-4"></i>
-
                         {% elif item.is_overdue_now %}
                             <i data-lucide="triangle-alert" class="h-4 w-4"></i>
-
                         {% else %}
                             <i data-lucide="circle-dot" class="h-4 w-4"></i>
                         {% endif %}
-
                     </span>
 
-
                     <div class="min-w-0 flex-1">
-
                         <div class="flex flex-wrap items-center gap-2">
-
-                            <b class="text-sm">
-                                {{ item.title }}
-                            </b>
-
+                            <b class="text-sm">{{ item.title }}</b>
 
                             {% if item.is_done %}
-
-                            <span class="badge bg-emerald-50 text-emerald-700">
-                                Выполнено
-                            </span>
-
+                                <span class="badge bg-emerald-50 text-emerald-700">Выполнено</span>
                             {% elif item.is_overdue_now %}
-
-                            <span class="badge bg-red-50 text-red-700">
-                                Просрочено
-                            </span>
-
+                                <span class="badge bg-red-50 text-red-700">Просрочено</span>
                             {% else %}
-
-                            <span class="badge bg-blue-50 text-[#315EBC]">
-                                В работе
-                            </span>
-
+                                <span class="badge bg-blue-50 text-[#315EBC]">В работе</span>
                             {% endif %}
-
                         </div>
 
-
-                        <!-- Метаданные -->
                         <div class="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
-
                             {% if item.scheduled_at %}
-
                             <span class="flex items-center gap-1">
                                 <i data-lucide="clock-3" class="h-3.5 w-3.5"></i>
-
                                 {{ item.scheduled_at|date:"H:i" }}
-
-                                {% if item.scheduled_end_at %}
-                                    –{{ item.scheduled_end_at|date:"H:i" }}
-                                {% endif %}
+                                {% if item.scheduled_end_at %}–{{ item.scheduled_end_at|date:"H:i" }}{% endif %}
                             </span>
-
                             {% endif %}
-
 
                             <span class="flex items-center gap-1">
                                 <i data-lucide="user-round" class="h-3.5 w-3.5"></i>
-
                                 {% if item.assignee %}
                                     {{ item.assignee.get_full_name|default:item.assignee.username }}
                                 {% else %}
@@ -513,167 +312,87 @@
                                 {% endif %}
                             </span>
 
-
                             {% if item.due_date %}
-
                             <span class="flex items-center gap-1 {% if item.is_overdue_now %}text-red-600{% endif %}">
                                 <i data-lucide="flag" class="h-3.5 w-3.5"></i>
                                 до {{ item.due_date|date:"d.m.Y" }}
                             </span>
-
                             {% endif %}
 
-
                             {% if item.created_by %}
-
                             <span class="flex items-center gap-1">
                                 <i data-lucide="user-pen" class="h-3.5 w-3.5"></i>
                                 {{ item.created_by.get_full_name|default:item.created_by.username }}
                             </span>
-
                             {% endif %}
-
                         </div>
 
-
                         {% if item.description %}
-
                         <p class="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
                             {{ item.description }}
                         </p>
-
                         {% endif %}
 
-
                         {% if item.is_done %}
-
                         <div class="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">
-
                             <b>
                                 Выполнил:
                                 {{ item.completed_by.get_full_name|default:item.completed_by.username|default:"—" }}
                             </b>
-
-                            {% if item.done_at %}
-                                · {{ item.done_at|date:"d.m.Y H:i" }}
-                            {% endif %}
-
+                            {% if item.done_at %}· {{ item.done_at|date:"d.m.Y H:i" }}{% endif %}
                             {% if item.completion_comment %}
-                            <div class="mt-1">
-                                {{ item.completion_comment }}
-                            </div>
+                                <div class="mt-1">{{ item.completion_comment }}</div>
                             {% endif %}
-
                         </div>
-
                         {% endif %}
-
                     </div>
-
                 </div>
 
-
-                <!-- Действия -->
                 <div class="flex shrink-0 flex-wrap gap-2">
-
                     {% if item.created_by_id == request.user.id or is_boss %}
-
                     <a
-                        href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}&edit={{ item.pk }}"
+                        href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}&edit={{ item.pk }}"
                         class="btn btn-soft"
                     >
                         <i data-lucide="pencil"></i>
                         Изменить
                     </a>
 
-
-                    <form
-                        method="post"
-                        onsubmit="return confirm('Удалить эту задачу?');"
-                    >
-
+                    <form method="post" onsubmit="return confirm('Удалить эту задачу?');">
                         {% csrf_token %}
-
-                        <input
-                            type="hidden"
-                            name="action"
-                            value="delete"
-                        >
-
-                        <input
-                            type="hidden"
-                            name="task_id"
-                            value="{{ item.pk }}"
-                        >
-
-                        <button
-                            class="btn btn-soft text-red-600"
-                            title="Удалить"
-                        >
+                        <input type="hidden" name="action" value="delete">
+                        <input type="hidden" name="task_id" value="{{ item.pk }}">
+                        <button class="btn btn-soft text-red-600" title="Удалить">
                             <i data-lucide="trash-2"></i>
                         </button>
-
                     </form>
-
                     {% endif %}
 
-
                     {% if not item.assignee or item.assignee_id == request.user.id or is_boss %}
-
                         {% if item.is_done %}
-
                         <form method="post">
-
                             {% csrf_token %}
-
-                            <input
-                                type="hidden"
-                                name="action"
-                                value="toggle"
-                            >
-
-                            <input
-                                type="hidden"
-                                name="task_id"
-                                value="{{ item.pk }}"
-                            >
-
+                            <input type="hidden" name="action" value="toggle">
+                            <input type="hidden" name="task_id" value="{{ item.pk }}">
                             <button class="btn btn-soft">
                                 <i data-lucide="rotate-ccw"></i>
                                 Вернуть
                             </button>
-
                         </form>
-
-
                         {% else %}
-
                         <details class="relative">
-
                             <summary class="btn btn-dark cursor-pointer list-none">
                                 <i data-lucide="check"></i>
                                 Выполнить
                             </summary>
 
-
                             <form
                                 method="post"
                                 class="absolute right-0 top-full z-20 mt-2 w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl"
                             >
-
                                 {% csrf_token %}
-
-                                <input
-                                    type="hidden"
-                                    name="action"
-                                    value="toggle"
-                                >
-
-                                <input
-                                    type="hidden"
-                                    name="task_id"
-                                    value="{{ item.pk }}"
-                                >
+                                <input type="hidden" name="action" value="toggle">
+                                <input type="hidden" name="task_id" value="{{ item.pk }}">
 
                                 <textarea
                                     class="field mb-2"
@@ -685,266 +404,146 @@
                                 <button class="btn btn-dark w-full">
                                     Подтвердить
                                 </button>
-
                             </form>
-
                         </details>
-
                         {% endif %}
-
                     {% endif %}
-
                 </div>
-
             </div>
-
         </article>
 
-
         {% empty %}
-
         <div class="flex flex-col items-center justify-center px-6 py-12 text-center">
-
             <span class="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-400">
                 <i data-lucide="calendar-check" class="h-5 w-5"></i>
             </span>
-
-            <b class="mt-3 text-sm">
-                На этот день задач нет
-            </b>
-
-            <p class="mt-1 text-xs text-slate-400">
-                День пока свободен
-            </p>
-
+            <b class="mt-3 text-sm">На этот день задач нет</b>
+            <p class="mt-1 text-xs text-slate-400">День пока свободен</p>
         </div>
-
         {% endfor %}
-
     </div>
-
 </section>
 
 
-<!-- ==================================================
+<!-- =========================================
      БЕЗ ДАТЫ
-================================================== -->
+========================================= -->
 {% if undated_tasks %}
-
 <details class="card">
-
     <summary class="flex cursor-pointer items-center justify-between p-4">
-
         <div class="flex items-center gap-3">
-
             <span class="grid h-8 w-8 place-items-center rounded-lg bg-amber-50 text-amber-600">
                 <i data-lucide="calendar-x" class="h-4 w-4"></i>
             </span>
 
             <div>
-
-                <b class="block text-sm">
-                    Задачи без даты
-                </b>
-
-                <span class="text-[10px] text-slate-400">
-                    Не попали в календарь
-                </span>
-
+                <b class="block text-sm">Задачи без даты</b>
+                <span class="text-[10px] text-slate-400">Не попали в календарь</span>
             </div>
-
         </div>
-
 
         <span class="badge bg-amber-50 text-amber-700">
             {{ undated_tasks|length }}
         </span>
-
     </summary>
 
-
     <div class="divide-y border-t">
-
         {% for item in undated_tasks %}
-
         <div class="flex flex-wrap items-center justify-between gap-3 p-4">
-
             <div>
-
-                <b class="text-sm">
-                    {{ item.title }}
-                </b>
-
+                <b class="text-sm">{{ item.title }}</b>
                 <p class="mt-1 text-xs text-slate-500">
-
                     {% if item.assignee %}
                         {{ item.assignee.get_full_name|default:item.assignee.username }}
                     {% else %}
                         Вся администрация
                     {% endif %}
-
                 </p>
-
             </div>
 
-
             {% if item.created_by_id == request.user.id or is_boss %}
-
             <a
-                href="?start={{ window_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}&edit={{ item.pk }}"
+                href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}&edit={{ item.pk }}"
                 class="btn btn-soft"
             >
                 Назначить дату
             </a>
-
             {% endif %}
-
         </div>
-
         {% endfor %}
-
     </div>
-
 </details>
-
 {% endif %}
 
 {% endblock %}
 
 
-<!-- ==================================================
-     МОДАЛКА
-================================================== -->
 {% block modals %}
-
-<section
-    id="task-modal"
-    class="modal {% if editing %}open{% endif %}"
->
-
+<section id="task-modal" class="modal {% if editing %}open{% endif %}">
     <form method="post">
-
         {% csrf_token %}
-
-        <input
-            type="hidden"
-            name="action"
-            value="save"
-        >
-
+        <input type="hidden" name="action" value="save">
 
         <div class="modal-head">
-
             <div>
-
-                <b>
-                    {% if editing %}
-                        Изменить задачу
-                    {% else %}
-                        Новая задача
-                    {% endif %}
-                </b>
-
+                <b>{% if editing %}Изменить задачу{% else %}Новая задача{% endif %}</b>
                 <p class="text-xs text-slate-500">
                     Задача появится в календаре и уведомлениях
                 </p>
-
             </div>
 
-
-            <button
-                type="button"
-                data-close
-            >
+            <button type="button" data-close>
                 <i data-lucide="x"></i>
             </button>
-
         </div>
 
-
         <div class="modal-body grid gap-4">
-
             {% for field in form %}
-
             <label>
-
-                <span class="label">
-                    {{ field.label }}
-                </span>
-
+                <span class="label">{{ field.label }}</span>
                 {{ field }}
 
                 {% if field.help_text %}
-
                 <small class="mt-1 block text-xs text-slate-400">
                     {{ field.help_text }}
                 </small>
-
                 {% endif %}
 
                 {% if field.errors %}
-
                 <small class="mt-1 block text-xs text-red-600">
                     {{ field.errors|join:", " }}
                 </small>
-
                 {% endif %}
-
             </label>
-
             {% endfor %}
 
-
             {% if form.non_field_errors %}
-
             <div class="text-xs text-red-600">
                 {{ form.non_field_errors }}
             </div>
-
             {% endif %}
-
         </div>
 
-
         <div class="modal-foot">
-
-            <button
-                type="button"
-                data-close
-                class="btn btn-soft"
-            >
+            <button type="button" data-close class="btn btn-soft">
                 Отмена
             </button>
 
             <button class="btn btn-primary">
-
-                {% if editing %}
-                    Сохранить
-                {% else %}
-                    Создать задачу
-                {% endif %}
-
+                {% if editing %}Сохранить{% else %}Создать задачу{% endif %}
             </button>
-
         </div>
-
     </form>
-
 </section>
-
 {% endblock %}
 
 
 {% block scripts %}
-
 {% if editing %}
-
 <script>
     document
         .querySelector("[data-modal-backdrop]")
         ?.classList.remove("hidden");
 </script>
-
 {% endif %}
-
 {% endblock %}
