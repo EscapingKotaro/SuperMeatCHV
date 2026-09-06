@@ -1574,3 +1574,133 @@ class CrmWorkflowTests(TestCase):
         self.assertFalse(Notification.objects.filter(
             kind=Notification.Kind.TRIAL_SCHEDULED,
         ).exists())
+        
+    def test_cancelled_subscription_does_not_affect_current_state(self):
+        today = timezone.localdate()
+
+        subscription = Subscription.objects.create(
+            child=self.child,
+            start_date=today - timedelta(days=5),
+            end_date=today + timedelta(days=10),
+            sessions_total=8,
+            price=Decimal("5600"),
+            promo="Скидка 10%",
+            is_active=True,
+        )
+
+        self.assertEqual(
+            self.child.sessions_left(),
+            8,
+        )
+
+        self.assertEqual(
+            self.child.nearest_expiry(),
+            subscription.end_date,
+        )
+
+        self.assertEqual(
+            list(self.child.active_promos()),
+            [
+                (
+                    "Скидка 10%",
+                    subscription.end_date,
+                )
+            ],
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("payments"),
+            {
+                "action": "cancel_subscription",
+                "subscription_id": subscription.pk,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("payments"),
+        )
+
+        subscription.refresh_from_db()
+
+        self.assertFalse(
+            subscription.is_active
+        )
+
+        self.assertEqual(
+            self.child.sessions_left(),
+            0,
+        )
+
+        self.assertIsNone(
+            self.child.nearest_expiry()
+        )
+
+        self.assertEqual(
+            list(self.child.active_promos()),
+            [],
+        )
+        
+def test_statistics_forecast_ignores_cancelled_subscription(self):
+    today = timezone.localdate()
+
+    active_child = Child.objects.create(
+        last_name="Активная",
+        first_name="Анна",
+        birth_year=2015,
+        group=self.group,
+        status=Child.Status.ACTIVE,
+    )
+
+    cancelled_child = Child.objects.create(
+        last_name="Отменённая",
+        first_name="Мария",
+        birth_year=2015,
+        group=self.group,
+        status=Child.Status.ACTIVE,
+    )
+
+    Subscription.objects.create(
+        child=active_child,
+        start_date=today - timedelta(days=5),
+        end_date=today + timedelta(days=5),
+        sessions_total=8,
+        price=Decimal("6000"),
+        is_active=True,
+    )
+
+    Subscription.objects.create(
+        child=cancelled_child,
+        start_date=today - timedelta(days=5),
+        end_date=today + timedelta(days=6),
+        sessions_total=8,
+        price=Decimal("9000"),
+        is_active=False,
+    )
+
+    self.client.login(
+        username="admin",
+        password="TestPass123!",
+    )
+
+    response = self.client.get(
+        reverse("statistics"),
+        {
+            "month": today.replace(day=1).isoformat(),
+        },
+    )
+
+    self.assertEqual(
+        response.status_code,
+        200,
+    )
+
+    self.assertEqual(
+        response.context["potential"],
+        Decimal("6000"),
+    )

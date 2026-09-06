@@ -221,6 +221,7 @@ class Child(models.Model):
         left = 0
 
         subscriptions = self.subscriptions.filter(
+            is_active=True,
             start_date__lte=today,
             end_date__gte=today,
         )
@@ -314,18 +315,26 @@ class Child(models.Model):
         total = present + absent
         return round(absent * 100 / total) if total else 0
 
-    def nearest_expiry(self):
-        """Ближайшая дата окончания абонемента."""
-        today = timezone.localdate()
-        sub = self.subscriptions.filter(end_date__gte=today).order_by("end_date").first()
-        return sub.end_date if sub else None
+        def nearest_expiry(self):
+            """Дата окончания текущего активного абонемента."""
+            sub = self.active_subscription()
+            return sub.end_date if sub else None
 
     def active_promos(self):
-        """Активные акции по абонементам."""
+        """Акции текущих действующих абонементов."""
         today = timezone.localdate()
-        return self.subscriptions.filter(
-            end_date__gte=today, promo__isnull=False
-        ).exclude(promo="").values_list('promo', 'end_date')
+
+        return (
+            self.subscriptions
+            .filter(
+                is_active=True,
+                start_date__lte=today,
+                end_date__gte=today,
+                promo__isnull=False,
+            )
+            .exclude(promo="")
+            .values_list("promo", "end_date")
+        )
 
     def total_paid(self):
         """Общая сумма оплат."""

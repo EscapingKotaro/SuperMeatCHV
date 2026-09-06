@@ -2811,8 +2811,18 @@ def statistics_view(request):
     revenue_month = Payment.objects.filter(
         date__gte=month_start, date__lte=month_end).aggregate(s=Sum('amount'))['s'] or 0
     # Прогноз: факт месяца + ожидаемые продления (абонементы, кончающиеся до конца месяца)
-    expected = Subscription.objects.filter(
-        end_date__gte=today, end_date__lte=month_end).aggregate(s=Sum('price'))['s'] or 0
+    expected = (
+        Subscription.objects
+        .filter(
+            is_active=True,
+            child__status=Child.Status.ACTIVE,
+            start_date__lte=today,
+            end_date__gte=today,
+            end_date__lte=month_end,
+        )
+        .aggregate(s=Sum("price"))["s"]
+        or 0
+    )
     potential = Decimal(revenue_month) + Decimal(expected)
 
     target = RevenueTarget.objects.filter(month=month_start).first()
