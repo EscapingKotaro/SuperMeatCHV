@@ -55,76 +55,113 @@
             ========================== -->
             <nav id="main-nav" class="scrollbar-none flex min-w-0 flex-1 gap-1 overflow-x-auto">
 
-                <a class="nav-pill {% if page == 'attendance' %}active{% endif %}" href="{% url 'attendance' %}">
-                    <i data-lucide="calendar-check"></i>
-                    Табель
-                </a>
 
-                <a class="nav-pill {% if page == 'applications' %}active{% endif %}" href="{% url 'applications' %}">
-                    <i data-lucide="inbox"></i>
-                    Заявки
-                </a>
-
-                <a class="nav-pill {% if page == 'newcomers' %}active{% endif %}" href="{% url 'newcomers' %}">
-                    <i data-lucide="user-round-plus"></i>
-                    Новички
-                </a>
-
-                <a class="nav-pill {% if page == 'calendar' %}active{% endif %}" href="{% url 'calendar' %}">
-                    <i data-lucide="calendar-days"></i>
-                    Календарь
-                </a>
-
-                <a class="nav-pill {% if page == 'revenue_forecast' %}active{% endif %}" href="{% url 'revenue_forecast' %}">
-                    <i data-lucide="trending-up"></i>
-                    Прогноз
-                </a>
-
-                <a class="nav-pill {% if page == 'trainers' %}active{% endif %}" href="{% url 'trainer_list' %}">
-                    <i data-lucide="user-check"></i>
-                    Тренеры
-                </a>
-
-                <a class="nav-pill {% if page == 'groups' %}active{% endif %}" href="{% url 'group_list' %}">
-                    <i data-lucide="users"></i>
-                    Группы
-                </a>
+    <a class="nav-pill {% if page == 'attendance' %}active{% endif %}" href="{% url 'attendance' %}">
+        <i data-lucide="calendar-check"></i>
+        Табель
+    </a>
 
 
-                <!-- Статистика -->
-                <button
-                    type="button"
-                    data-stats-toggle
-                    class="nav-pill cursor-pointer {% if page == 'statistics' or page == 'payments_table' or page == 'payment_history' or page == 'salaries' %}active{% endif %}"
-                >
-                    <i data-lucide="chart-no-axes-combined"></i>
-                    Статистика
-                    <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
-                </button>
+    <div class="nav-dropdown relative" data-dropdown>
+        <button type="button" class="nav-pill cursor-pointer {% if page in 'applications,newcomers' %}active{% endif %}">
+            <i data-lucide="user-round"></i>
+            Клиенты
+            <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
+        </button>
+        <div class="nav-dropdown-menu absolute left-0 top-full z-50 mt-1 hidden min-w-[180px] flex-col gap-1 rounded-lg border border-neutral-200 bg-white p-1 shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
+            <a class="nav-dropdown-item flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 {% if page == 'applications' %}active{% endif %}" href="{% url 'applications' %}">
+                <i data-lucide="inbox" class="h-4 w-4"></i> Заявки
+            </a>
+            <a class="nav-dropdown-item flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 {% if page == 'newcomers' %}active{% endif %}" href="{% url 'newcomers' %}">
+                <i data-lucide="user-round-plus" class="h-4 w-4"></i> Новички
+            </a>
+        </div>
+    </div>
 
-                <a class="nav-pill {% if page == 'payments' %}active{% endif %}" href="{% url 'payments' %}">
-                    <i data-lucide="wallet-cards"></i>
-                    Продления
-                </a>
 
-                <a class="nav-pill {% if page == 'expenses' %}active{% endif %}" href="{% url 'expenses' %}">
-                    <i data-lucide="receipt-text"></i>
-                    Расходы
-                </a>
+    <div class="nav-dropdown relative" data-dropdown>
+        <button type="button" class="nav-pill cursor-pointer {% if page in 'trainers,groups' %}active{% endif %}">
+            <i data-lucide="users-round"></i>
+            Команда
+            <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
+        </button>
+        <div class="nav-dropdown-menu absolute left-0 top-full z-50 mt-1 hidden min-w-[180px] flex-col gap-1 rounded-lg border border-neutral-200 bg-white p-1 shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
+            <a class="nav-dropdown-item flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 {% if page == 'trainers' %}active{% endif %}" href="{% url 'trainer_list' %}">
+                <i data-lucide="user-check" class="h-4 w-4"></i> Тренеры
+            </a>
+            <a class="nav-dropdown-item flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 {% if page == 'groups' %}active{% endif %}" href="{% url 'group_list' %}">
+                <i data-lucide="users" class="h-4 w-4"></i> Группы
+            </a>
+        </div>
+    </div>
 
-                <a class="nav-pill {% if page == 'competitions' %}active{% endif %}" href="{% url 'competitions' %}">
-                    <i data-lucide="trophy"></i>
-                    Соревнования
-                </a>
 
-                {% if is_boss %}
-                <a class="nav-pill {% if page == 'boss' %}active{% endif %}" href="{% url 'boss' %}">
-                    <i data-lucide="briefcase-business"></i>
-                    Руководителю
-                </a>
-                {% endif %}
+    <a class="nav-pill {% if page == 'calendar' %}active{% endif %}" href="{% url 'calendar' %}">
+        <i data-lucide="calendar-days"></i>
+        Календарь
+    </a>
 
-            </nav>
+
+    <a class="nav-pill {% if page == 'revenue_forecast' %}active{% endif %}" href="{% url 'revenue_forecast' %}">
+        <i data-lucide="trending-up"></i>
+        Прогноз
+    </a>
+
+
+    <div class="nav-dropdown relative" data-dropdown>
+        <button type="button" class="nav-pill cursor-pointer {% if page in 'payments,expenses' %}active{% endif %}">
+            <i data-lucide="wallet"></i>
+            Финансы
+            <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
+        </button>
+        <div class="nav-dropdown-menu absolute left-0 top-full z-50 mt-1 hidden min-w-[180px] flex-col gap-1 rounded-lg border border-neutral-200 bg-white p-1 shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
+            <a class="nav-dropdown-item flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 {% if page == 'payments' %}active{% endif %}" href="{% url 'payments' %}">
+                <i data-lucide="wallet-cards" class="h-4 w-4"></i> Продления
+            </a>
+            <a class="nav-dropdown-item flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 {% if page == 'expenses' %}active{% endif %}" href="{% url 'expenses' %}">
+                <i data-lucide="receipt-text" class="h-4 w-4"></i> Расходы
+            </a>
+        </div>
+    </div>
+
+
+    <div class="nav-dropdown relative" data-dropdown>
+        <button type="button" class="nav-pill cursor-pointer {% if page in 'statistics,payments_table,payment_history,salaries' %}active{% endif %}">
+            <i data-lucide="chart-no-axes-combined"></i>
+            Статистика
+            <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
+        </button>
+        <div class="nav-dropdown-menu absolute left-0 top-full z-50 mt-1 hidden min-w-[200px] flex-col gap-1 rounded-lg border border-neutral-200 bg-white p-1 shadow-lg dark:border-neutral-800 dark:bg-neutral-900">
+            <a class="nav-dropdown-item flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 {% if page == 'statistics' %}active{% endif %}" href="{% url 'statistics' %}">
+                <i data-lucide="bar-chart-3" class="h-4 w-4"></i> Общая
+            </a>
+            <a class="nav-dropdown-item flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 {% if page == 'payments_table' %}active{% endif %}" href="{% url 'payments_table' %}">
+                <i data-lucide="table" class="h-4 w-4"></i> Таблица оплат
+            </a>
+            <a class="nav-dropdown-item flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 {% if page == 'payment_history' %}active{% endif %}" href="{% url 'payment_history' %}">
+                <i data-lucide="history" class="h-4 w-4"></i> История платежей
+            </a>
+            <a class="nav-dropdown-item flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-neutral-100 dark:hover:bg-neutral-800 {% if page == 'salaries' %}active{% endif %}" href="{% url 'salaries' %}">
+                <i data-lucide="banknote" class="h-4 w-4"></i> Зарплаты
+            </a>
+        </div>
+    </div>
+
+
+    <a class="nav-pill {% if page == 'competitions' %}active{% endif %}" href="{% url 'competitions' %}">
+        <i data-lucide="trophy"></i>
+        Соревнования
+    </a>
+
+
+    {% if is_boss %}
+    <a class="nav-pill {% if page == 'boss' %}active{% endif %}" href="{% url 'boss' %}">
+        <i data-lucide="briefcase-business"></i>
+        Руководителю
+    </a>
+    {% endif %}
+
+</nav>
 
 
             <!-- =========================
