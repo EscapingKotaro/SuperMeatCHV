@@ -197,7 +197,7 @@ class StaffCreateForm(StyledFormMixin, UserCreationForm):
 
     class Meta(UserCreationForm.Meta):
         model = get_user_model()
-        fields = ("username", "first_name", "last_name", "email", "role")
+        fields = ("first_name", "last_name","username",  "email", "role")
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

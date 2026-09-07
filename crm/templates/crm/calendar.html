@@ -228,21 +228,6 @@
                 <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500 sm:text-[11px]">
                     <span>{{ selected_tasks|length }} задач</span>
 
-                    {% if selected_workers %}
-                    <span class="flex min-w-0 items-center gap-1 text-emerald-700">
-                        <i data-lucide="users-round" class="h-3.5 w-3.5 shrink-0"></i>
-                        <span class="truncate">
-                            На смене:
-                            {% for profile in selected_workers %}
-                                <b>{{ profile.user.first_name|default:profile.user.username }}</b>{% if not forloop.last %},{% endif %}
-                            {% endfor %}
-                        </span>
-                    </span>
-                    {% else %}
-                    <span class="text-slate-400">
-                        На смене никого
-                    </span>
-                    {% endif %}
                 </div>
             </div>
         </div>

@@ -9,15 +9,16 @@ from django.utils import timezone
 
 
 class Role(models.TextChoices):
-    MANAGER = "manager", "Рядовой админ"
-    SENIOR  = "senior",  "Старший админ"
+    MANAGER = "manager", "Менеджер"
+    SENIOR  = "senior",  "Старший менеджер"
     BOSS    = "boss",    "Начальник"
+    ADMIN    = "admin",    "Админ"
 
-RANK = {Role.MANAGER: 0, Role.SENIOR: 1, Role.BOSS: 2}
+RANK = {Role.MANAGER: 0, Role.SENIOR: 1, Role.BOSS: 2, Role.ADMIN: 3}
 
 def user_role(user):
     if user.is_superuser:
-        return Role.BOSS
+        return Role.ADMIN
     p = getattr(user, "profile", None)
     return Role(p.role) if p else Role.MANAGER
 
@@ -230,14 +231,11 @@ class Child(models.Model):
 
         subscriptions = self.subscriptions.filter(
             is_active=True,
-            start_date__lte=today,
-            end_date__gte=today,
         )
 
         for sub in subscriptions:
             used = self.attendances.filter(
                 status__in=("present", "absent"),
-                date__gte=sub.start_date,
                 date__lte=today,
             ).count()
 
