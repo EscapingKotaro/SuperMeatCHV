@@ -97,7 +97,7 @@ def role_required(min_rank):
         @wraps(view)
         @login_required
         def wrapped(request, *args, **kwargs):
-            if {Role.MANAGER: 0, Role.SENIOR: 1, Role.BOSS: 2}[user_role(request.user)] < min_rank:
+            if {Role.MANAGER: 0, Role.SENIOR: 1, Role.BOSS: 2, Role.ADMIN: 3}[user_role(request.user)] < min_rank:
                 return HttpResponseForbidden("Недостаточно прав")
             return view(request, *args, **kwargs)
 
@@ -113,8 +113,8 @@ def page_context(request, page, **extra):
         "title": title,
         "subtitle": subtitle,
         "current_role": user_role(request.user),
-        "is_boss": user_role(request.user) == Role.BOSS,
-        "is_senior": user_role(request.user) in (Role.SENIOR, Role.BOSS),
+        "is_boss": user_role(request.user) in (Role.SENIOR, Role.BOSS, Role.ADMIN),
+        "is_senior": user_role(request.user) in (Role.SENIOR, Role.BOSS, Role.ADMIN),
     }
     context.update(extra)
     return context
