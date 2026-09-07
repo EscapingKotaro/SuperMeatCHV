@@ -11,15 +11,27 @@
 {% endblock %}
 {% block content %}
 <section class="mb-4 overflow-hidden rounded-[1.25rem] bg-[#17202A] p-6 text-white">
-    <div class="grid gap-6 md:grid-cols-[1fr_1.3fr]">
-        <div>
-            <p class="text-xs font-bold text-slate-400">ВЫРУЧКА ЗА МЕСЯЦ</p>
-            <p class="mt-2 text-4xl font-extrabold">{{ revenue }} ₽</p>
+    <div class="grid gap-6 lg:grid-cols-[1.45fr_1fr]">
+        <div class="grid gap-5 sm:grid-cols-2">
+            <div>
+                <p class="text-xs font-bold text-slate-400">ТЕКУЩАЯ ВЫРУЧКА</p>
+                <p class="mt-2 text-4xl font-extrabold">{{ revenue|floatformat:0 }} ₽</p>
+                <p class="mt-1 text-[11px] text-slate-400">Факт с начала месяца по сегодня</p>
+            </div>
+
+            <div>
+                <p class="text-xs font-bold text-slate-400">ПОТЕНЦИАЛЬНАЯ ВЫРУЧКА</p>
+                <p class="mt-2 text-4xl font-extrabold text-emerald-300">{{ potential_revenue|floatformat:0 }} ₽</p>
+                <p class="mt-1 text-[11px] text-slate-400">
+                    Ожидаемые продления: {{ expected_revenue|floatformat:0 }} ₽
+                </p>
+            </div>
         </div>
+
         <div class="self-center">
             <div class="mb-2 flex justify-between text-xs">
                 <span>{{ target_percent }}% от цели</span>
-                <b>{{ target_amount }} ₽</b>
+                <b>{{ target_amount|floatformat:0 }} ₽</b>
             </div>
             <div class="h-3 overflow-hidden rounded-full bg-white/10">
                 <div class="h-full rounded-full bg-[#FF5C35]" style="width:{{ target_percent }}%">
@@ -31,20 +43,27 @@
         </div>
     </div>
 </section>
+
 <div class="mb-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
     <div class="card metric">
         <p class="metric-label">Активные спортсмены</p>
         <p class="metric-value">{{ active_count }}</p>
     </div>
+
     <div class="card metric">
-        <p class="metric-label">Тренеры</p>
+        <p class="metric-label">Тренеры в отчёте</p>
         <p class="metric-value">{{ trainer_rows|length }}</p>
     </div>
+
     <div class="card metric">
         <p class="metric-label">ЗП начислено</p>
-        <p class="metric-value">{{ salaries }} ₽</p>
-        <p class="text-xs text-slate-500">Выплачено: {{ salary_paid }} ₽</p>
+        <p class="metric-value">{{ salaries|floatformat:0 }} ₽</p>
+        <p class="text-xs text-slate-500">
+            Выплачено: {{ salary_paid|floatformat:0 }} ₽ ·
+            <a href="{% url 'salaries' %}" class="font-bold text-blue-600">расчёт</a>
+        </p>
     </div>
+
     <div class="card metric">
         <p class="metric-label">Задач просрочено</p>
         <p class="metric-value text-red-600">{{ overdue_tasks }}</p>
@@ -209,18 +228,23 @@
     <section class="card overflow-hidden">
         <div class="p-5">
             <h2 class="font-extrabold">KPI тренеров</h2>
-            <p class="text-xs text-slate-500">Показатели текущего месяца</p>
+            <p class="text-xs text-slate-500">
+                Пробные — фактический приход за текущий месяц.
+                «Остались» — пробники с отмеченной оплатой.
+            </p>
         </div>
         <div class="table-wrap">
-            <table class="data-table">
+            <table class="data-table min-w-[900px]">
                 <thead>
                     <tr>
                         <th>#</th>
                         <th>Тренер</th>
-                        <th>Детей</th>
+                        <th>Активных</th>
                         <th>Пробные</th>
+                        <th>Остались</th>
+                        <th>Конверсия</th>
                         <th>Ушли</th>
-                        <th>Посещ.</th>
+                        <th>Посещаемость</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -234,14 +258,27 @@
                         </td>
                         <td>{{ row.children }}</td>
                         <td>{{ row.trial }}</td>
+                        <td>{{ row.retained }}</td>
+                        <td>
+                            <span class="badge bg-blue-50 text-blue-700">{{ row.retention_pct }}%</span>
+                        </td>
                         <td>{{ row.lost }}</td>
                         <td>
-                            <span class="badge {% if row.attendance >= 80 %}bg-emerald-50 text-emerald-700{% else %}bg-amber-50 text-amber-700{% endif %}">{{ row.attendance }}%</span>
+                            <span class="badge
+                                {% if row.attendance >= 80 %}
+                                    bg-emerald-50 text-emerald-700
+                                {% elif row.attendance >= 50 %}
+                                    bg-amber-50 text-amber-700
+                                {% else %}
+                                    bg-red-50 text-red-700
+                                {% endif %}">
+                                {{ row.attendance }}%
+                            </span>
                         </td>
                     </tr>
                     {% empty %}
                     <tr>
-                        <td colspan="6">Нет данных</td>
+                        <td colspan="8">Нет данных</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -249,30 +286,106 @@
         </div>
     </section>
     <section id="logs" class="card p-5">
-        <div class="flex justify-between">
+        <div class="flex flex-wrap items-center justify-between gap-3">
             <div>
                 <h2 class="font-extrabold">
                     {% if all_logs %}Все действия{% else %}Последние действия{% endif %}
                 </h2>
-                <p class="text-xs text-slate-500">Журнал сотрудников</p>
+                <p class="text-xs text-slate-500">
+                    Журнал сотрудников · всего {{ events_count }} событий
+                </p>
             </div>
-            <a href="{% if all_logs %}
+
+            <div class="flex gap-2">
+                <a href="{% url 'boss_logs_export' %}" class="btn btn-soft">
+                    <i data-lucide="file-spreadsheet"></i>
+                    Excel
+                </a>
+
+                <a href="{% if all_logs %}
 {% url 'boss' %}
 {% else %}?all_logs=1#logs{% endif %}" class="btn btn-soft">
-                {% if all_logs %}Свернуть{% else %}Все логи{% endif %}
-            </a>
+                    {% if all_logs %}Свернуть{% else %}Вся история{% endif %}
+                </a>
+            </div>
         </div>
         <div class="mt-4 space-y-4 text-xs">
             {% for event in events %}
             <div class="flex gap-3">
                 <span class="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-blue-50 font-bold text-blue-600">{{ event.actor.username|slice:":2"|upper|default:"СИ" }}</span>
-                <div>
+                <div class="min-w-0">
                     <b>{{ event.description }}</b>
-                    <p class="text-slate-500">{{ event.actor.get_full_name|default:event.actor.username|default:"Система" }} · {{ event.created_at|timesince }} назад</p>
+                    <p class="text-slate-500">
+                        {{ event.actor.get_full_name|default:event.actor.username|default:"Система" }}
+                        · {{ event.created_at|date:"d.m.Y H:i:s" }}
+                        · {{ event.action }}
+                    </p>
                 </div>
             </div>
             {% empty %}
             <p class="text-slate-500">Действий пока нет</p>
+            {% endfor %}
+        </div>
+    </section>
+</div>
+
+<div class="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+    <section class="card p-5">
+        <h3 class="font-extrabold">Топ тренеров</h3>
+        <p class="mb-4 text-xs text-slate-500">По посещаемости групп</p>
+        <div class="space-y-3">
+            {% for row in top_trainers_attendance %}
+            <div class="flex items-center justify-between gap-3">
+                <b class="truncate">{{ forloop.counter }}. {{ row.trainer.full_name }}</b>
+                <span class="badge bg-emerald-50 text-emerald-700">{{ row.attendance }}%</span>
+            </div>
+            {% empty %}
+            <p class="text-xs text-slate-400">Пока нет данных</p>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="card p-5">
+        <h3 class="font-extrabold">Топ групп</h3>
+        <p class="mb-4 text-xs text-slate-500">По посещаемости</p>
+        <div class="space-y-3">
+            {% for row in top_groups_attendance %}
+            <div class="flex items-center justify-between gap-3">
+                <b class="truncate">{{ forloop.counter }}. {{ row.group.name }}</b>
+                <span class="badge bg-blue-50 text-blue-700">{{ row.attendance_pct }}%</span>
+            </div>
+            {% empty %}
+            <p class="text-xs text-slate-400">Пока нет данных</p>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="card p-5">
+        <h3 class="font-extrabold">Топ по пробным</h3>
+        <p class="mb-4 text-xs text-slate-500">Фактически пришли на пробное</p>
+        <div class="space-y-3">
+            {% for row in top_trial_groups %}
+            <div class="flex items-center justify-between gap-3">
+                <b class="truncate">{{ forloop.counter }}. {{ row.name }}</b>
+                <span class="badge bg-violet-50 text-violet-700">{{ row.count }}</span>
+            </div>
+            {% empty %}
+            <p class="text-xs text-slate-400">Пока нет данных</p>
+            {% endfor %}
+        </div>
+    </section>
+
+    <section class="card p-5">
+        <h3 class="font-extrabold">Топ по соревнованиям</h3>
+        <p class="mb-4 text-xs text-slate-500">Уникальных участников за месяц</p>
+        <div class="space-y-3">
+            {% for row in top_competition_groups %}
+            <div class="flex items-center justify-between gap-3">
+                <b class="truncate">{{ forloop.counter }}. {{ row.name }}</b>
+                <span class="badge bg-orange-50 text-orange-700">{{ row.count }}</span>
+            </div>
+            {% empty %}
+            <p class="text-xs text-slate-400">Пока нет данных</p>
             {% endfor %}
         </div>
     </section>
