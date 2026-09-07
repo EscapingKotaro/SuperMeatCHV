@@ -29,6 +29,12 @@
         <div class="mt-1 text-2xl font-extrabold">
             {{ total_children }}
         </div>
+
+        {% if unassigned_children %}
+        <small class="text-[10px] text-amber-600">
+            Без активной группы: {{ unassigned_children }}
+        </small>
+        {% endif %}
     </div>
 
 
@@ -77,11 +83,11 @@
 
     <div class="card p-4">
         <div class="text-[10px] font-bold uppercase text-slate-400">
-            Выручка сегодня
+            Выручка на сегодняшний день
         </div>
 
         <div class="mt-1 text-2xl font-extrabold">
-            {{ revenue_today|floatformat:0 }} ₽
+            {{ revenue_to_date|floatformat:0 }} ₽
         </div>
     </div>
 
@@ -284,6 +290,7 @@
 
                     {% empty %}
 
+                        {% if not unassigned_children %}
                         <tr>
                             <td
                                 colspan="6"
@@ -292,8 +299,27 @@
                                 Нет данных по группам
                             </td>
                         </tr>
+                        {% endif %}
 
                     {% endfor %}
+
+                    {% if unassigned_children %}
+                    <tr class="bg-amber-50/50">
+                        <td>
+                            <b>Без активной группы</b>
+                            <small class="block text-slate-400">
+                                Нужно распределить
+                            </small>
+                        </td>
+                        <td>
+                            <b>{{ unassigned_children }}</b>
+                        </td>
+                        <td>—</td>
+                        <td>—</td>
+                        <td>—</td>
+                        <td>—</td>
+                    </tr>
+                    {% endif %}
 
                 </tbody>
 

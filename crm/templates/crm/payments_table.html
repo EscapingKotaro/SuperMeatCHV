@@ -42,7 +42,7 @@
                     <th>Прогноз окончания</th>
                     <th>Срок абонемента</th>
                     <th>Позвонить</th>
-                    <th class="text-right">Сумма</th>
+                    <th class="text-right">К оплате</th>
                 </tr>
             </thead>
             <tbody>
@@ -93,7 +93,14 @@
                         </b>
                     </td>
 
-                    <td class="text-right font-bold">{{ row.amount|floatformat:0 }} ₽</td>
+                    <td class="text-right">
+                        <b>{{ row.amount|floatformat:0 }} ₽</b>
+                        {% if row.prepaid_credit > 0 %}
+                        <small class="block text-emerald-600">
+                            Уже внесено: {{ row.prepaid_credit|floatformat:0 }} ₽
+                        </small>
+                        {% endif %}
+                    </td>
                 </tr>
             {% empty %}
                 <tr>

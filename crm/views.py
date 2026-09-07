@@ -3939,6 +3939,15 @@ def statistics_view(request):
         status__in=current_statuses,
     ).count()
     active_children = children.filter(status=Child.Status.ACTIVE).count()
+    unassigned_children = (
+        children
+        .filter(status__in=current_statuses)
+        .filter(
+            Q(group__isnull=True)
+            | Q(group__is_active=False)
+        )
+        .count()
+    )
 
     new_qs = children.filter(created_at__date__gte=month_start, created_at__date__lte=month_end)
     new_count = new_qs.count()
@@ -3947,7 +3956,20 @@ def statistics_view(request):
         status__in=[Child.Status.LOST, Child.Status.ARCHIVED],
         archived_at__gte=month_start, archived_at__lte=month_end).count()
 
-    revenue_today = Payment.objects.filter(date=today).aggregate(s=Sum('amount'))['s'] or 0
+    if month_start > today:
+        revenue_to_date = Decimal("0")
+    else:
+        revenue_cutoff = min(month_end, today)
+        revenue_to_date = (
+            Payment.objects
+            .filter(
+                date__gte=month_start,
+                date__lte=revenue_cutoff,
+            )
+            .aggregate(s=Sum("amount"))["s"]
+            or Decimal("0")
+        )
+
     revenue_month = Payment.objects.filter(
         date__gte=month_start, date__lte=month_end).aggregate(s=Sum('amount'))['s'] or 0
 
@@ -4003,9 +4025,13 @@ def statistics_view(request):
     context = {
         'month_start': month_start, 'month_end': month_end, 'today': today,
         'total_children': total_children, 'active_children': active_children,
+        'unassigned_children': unassigned_children,
         'new_count': new_count, 'new_kept': new_kept,
         'left_count': left_count,
-        'revenue_today': revenue_today, 'revenue_month': revenue_month,
+        'revenue_to_date': revenue_to_date,
+        # Совместимость со старым именем контекста.
+        'revenue_today': revenue_to_date,
+        'revenue_month': revenue_month,
         'potential': potential, 'expected': expected,
         'target': target, 'target_percent': target_percent,
         'expenses_month': expenses_month,
@@ -4140,6 +4166,29 @@ def salaries_export_view(request):
     return response
 
 
+def _prepaid_credit(child):
+    """Свободная предоплата после покрытия уже начисленных обязательств."""
+    subscriptions_total = (
+        child.subscriptions.aggregate(s=Sum("price"))["s"]
+        or Decimal("0")
+    )
+    attendance_charges = (
+        child.attendances.aggregate(s=Sum("charge_amount"))["s"]
+        or Decimal("0")
+    )
+    paid_total = (
+        child.payments.aggregate(s=Sum("amount"))["s"]
+        or Decimal("0")
+    )
+
+    return max(
+        Decimal("0"),
+        Decimal(paid_total)
+        - Decimal(subscriptions_total)
+        - Decimal(attendance_charges),
+    )
+
+
 def build_renewal_rows(month_start, month_end, today=None):
     """Кому и когда звонить по продлению абонемента."""
     today = today or timezone.localdate()
@@ -4211,11 +4260,24 @@ def build_renewal_rows(month_start, month_end, today=None):
             priority = 3
             status = "Запланировано"
 
-        amount = (
+        renewal_price = Decimal(
             subscription.tariff.price
             if subscription.tariff
             else subscription.price
         )
+        prepaid_credit = min(
+            _prepaid_credit(child),
+            renewal_price,
+        )
+        amount = max(
+            Decimal("0"),
+            renewal_price - prepaid_credit,
+        )
+
+        # Продление уже полностью оплачено заранее — звонить не нужно,
+        # и в прогнозную выручку его второй раз не включаем.
+        if amount <= 0:
+            continue
 
         rows.append({
             "child": child,
@@ -4227,6 +4289,8 @@ def build_renewal_rows(month_start, month_end, today=None):
             "projected_end": projected_end,
             "renewal_date": renewal_date,
             "call_date": call_date,
+            "renewal_price": renewal_price,
+            "prepaid_credit": prepaid_credit,
             "amount": amount,
             "priority": priority,
             "status": status,
