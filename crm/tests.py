@@ -2463,6 +2463,68 @@ class CrmWorkflowTests(TestCase):
             self.group.name,
         )
 
+    def test_boss_competition_top_keeps_group_at_participation_after_transfer(self):
+        today = timezone.localdate()
+
+        other_trainer = Trainer.objects.create(
+            full_name="Тренер новой группы",
+        )
+        other_group = Group.objects.create(
+            name="Новая группа после перевода",
+            trainer=other_trainer,
+        )
+
+        competition = Competition.objects.create(
+            name="Историческое соревнование",
+            date=today,
+            city="Москва",
+        )
+
+        entry = CompetitionEntry.objects.create(
+            child=self.child,
+            competition=competition,
+            category="Общая",
+        )
+
+        self.assertEqual(
+            entry.group_snapshot_id,
+            self.group.pk,
+        )
+
+        self.child.group = other_group
+        self.child.save(
+            update_fields=["group"],
+        )
+
+        self.client.login(
+            username="boss",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("boss"),
+        )
+
+        self.assertEqual(
+            response.status_code,
+            200,
+        )
+
+        competition_groups = (
+            response.context["top_competition_groups"]
+        )
+
+        self.assertEqual(
+            competition_groups[0]["name"],
+            self.group.name,
+        )
+        self.assertFalse(
+            any(
+                row["name"] == other_group.name
+                for row in competition_groups
+            )
+        )
+
     def test_audit_middleware_records_unlogged_successful_actions(self):
         self.client.login(
             username="admin",

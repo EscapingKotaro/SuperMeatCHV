@@ -627,6 +627,14 @@ class CompetitionEntry(models.Model):
         related_name="entries",
         verbose_name="соревнование",
     )
+    group_snapshot = models.ForeignKey(
+        Group,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="+",
+        verbose_name="Группа на момент участия",
+    )
     category = models.CharField(
         "Категория/группа",
         max_length=100,
@@ -653,6 +661,23 @@ class CompetitionEntry(models.Model):
                 name="unique_child_competition_category",
             ),
         ]
+
+    def save(self, *args, **kwargs):
+        # Для новых участий фиксируем группу один раз.
+        # Последующий перевод ребёнка не должен менять историю соревнования.
+        if (
+            self._state.adding
+            and self.group_snapshot_id is None
+            and self.child_id
+        ):
+            self.group_snapshot_id = (
+                Child.objects
+                .filter(pk=self.child_id)
+                .values_list("group_id", flat=True)
+                .first()
+            )
+
+        super().save(*args, **kwargs)
 
     def total_points(self):
         apparatus_ids = list(

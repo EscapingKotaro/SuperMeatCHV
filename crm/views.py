@@ -10,6 +10,7 @@ from django.contrib.auth import authenticate, get_user_model, login, logout, upd
 from django.contrib.auth.decorators import login_required
 from django.core.management import call_command
 from django.db.models import Count, Max, Q, Sum
+from django.db.models.functions import Coalesce
 from django.db import transaction
 from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidden, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
@@ -1273,11 +1274,26 @@ def competitions_page(request):
             )
 
             if entry_form.is_valid():
+                previous_child_id = (
+                    target.child_id
+                    if target
+                    else None
+                )
+
                 entry = entry_form.save(
                     commit=False
                 )
 
                 entry.competition = selected
+
+                # Если администратор исправил самого участника в существующей
+                # записи, снимок группы должен соответствовать новому ребёнку.
+                if (
+                    target
+                    and entry.child_id != previous_child_id
+                ):
+                    entry.group_snapshot_id = entry.child.group_id
+
                 entry.save()
 
                 for apparatus_item in selected.apparatus.all():
@@ -3146,7 +3162,7 @@ def boss_page(request):
 
     top_competition_groups = [
         {
-            "name": row["child__group__name"],
+            "name": row["ranking_group_name"],
             "count": row["total"],
         }
         for row in (
@@ -3154,11 +3170,23 @@ def boss_page(request):
             .filter(
                 competition__date__gte=month,
                 competition__date__lte=month_end,
-                child__group__isnull=False,
+            )
+            .annotate(
+                ranking_group_id=Coalesce(
+                    "group_snapshot_id",
+                    "child__group_id",
+                ),
+                ranking_group_name=Coalesce(
+                    "group_snapshot__name",
+                    "child__group__name",
+                ),
+            )
+            .filter(
+                ranking_group_id__isnull=False,
             )
             .values(
-                "child__group_id",
-                "child__group__name",
+                "ranking_group_id",
+                "ranking_group_name",
             )
             .annotate(
                 total=Count(
@@ -3168,7 +3196,7 @@ def boss_page(request):
             )
             .order_by(
                 "-total",
-                "child__group__name",
+                "ranking_group_name",
             )[:5]
         )
     ]
