@@ -40,7 +40,6 @@ urlpatterns = [
 
     # Оплаты / абонементы
     path("payments/", views.payments_page, name="payments"),
-    path("payments/table/", views.payments_table_view, name="payments_table"),
     path("payments/history/", views.payment_history_view, name="payment_history"),
 
     # Расходы

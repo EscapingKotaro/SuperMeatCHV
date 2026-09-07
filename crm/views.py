@@ -4667,28 +4667,6 @@ def build_renewal_rows(month_start, month_end, today=None):
     return rows
 
 
-@login_required
-def payments_table_view(request):
-    month_start, month_end, today = _month_range(request)
-    rows = build_renewal_rows(month_start, month_end, today)
-    expected = sum(
-        (row["amount"] for row in rows),
-        Decimal("0"),
-    )
-
-    context = {
-        'rows': rows,
-        'expected': expected,
-        'urgent_count': sum(1 for row in rows if row["priority"] == 0),
-        'call_today_count': sum(1 for row in rows if row["call_date"] <= today),
-        'month_start': month_start,
-        'month_end': month_end,
-        'today': today,
-        'title': 'Предварительные оплаты',
-        'page': 'payments_table',
-    }
-    return render(request, 'crm/payments_table.html', context)
-
 
 @login_required
 def payment_history_view(request):
