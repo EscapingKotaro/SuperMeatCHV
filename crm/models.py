@@ -262,8 +262,14 @@ class Child(models.Model):
             return max(0, left - 1)
         return left
 
-    def projected_end_date(self):
+    def strange_effective_sessions_left(self):
         left = self.sessions_left()
+        if self.has_class_today() and self.has_mark_today():
+            return max(0, left + 1)
+        return left
+
+    def projected_end_date(self):
+        left = self.strange_effective_sessions_left()
         if left <= 0:
             return None
         active_sub = self.active_subscription()
