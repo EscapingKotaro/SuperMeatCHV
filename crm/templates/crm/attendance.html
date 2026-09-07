@@ -180,8 +180,7 @@
                                         data-child-id="{{ item.child.id }}"
                                         data-date="{{ entry.date|date:'Y-m-d' }}"
                                         data-state="{% if entry.status == 'present' %}1{% elif entry.status == 'absent' %}2{% elif entry.status == 'frozen' %}3{% elif entry.status == 'vacation' %}4{% elif entry.status == 'excused' %}5{% else %}0{% endif %}"
-                                        class="attendance-cell w-8 h-8 text-xs {% if entry.status == 'present' %}bg-emerald-100 text-emerald-700{% elif entry.status == 'absent' %}bg-red-100 text-red-700{% elif entry.status == 'frozen' %}bg-blue-100 text-blue-700{% elif entry.status == 'vacation' %}bg-amber-100 text-amber-700{% elif entry.status == 'excused' %}bg-yellow-100 text-yellow-700{% else %}bg-slate-100 text-slate-400{% endif %}"
-                                        oncontextmenu="showCancelMenu(event, '{{ item.child.id }}', '{{ entry.date|date:'Y-m-d' }}'); return false;">
+                                        class="attendance-cell w-8 h-8 text-xs {% if entry.status == 'present' %}bg-emerald-100 text-emerald-700{% elif entry.status == 'absent' %}bg-red-100 text-red-700{% elif entry.status == 'frozen' %}bg-blue-100 text-blue-700{% elif entry.status == 'vacation' %}bg-amber-100 text-amber-700{% elif entry.status == 'excused' %}bg-yellow-100 text-yellow-700{% else %}bg-slate-100 text-slate-400{% endif %}">
                                     {% if entry.status == 'present' %}+{% elif entry.status == 'absent' %}×{% elif entry.status == 'frozen' %}❄{% elif entry.status == 'vacation' %}О{% elif entry.status == 'excused' %}У{% endif %}
                                 </button>
                             </td>
@@ -283,16 +282,6 @@
     </div>
 </div>
 
-<!-- Контекстное меню правого клика -->
-<div id="context-menu" class="hidden fixed z-[60] bg-white border border-slate-200 rounded-lg shadow-xl py-1 min-w-[180px]">
-    <button onclick="cancelAttendance()" class="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 flex items-center gap-2 text-red-600">
-        <i data-lucide="x" class="h-4 w-4"></i>
-        Отменить отметку
-    </button>
-    <button onclick="closeContextMenu()" class="w-full text-left px-3 py-2 text-sm hover:bg-slate-100 text-slate-500 border-t border-slate-100 mt-1">
-        Закрыть
-    </button>
-</div>
 
 <script>
 (() => {
@@ -302,442 +291,206 @@
     const CANCEL_URL = "{% url 'cancel_attendance' %}";
 
     const menu = document.getElementById("attendance-menu");
-
     let activeButton = null;
-
 
     // =========================================================
     // СОСТОЯНИЯ
     // =========================================================
-
     const STATES = {
-        present: {
-            state: "1",
-            symbol: "+",
-            classes: [
-                "bg-emerald-100",
-                "text-emerald-700"
-            ]
-        },
-
-        absent: {
-            state: "2",
-            symbol: "×",
-            classes: [
-                "bg-red-100",
-                "text-red-700"
-            ]
-        },
-
-        frozen: {
-            state: "3",
-            symbol: "❄",
-            classes: [
-                "bg-blue-100",
-                "text-blue-700"
-            ]
-        },
-
-        vacation: {
-            state: "4",
-            symbol: "О",
-            classes: [
-                "bg-amber-100",
-                "text-amber-700"
-            ]
-        },
-
-        excused: {
-            state: "5",
-            symbol: "У",
-            classes: [
-                "bg-yellow-100",
-                "text-yellow-700"
-            ]
-        },
-
-        clear: {
-            state: "0",
-            symbol: "",
-            classes: [
-                "bg-slate-100",
-                "text-slate-400"
-            ]
-        }
+        present: { state: "1", symbol: "+", classes: ["bg-emerald-100", "text-emerald-700"] },
+        absent: { state: "2", symbol: "×", classes: ["bg-red-100", "text-red-700"] },
+        frozen: { state: "3", symbol: "❄", classes: ["bg-blue-100", "text-blue-700"] },
+        vacation: { state: "4", symbol: "О", classes: ["bg-amber-100", "text-amber-700"] },
+        excused: { state: "5", symbol: "У", classes: ["bg-yellow-100", "text-yellow-700"] },
+        clear: { state: "0", symbol: "", classes: ["bg-slate-100", "text-slate-400"] }
     };
 
-
     const ALL_CLASSES = [
-        "bg-slate-100",
-        "text-slate-400",
-
-        "bg-emerald-100",
-        "text-emerald-700",
-
-        "bg-red-100",
-        "text-red-700",
-
-        "bg-blue-100",
-        "text-blue-700",
-
-        "bg-amber-100",
-        "text-amber-700",
-
-        "bg-yellow-100",
-        "text-yellow-700"
+        "bg-slate-100", "text-slate-400",
+        "bg-emerald-100", "text-emerald-700",
+        "bg-red-100", "text-red-700",
+        "bg-blue-100", "text-blue-700",
+        "bg-amber-100", "text-amber-700",
+        "bg-yellow-100", "text-yellow-700"
     ];
-
 
     // =========================================================
     // CSRF
     // =========================================================
-
     function getCsrfToken() {
-        const input = document.querySelector(
-            'input[name="csrfmiddlewaretoken"]'
-        );
-
-        if (input && input.value) {
-            return input.value;
-        }
-
-        const cookie = document.cookie
-            .split("; ")
-            .find(row => row.startsWith("csrftoken="));
-
-        return cookie
-            ? decodeURIComponent(cookie.split("=")[1])
-            : "";
+        const input = document.querySelector('input[name="csrfmiddlewaretoken"]');
+        if (input && input.value) return input.value;
+        const cookie = document.cookie.split("; ").find(row => row.startsWith("csrftoken="));
+        return cookie ? decodeURIComponent(cookie.split("=")[1]) : "";
     }
-
 
     // =========================================================
     // ОТРИСОВКА ЯЧЕЙКИ
     // =========================================================
-
     function paintButton(button, status) {
         const config = STATES[status];
-
-        if (!config) {
-            return;
-        }
-
+        if (!config) return;
         button.classList.remove(...ALL_CLASSES);
-
         button.classList.add(...config.classes);
-
         button.textContent = config.symbol;
-
         button.dataset.state = config.state;
     }
 
-
     // =========================================================
-    // ОТКРЫТИЕ МЕНЮ
+    // УПРАВЛЕНИЕ МЕНЮ
     // =========================================================
-
     function openMenu(button) {
         activeButton = button;
-
         const rect = button.getBoundingClientRect();
-
         menu.classList.remove("hidden");
-
-        const menuWidth = menu.offsetWidth;
-        const menuHeight = menu.offsetHeight;
 
         let left = rect.left;
         let top = rect.bottom + 6;
+        const menuWidth = menu.offsetWidth;
+        const menuHeight = menu.offsetHeight;
 
+        if (left + menuWidth > window.innerWidth - 10) left = window.innerWidth - menuWidth - 10;
+        if (top + menuHeight > window.innerHeight - 10) top = rect.top - menuHeight - 6;
 
-        // Если справа не помещается
-        if (left + menuWidth > window.innerWidth - 10) {
-            left = window.innerWidth - menuWidth - 10;
-        }
-
-
-        // Если снизу не помещается — показываем сверху
-        if (top + menuHeight > window.innerHeight - 10) {
-            top = rect.top - menuHeight - 6;
-        }
-
-
-        left = Math.max(8, left);
-        top = Math.max(8, top);
-
-
-        menu.style.left = `${left}px`;
-        menu.style.top = `${top}px`;
+        menu.style.left = `${Math.max(8, left)}px`;
+        menu.style.top = `${Math.max(8, top)}px`;
     }
-
 
     function closeMenu() {
         menu.classList.add("hidden");
         activeButton = null;
     }
 
-
     // =========================================================
-    // СОХРАНИТЬ ОТМЕТКУ
+    // API: СОХРАНИТЬ / УДАЛИТЬ
     // =========================================================
-
     async function saveAttendance(button, status) {
         const childId = button.dataset.childId;
         const date = button.dataset.date;
-
-        if (!childId || !date) {
-            console.error("Нет childId/date", {
-                childId,
-                date
-            });
-
-            return;
-        }
-
-
-        const body = new URLSearchParams({
-            child_id: childId,
-            date: date,
-            status: status
-        });
-
+        if (!childId || !date) return;
 
         button.disabled = true;
         button.classList.add("opacity-50");
 
-
         try {
             const response = await fetch(MARK_URL, {
                 method: "POST",
-
                 credentials: "same-origin",
-
                 headers: {
-                    "Content-Type":
-                        "application/x-www-form-urlencoded;charset=UTF-8",
-
-                    "X-CSRFToken":
-                        getCsrfToken(),
-
-                    "X-Requested-With":
-                        "XMLHttpRequest"
+                    "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+                    "X-CSRFToken": getCsrfToken(),
+                    "X-Requested-With": "XMLHttpRequest"
                 },
-
-                body: body.toString()
+                body: new URLSearchParams({ child_id: childId, date: date, status: status }).toString()
             });
-
-
             const data = await response.json();
-
-
-            if (!response.ok || data.status !== "ok") {
-                throw new Error(
-                    data.message ||
-                    `HTTP ${response.status}`
-                );
-            }
-
-
+            if (!response.ok || data.status !== "ok") throw new Error(data.message || `HTTP ${response.status}`);
             paintButton(button, status);
-
         } catch (error) {
-            console.error(
-                "Ошибка сохранения отметки:",
-                error
-            );
-
-            alert(
-                "Не удалось сохранить отметку: " +
-                error.message
-            );
-
+            console.error("Ошибка сохранения:", error);
+            alert("Не удалось сохранить отметку: " + error.message);
         } finally {
             button.disabled = false;
             button.classList.remove("opacity-50");
         }
     }
-
-
-    // =========================================================
-    // УДАЛИТЬ ОТМЕТКУ
-    // =========================================================
 
     async function clearAttendance(button) {
         const childId = button.dataset.childId;
         const date = button.dataset.date;
 
-
-        const body = new URLSearchParams({
-            child_id: childId,
-            date: date
-        });
-
-
         button.disabled = true;
         button.classList.add("opacity-50");
-
 
         try {
             const response = await fetch(CANCEL_URL, {
                 method: "POST",
-
                 credentials: "same-origin",
-
                 headers: {
-                    "Content-Type":
-                        "application/x-www-form-urlencoded;charset=UTF-8",
-
-                    "X-CSRFToken":
-                        getCsrfToken(),
-
-                    "X-Requested-With":
-                        "XMLHttpRequest"
+                    "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+                    "X-CSRFToken": getCsrfToken(),
+                    "X-Requested-With": "XMLHttpRequest"
                 },
-
-                body: body.toString()
+                body: new URLSearchParams({ child_id: childId, date: date }).toString()
             });
-
-
             const data = await response.json();
-
-
-            if (!response.ok || data.status !== "ok") {
-                throw new Error(
-                    data.message ||
-                    `HTTP ${response.status}`
-                );
-            }
-
-
+            if (!response.ok || data.status !== "ok") throw new Error(data.message || `HTTP ${response.status}`);
             paintButton(button, "clear");
-
         } catch (error) {
-            console.error(
-                "Ошибка удаления отметки:",
-                error
-            );
-
-            alert(
-                "Не удалось убрать отметку: " +
-                error.message
-            );
-
+            console.error("Ошибка удаления:", error);
+            alert("Не удалось убрать отметку: " + error.message);
         } finally {
             button.disabled = false;
             button.classList.remove("opacity-50");
         }
     }
 
-
     // =========================================================
-    // КЛИК ПО ЯЧЕЙКЕ
+    // 1. ЛКМ: БЫСТРОЕ ПЕРЕКЛЮЧЕНИЕ (Пусто -> Пришёл, Есть -> Убрать)
     // =========================================================
-
-    document.addEventListener(
-        "click",
-        function(event) {
-            const button = event.target.closest(
-                "[data-attendance]"
-            );
-
-            if (!button) {
-                return;
-            }
-
-            event.preventDefault();
-            event.stopPropagation();
-
-            openMenu(button);
-        },
-        true
-    );
-
-
-    // =========================================================
-    // ВЫБОР ИЗ МЕНЮ
-    // =========================================================
-
-    menu.addEventListener(
-        "click",
-        async function(event) {
-            const option = event.target.closest(
-                "[data-attendance-choice]"
-            );
-
-            if (!option || !activeButton) {
-                return;
-            }
-
-
-            const status =
-                option.dataset.attendanceChoice;
-
-            const button = activeButton;
-
-
-            closeMenu();
-
-
-            if (status === "clear") {
-                await clearAttendance(button);
-                return;
-            }
-
-
-            await saveAttendance(
-                button,
-                status
-            );
-        }
-    );
-
-
-    // =========================================================
-    // КЛИК ВНЕ МЕНЮ
-    // =========================================================
-
-    document.addEventListener(
-        "click",
-        function(event) {
-            if (
-                !menu.classList.contains("hidden") &&
-                !menu.contains(event.target)
-            ) {
+    document.addEventListener("click", function(event) {
+        const button = event.target.closest("[data-attendance]");
+        
+        if (!button) {
+            // Если кликнули в пустое место и меню открыто — закрываем его
+            if (!menu.classList.contains("hidden") && !menu.contains(event.target)) {
                 closeMenu();
             }
+            return;
         }
-    );
 
+        // Это клик по ячейке табеля
+        event.preventDefault();
+        event.stopPropagation();
 
-    // =========================================================
-    // ESC
-    // =========================================================
-
-    document.addEventListener(
-        "keydown",
-        function(event) {
-            if (event.key === "Escape") {
-                closeMenu();
-            }
+        const currentState = button.dataset.state;
+        if (currentState === "0") {
+            saveAttendance(button, "present"); // Нет отметки -> ставим "+"
+        } else {
+            clearAttendance(button); // Есть отметка -> стираем
         }
-    );
-
+    });
 
     // =========================================================
-    // СКРОЛЛ
+    // 2. ПКМ: ОТКРЫТИЕ МЕНЮ ВЫБОРА
     // =========================================================
+    document.addEventListener("contextmenu", function(event) {
+        const button = event.target.closest("[data-attendance]");
+        if (!button) return;
 
-    window.addEventListener(
-        "scroll",
-        function() {
-            if (
-                !menu.classList.contains("hidden")
-            ) {
-                closeMenu();
-            }
-        },
-        true
-    );
+        event.preventDefault(); // Блокируем стандартное меню браузера
+        event.stopPropagation();
+        openMenu(button);
+    });
+
+    // =========================================================
+    // 3. ВЫБОР ИЗ МЕНЮ
+    // =========================================================
+    menu.addEventListener("click", async function(event) {
+        const option = event.target.closest("[data-attendance-choice]");
+        if (!option || !activeButton) return;
+
+        const status = option.dataset.attendanceChoice;
+        const button = activeButton;
+        closeMenu();
+
+        if (status === "clear") {
+            await clearAttendance(button);
+        } else {
+            await saveAttendance(button, status);
+        }
+    });
+
+    // =========================================================
+    // 4. ЗАКРЫТИЕ ПО ESC И СКРОЛЛУ
+    // =========================================================
+    document.addEventListener("keydown", function(event) {
+        if (event.key === "Escape") closeMenu();
+    });
+
+    window.addEventListener("scroll", function() {
+        if (!menu.classList.contains("hidden")) closeMenu();
+    }, true);
 
 })();
 </script>
