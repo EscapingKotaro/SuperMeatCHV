@@ -286,6 +286,50 @@
         }, { passive: false });
     </script>
 
+    <script>
+    document.addEventListener('click', function(e) {
+        // 1. Если кликнули по кнопке с data-dropdown-toggle
+        const toggleBtn = e.target.closest('[data-dropdown-toggle]');
+        if (toggleBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            
+            const wrapper = toggleBtn.closest('[data-dropdown]');
+            const menu = wrapper.querySelector('[data-dropdown-menu]');
+            const isHidden = menu.classList.contains('hidden');
+            
+            // Сначала закрываем ВСЕ открытые меню на странице
+            document.querySelectorAll('[data-dropdown-menu]').forEach(m => m.classList.add('hidden'));
+            
+            // Если текущее было закрыто — открываем его
+            if (isHidden) {
+                menu.classList.remove('hidden');
+            }
+            return; // Прерываем выполнение, чтобы не сработал "клик вне"
+        }
+
+        // 2. Если кликнули ВНУТРИ самого выпадающего меню (по ссылке) — ничего не делаем, пусть ссылка сработает
+        if (e.target.closest('[data-dropdown-menu]')) {
+            return; 
+        }
+
+        // 3. Клик в ЛЮБОМ другом месте страницы закрывает все меню
+        document.querySelectorAll('[data-dropdown-menu]').forEach(menu => {
+            menu.classList.add('hidden');
+        });
+    });
+
+    // Закрытие при скролле (чтобы меню не улетало от кнопки)
+    window.addEventListener('scroll', () => {
+        document.querySelectorAll('[data-dropdown-menu]').forEach(m => m.classList.add('hidden'));
+    }, true);
+
+    // Закрытие при изменении размера окна
+    window.addEventListener('resize', () => {
+        document.querySelectorAll('[data-dropdown-menu]').forEach(m => m.classList.add('hidden'));
+    });
+    </script>
+
     {% block scripts %}{% endblock %}
 
 </body>
