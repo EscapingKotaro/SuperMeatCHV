@@ -19,6 +19,8 @@ from .models import (
     ManagerTask,
     Notification,
     Newcomer,
+    Payment,
+    RevenueTarget,
     Role,
     StaffProfile,
     Subscription,
@@ -1648,6 +1650,11 @@ class CrmWorkflowTests(TestCase):
         
     def test_statistics_forecast_ignores_cancelled_subscription(self):
         today = timezone.localdate()
+        next_month = (
+            today.replace(day=28)
+            + timedelta(days=4)
+        ).replace(day=1)
+        month_end = next_month - timedelta(days=1)
 
         active_child = Child.objects.create(
             last_name="Активная",
@@ -1668,7 +1675,7 @@ class CrmWorkflowTests(TestCase):
         Subscription.objects.create(
             child=active_child,
             start_date=today - timedelta(days=5),
-            end_date=today + timedelta(days=5),
+            end_date=month_end,
             sessions_total=8,
             price=Decimal("6000"),
             is_active=True,
@@ -1677,7 +1684,7 @@ class CrmWorkflowTests(TestCase):
         Subscription.objects.create(
             child=cancelled_child,
             start_date=today - timedelta(days=5),
-            end_date=today + timedelta(days=6),
+            end_date=month_end,
             sessions_total=8,
             price=Decimal("9000"),
             is_active=False,
@@ -1691,7 +1698,7 @@ class CrmWorkflowTests(TestCase):
         response = self.client.get(
             reverse("statistics"),
             {
-                "month": today.replace(day=1).isoformat(),
+                "month": today.strftime("%Y-%m"),
             },
         )
 
@@ -1900,6 +1907,476 @@ class CrmWorkflowTests(TestCase):
         )
         
         
+    def test_statistics_get_does_not_write_attendance_snapshots(self):
+        today = timezone.localdate()
+
+        attendance = Attendance.objects.create(
+            child=self.child,
+            date=today,
+            status=Attendance.Status.PRESENT,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("statistics"),
+            {"month": today.strftime("%Y-%m")},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        attendance.refresh_from_db()
+        self.assertIsNone(attendance.group_snapshot)
+        self.assertIsNone(attendance.trainer_snapshot)
+        self.assertIsNone(attendance.salary_rate_snapshot)
+
+        self.client.logout()
+        self.client.login(
+            username="senior",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("salaries"),
+            {"month": today.strftime("%Y-%m")},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        attendance.refresh_from_db()
+        self.assertIsNone(attendance.group_snapshot)
+        self.assertIsNone(attendance.trainer_snapshot)
+        self.assertIsNone(attendance.salary_rate_snapshot)
+
+    def test_transferred_child_old_mark_does_not_inflate_current_group_stats(self):
+        today = timezone.localdate()
+
+        other_trainer = Trainer.objects.create(
+            full_name="Другой тренер",
+        )
+        other_group = Group.objects.create(
+            name="Другая группа",
+            trainer=other_trainer,
+        )
+
+        Attendance.objects.create(
+            child=self.child,
+            date=today,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+            salary_rate_snapshot=self.group.salary_rate,
+            status=Attendance.Status.PRESENT,
+        )
+
+        self.child.group = other_group
+        self.child.save(update_fields=["group"])
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("statistics"),
+            {"month": today.strftime("%Y-%m")},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        old_group_stats = next(
+            row
+            for row in response.context["groups_stats"]
+            if row["group"].pk == self.group.pk
+        )
+        new_group_stats = next(
+            row
+            for row in response.context["groups_stats"]
+            if row["group"].pk == other_group.pk
+        )
+
+        self.assertEqual(old_group_stats["present"], 0)
+        self.assertEqual(new_group_stats["present"], 0)
+
+    def test_future_subscription_is_not_pending_renewal(self):
+        today = timezone.localdate()
+        future_start = (
+            today.replace(day=28)
+            + timedelta(days=40)
+        ).replace(day=1)
+        future_end = future_start + timedelta(days=20)
+
+        Subscription.objects.create(
+            child=self.child,
+            start_date=future_start,
+            end_date=future_end,
+            sessions_total=8,
+            price=Decimal("7000"),
+            is_active=True,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("payments_table"),
+            {"month": future_end.strftime("%Y-%m")},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["rows"], [])
+        self.assertEqual(response.context["expected"], Decimal("0"))
+
+    def test_statistics_and_prepayments_use_same_forecast_source(self):
+        today = timezone.localdate()
+        next_month = (
+            today.replace(day=28)
+            + timedelta(days=4)
+        ).replace(day=1)
+        month_end = next_month - timedelta(days=1)
+
+        Subscription.objects.create(
+            child=self.child,
+            start_date=today - timedelta(days=5),
+            end_date=month_end,
+            sessions_total=8,
+            price=Decimal("6500"),
+            is_active=True,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        month = today.strftime("%Y-%m")
+
+        statistics = self.client.get(
+            reverse("statistics"),
+            {"month": month},
+        )
+        prepayments = self.client.get(
+            reverse("payments_table"),
+            {"month": month},
+        )
+
+        self.assertEqual(statistics.status_code, 200)
+        self.assertEqual(prepayments.status_code, 200)
+        self.assertEqual(
+            statistics.context["expected"],
+            prepayments.context["expected"],
+        )
+        self.assertEqual(
+            statistics.context["potential"],
+            Decimal(statistics.context["revenue_month"])
+            + prepayments.context["expected"],
+        )
+
+    def test_boss_target_for_other_month_does_not_move_current_target(self):
+        today = timezone.localdate()
+        current_month = today.replace(day=1)
+        next_month = (
+            current_month
+            + timedelta(days=32)
+        ).replace(day=1)
+
+        current_target = RevenueTarget.objects.create(
+            month=current_month,
+            amount=Decimal("500000"),
+            set_by=self.boss,
+        )
+
+        self.client.login(
+            username="boss",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("boss"),
+            {
+                "action": "set_target",
+                "target-month": next_month.strftime("%Y-%m"),
+                "target-amount": "600000",
+            },
+        )
+
+        self.assertRedirects(response, reverse("boss"))
+
+        current_target.refresh_from_db()
+        self.assertEqual(
+            current_target.amount,
+            Decimal("500000"),
+        )
+        self.assertEqual(
+            RevenueTarget.objects.get(month=next_month).amount,
+            Decimal("600000"),
+        )
+
+    def test_inactive_trainer_with_departure_is_kept_in_statistics(self):
+        today = timezone.localdate()
+
+        inactive_trainer = Trainer.objects.create(
+            full_name="Бывший тренер",
+            is_active=False,
+        )
+
+        Child.objects.create(
+            last_name="Ушедшая",
+            first_name="Спортсменка",
+            birth_year=2014,
+            status=Child.Status.LOST,
+            archived_at=today,
+            departure_trainer=inactive_trainer,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("statistics"),
+            {"month": today.strftime("%Y-%m")},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        trainer_row = next(
+            row
+            for row in response.context["trainers_stats"]
+            if row["trainer"].pk == inactive_trainer.pk
+        )
+
+        self.assertEqual(trainer_row["left"], 1)
+
+    def test_salary_pages_require_senior_role(self):
+        today = timezone.localdate()
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        self.assertEqual(
+            self.client.get(
+                reverse("salaries"),
+                {"month": today.strftime("%Y-%m")},
+            ).status_code,
+            403,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("salaries_export"),
+                {"month": today.strftime("%Y-%m")},
+            ).status_code,
+            403,
+        )
+
+        self.client.logout()
+        self.client.login(
+            username="senior",
+            password="TestPass123!",
+        )
+
+        self.assertEqual(
+            self.client.get(
+                reverse("salaries"),
+                {"month": today.strftime("%Y-%m")},
+            ).status_code,
+            200,
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("salaries_export"),
+                {"month": today.strftime("%Y-%m")},
+            ).status_code,
+            200,
+        )
+
+    def test_statistics_revenue_to_date_is_accumulated_for_selected_month(self):
+        today = timezone.localdate()
+        current_month = today.replace(day=1)
+        previous_month_end = current_month - timedelta(days=1)
+        previous_month_start = previous_month_end.replace(day=1)
+
+        Payment.objects.create(
+            child=self.child,
+            amount=Decimal("1000"),
+            date=previous_month_start,
+            created_by=self.admin,
+        )
+        Payment.objects.create(
+            child=self.child,
+            amount=Decimal("2000"),
+            date=previous_month_end,
+            created_by=self.admin,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("statistics"),
+            {"month": previous_month_start.strftime("%Y-%m")},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["revenue_to_date"],
+            Decimal("3000"),
+        )
+        self.assertEqual(
+            response.context["revenue_month"],
+            Decimal("3000"),
+        )
+
+    def test_statistics_accounts_for_children_without_active_group(self):
+        Child.objects.create(
+            last_name="Безгруппный",
+            first_name="Иван",
+            birth_year=2015,
+            group=None,
+            status=Child.Status.ACTIVE,
+        )
+
+        today = timezone.localdate()
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("statistics"),
+            {"month": today.strftime("%Y-%m")},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        grouped = sum(
+            row["kids"]
+            for row in response.context["groups_stats"]
+        )
+
+        self.assertEqual(
+            response.context["unassigned_children"],
+            1,
+        )
+        self.assertEqual(
+            grouped + response.context["unassigned_children"],
+            response.context["total_children"],
+        )
+
+    def test_partial_prepayment_reduces_expected_renewal(self):
+        today = timezone.localdate()
+        next_month = (
+            today.replace(day=28)
+            + timedelta(days=4)
+        ).replace(day=1)
+        month_end = next_month - timedelta(days=1)
+
+        subscription = Subscription.objects.create(
+            child=self.child,
+            start_date=today - timedelta(days=5),
+            end_date=month_end,
+            sessions_total=8,
+            price=Decimal("6000"),
+            is_active=True,
+        )
+
+        Payment.objects.create(
+            child=self.child,
+            subscription=subscription,
+            amount=Decimal("9000"),
+            date=today,
+            created_by=self.admin,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("payments_table"),
+            {"month": today.strftime("%Y-%m")},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        row = next(
+            item
+            for item in response.context["rows"]
+            if item["child"].pk == self.child.pk
+        )
+
+        self.assertEqual(
+            row["prepaid_credit"],
+            Decimal("3000"),
+        )
+        self.assertEqual(
+            row["amount"],
+            Decimal("3000"),
+        )
+
+    def test_full_prepayment_closes_call_and_forecast(self):
+        today = timezone.localdate()
+        next_month = (
+            today.replace(day=28)
+            + timedelta(days=4)
+        ).replace(day=1)
+        month_end = next_month - timedelta(days=1)
+
+        subscription = Subscription.objects.create(
+            child=self.child,
+            start_date=today - timedelta(days=5),
+            end_date=month_end,
+            sessions_total=8,
+            price=Decimal("6000"),
+            is_active=True,
+        )
+
+        Payment.objects.create(
+            child=self.child,
+            subscription=subscription,
+            amount=Decimal("12000"),
+            date=today,
+            created_by=self.admin,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        month = today.strftime("%Y-%m")
+        prepayments = self.client.get(
+            reverse("payments_table"),
+            {"month": month},
+        )
+        statistics = self.client.get(
+            reverse("statistics"),
+            {"month": month},
+        )
+
+        self.assertEqual(prepayments.status_code, 200)
+        self.assertEqual(statistics.status_code, 200)
+
+        self.assertFalse(
+            any(
+                row["child"].pk == self.child.pk
+                for row in prepayments.context["rows"]
+            )
+        )
+        self.assertEqual(
+            prepayments.context["expected"],
+            Decimal("0"),
+        )
+        self.assertEqual(
+            statistics.context["expected"],
+            Decimal("0"),
+        )
+
     def test_expired_subscription_with_debt_creates_notification(self):
         today = timezone.localdate()
 
