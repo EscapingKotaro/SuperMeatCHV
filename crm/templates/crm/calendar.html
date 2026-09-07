@@ -61,32 +61,7 @@
             </div>
 
 
-            <!-- Сегодня на смене -->
-            <div class="min-w-0">
 
-                <div class="mb-1.5 flex items-center gap-1.5 text-[9px] font-extrabold uppercase tracking-wide text-slate-400 sm:text-[10px]">
-                    <i data-lucide="users-round" class="h-3.5 w-3.5"></i>
-                    Сегодня на смене
-                </div>
-
-                <div class="scrollbar-none flex gap-1.5 overflow-x-auto pb-0.5">
-                    {% if today_workers %}
-                        {% for profile in today_workers %}
-                        <span class="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-emerald-50 px-2 py-1.5 text-[11px] font-bold text-emerald-700 sm:px-2.5 sm:py-2 sm:text-xs">
-                            <span class="grid h-5 w-5 place-items-center rounded-md bg-emerald-100 text-[9px] font-extrabold">
-                                {{ profile.user.first_name|default:profile.user.username|slice:":1"|upper }}
-                            </span>
-                            {{ profile.user.first_name|default:profile.user.username }}
-                        </span>
-                        {% endfor %}
-                    {% else %}
-                        <span class="shrink-0 rounded-lg bg-slate-100 px-2.5 py-1.5 text-[11px] text-slate-400">
-                            Никого
-                        </span>
-                    {% endif %}
-                </div>
-
-            </div>
         </div>
     </div>
 
@@ -207,22 +182,6 @@
 
             </div>
 
-
-            <!-- Только сотрудники снизу.
-                 Количество задач здесь больше не дублируется. -->
-            <div class="mt-auto flex min-h-4 items-end pt-1">
-
-                {% if day.workers %}
-                <span
-                    class="inline-flex items-center gap-0.5 rounded-md bg-emerald-50 px-1 py-0.5 text-[7px] font-bold text-emerald-600 sm:gap-1 sm:px-1.5 sm:text-[8px]"
-                    title="На смене: {{ day.working_names }}"
-                >
-                    <i data-lucide="users" class="h-2.5 w-2.5"></i>
-                    {{ day.workers|length }}
-                </span>
-                {% endif %}
-
-            </div>
 
 
             {% if day.date == today %}
