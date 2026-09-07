@@ -263,7 +263,7 @@ class Child(models.Model):
         return left
 
     def projected_end_date(self):
-        left = self.effective_sessions_left()
+        left = self.sessions_left()
         if left <= 0:
             return None
         active_sub = self.active_subscription()
