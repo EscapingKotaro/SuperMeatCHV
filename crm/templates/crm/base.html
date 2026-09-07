@@ -14,10 +14,8 @@
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="{% static 'crm/ico.png' %}">
 
-
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="{% static 'crm/app.css' %}">
@@ -29,96 +27,120 @@
          ШАПКА
     ========================== -->
     <header class="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
-
         <div class="mx-auto flex max-w-[1500px] items-center gap-4 px-4 py-3 lg:px-7">
 
             <!-- Логотип -->
             <a href="{% url 'attendance' %}" class="mr-2 flex shrink-0 items-center gap-2.5">
-    <img src="{% static 'crm/ico.png' %}" alt="Спартак" class="h-9 w-9" aria-hidden="true">
-
-    <span class="hidden text-sm font-extrabold leading-tight tracking-tight sm:block">
-        Гимнастический клуб<br>
-        <span class="text-[#F62E2E]">"Спартак"</span>
-    </span>
-</a>
-
+                <img src="{% static 'crm/ico.png' %}" alt="Спартак" class="h-9 w-9" aria-hidden="true">
+                <span class="hidden text-sm font-extrabold leading-tight tracking-tight sm:block">
+                    Гимнастический клуб<br>
+                    <span class="text-[#F62E2E]">"Спартак"</span>
+                </span>
+            </a>
 
             <!-- =========================
-                 ОСНОВНАЯ НАВИГАЦИЯ
+                 ОСНОВНАЯ НАВИГАЦИЯ (СГРУППИРОВАНА)
             ========================== -->
             <nav id="main-nav" class="scrollbar-none flex min-w-0 flex-1 gap-1 overflow-x-auto">
 
+                <!-- Табель (отдельно) -->
                 <a class="nav-pill {% if page == 'attendance' %}active{% endif %}" href="{% url 'attendance' %}">
-                    <i data-lucide="calendar-check"></i>
-                    Табель
+                    <i data-lucide="calendar-check"></i> Табель
                 </a>
 
-                <a class="nav-pill {% if page == 'applications' %}active{% endif %}" href="{% url 'applications' %}">
-                    <i data-lucide="inbox"></i>
-                    Заявки
-                </a>
+                <!-- Клиенты -->
+                <div class="relative" data-dropdown>
+                    <button type="button" data-dropdown-toggle class="nav-pill cursor-pointer {% if page in 'applications,newcomers' %}active{% endif %}">
+                        <i data-lucide="user-round"></i> Клиенты
+                        <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
+                    </button>
+                    <div data-dropdown-menu class="absolute left-0 top-full z-50 mt-2 hidden min-w-[180px] flex-col gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                        <a href="{% url 'applications' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'applications' %}bg-slate-100 font-semibold{% endif %}">
+                            <i data-lucide="inbox" class="h-4 w-4"></i> Заявки
+                        </a>
+                        <a href="{% url 'newcomers' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'newcomers' %}bg-slate-100 font-semibold{% endif %}">
+                            <i data-lucide="user-round-plus" class="h-4 w-4"></i> Новички
+                        </a>
+                    </div>
+                </div>
 
-                <a class="nav-pill {% if page == 'newcomers' %}active{% endif %}" href="{% url 'newcomers' %}">
-                    <i data-lucide="user-round-plus"></i>
-                    Новички
-                </a>
+                <!-- Команда -->
+                <div class="relative" data-dropdown>
+                    <button type="button" data-dropdown-toggle class="nav-pill cursor-pointer {% if page in 'trainers,groups' %}active{% endif %}">
+                        <i data-lucide="users-round"></i> Команда
+                        <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
+                    </button>
+                    <div data-dropdown-menu class="absolute left-0 top-full z-50 mt-2 hidden min-w-[180px] flex-col gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                        <a href="{% url 'trainer_list' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'trainers' %}bg-slate-100 font-semibold{% endif %}">
+                            <i data-lucide="user-check" class="h-4 w-4"></i> Тренеры
+                        </a>
+                        <a href="{% url 'group_list' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'groups' %}bg-slate-100 font-semibold{% endif %}">
+                            <i data-lucide="users" class="h-4 w-4"></i> Группы
+                        </a>
+                    </div>
+                </div>
 
+                <!-- Календарь (отдельно) -->
                 <a class="nav-pill {% if page == 'calendar' %}active{% endif %}" href="{% url 'calendar' %}">
-                    <i data-lucide="calendar-days"></i>
-                    Календарь
+                    <i data-lucide="calendar-days"></i> Календарь
                 </a>
 
-                <a class="nav-pill {% if page == 'revenue_forecast' %}active{% endif %}" href="{% url 'revenue_forecast' %}">
-                    <i data-lucide="trending-up"></i>
-                    Прогноз
-                </a>
-
-                <a class="nav-pill {% if page == 'trainers' %}active{% endif %}" href="{% url 'trainer_list' %}">
-                    <i data-lucide="user-check"></i>
-                    Тренеры
-                </a>
-
-                <a class="nav-pill {% if page == 'groups' %}active{% endif %}" href="{% url 'group_list' %}">
-                    <i data-lucide="users"></i>
-                    Группы
-                </a>
-
+                <!-- Финансы -->
+                <div class="relative" data-dropdown>
+                    <button type="button" data-dropdown-toggle class="nav-pill cursor-pointer {% if page in 'revenue_forecast,payments,expenses' %}active{% endif %}">
+                        <i data-lucide="wallet"></i> Финансы
+                        <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
+                    </button>
+                    <div data-dropdown-menu class="absolute left-0 top-full z-50 mt-2 hidden min-w-[200px] flex-col gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                        <a href="{% url 'revenue_forecast' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'revenue_forecast' %}bg-slate-100 font-semibold{% endif %}">
+                            <i data-lucide="trending-up" class="h-4 w-4"></i> Прогноз выручки
+                        </a>
+                        <a href="{% url 'payments' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'payments' %}bg-slate-100 font-semibold{% endif %}">
+                            <i data-lucide="wallet-cards" class="h-4 w-4"></i> Продления
+                        </a>
+                        <a href="{% url 'expenses' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'expenses' %}bg-slate-100 font-semibold{% endif %}">
+                            <i data-lucide="receipt-text" class="h-4 w-4"></i> Расходы
+                        </a>
+                    </div>
+                </div>
 
                 <!-- Статистика -->
-                <button
-                    type="button"
-                    data-stats-toggle
-                    class="nav-pill cursor-pointer {% if page == 'statistics' or page == 'payments_table' or page == 'payment_history' or page == 'salaries' %}active{% endif %}"
-                >
-                    <i data-lucide="chart-no-axes-combined"></i>
-                    Статистика
-                    <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
-                </button>
+                <div class="relative" data-dropdown>
+                    <button type="button" data-dropdown-toggle class="nav-pill cursor-pointer {% if page in 'statistics,payments_table,payment_history,salaries' %}active{% endif %}">
+                        <i data-lucide="chart-no-axes-combined"></i> Статистика
+                        <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
+                    </button>
+                    <div data-dropdown-menu class="absolute left-0 top-full z-50 mt-2 hidden min-w-[220px] flex-col gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+                        <a href="{% url 'statistics' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'statistics' %}bg-slate-100 font-semibold{% endif %}">
+                            <i data-lucide="chart-no-axes-combined" class="h-4 w-4"></i> Общая статистика
+                        </a>
+                        <a href="{% url 'payments_table' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'payments_table' %}bg-slate-100 font-semibold{% endif %}">
+                            <i data-lucide="wallet-cards" class="h-4 w-4"></i> Предварительные оплаты
+                        </a>
+                        <a href="{% url 'payment_history' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'payment_history' %}bg-slate-100 font-semibold{% endif %}">
+                            <i data-lucide="history" class="h-4 w-4"></i> История оплат
+                        </a>
+                        {% if is_senior %}
+                        <a href="{% url 'salaries' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'salaries' %}bg-slate-100 font-semibold{% endif %}">
+                            <i data-lucide="banknote" class="h-4 w-4"></i> ЗП тренеров
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
 
-                <a class="nav-pill {% if page == 'payments' %}active{% endif %}" href="{% url 'payments' %}">
-                    <i data-lucide="wallet-cards"></i>
-                    Продления
-                </a>
-
-                <a class="nav-pill {% if page == 'expenses' %}active{% endif %}" href="{% url 'expenses' %}">
-                    <i data-lucide="receipt-text"></i>
-                    Расходы
-                </a>
-
+                <!-- Соревнования (отдельно) -->
                 <a class="nav-pill {% if page == 'competitions' %}active{% endif %}" href="{% url 'competitions' %}">
-                    <i data-lucide="trophy"></i>
-                    Соревнования
+                    <i data-lucide="trophy"></i> Соревнования
                 </a>
 
+                <!-- Руководителю (отдельно) -->
                 {% if is_boss %}
                 <a class="nav-pill {% if page == 'boss' %}active{% endif %}" href="{% url 'boss' %}">
-                    <i data-lucide="briefcase-business"></i>
-                    Руководителю
+                    <i data-lucide="briefcase-business"></i> Руководителю
                 </a>
                 {% endif %}
 
             </nav>
-
 
             <!-- =========================
                  ПРАВАЯ ЧАСТЬ ШАПКИ
@@ -129,12 +151,8 @@
                     <i data-lucide="search" class="h-5 w-5"></i>
                 </a>
 
-                <a href="{% url 'notifications' %}"
-                class="relative grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100"
-                aria-label="Уведомления">
-
+                <a href="{% url 'notifications' %}" class="relative grid h-10 w-10 place-items-center rounded-xl hover:bg-slate-100" aria-label="Уведомления">
                     <i data-lucide="bell" class="h-5 w-5"></i>
-
                     {% if notification_count %}
                     <span class="absolute -right-1 -top-1 min-w-5 rounded-full bg-red-500 px-1.5 text-center text-[10px] font-bold leading-5 text-white">
                         {% if notification_count > 99 %}99+{% else %}{{ notification_count }}{% endif %}
@@ -142,231 +160,133 @@
                     {% endif %}
                 </a>
 
-
-                <!-- Пользователь -->
-                <div class="relative">
-
-                    <button type="button"
-                            data-menu-toggle
-                            class="flex items-center gap-2 rounded-xl p-1.5 hover:bg-slate-100">
-
+                <!-- Пользователь (теперь тоже работает через универсальный data-dropdown) -->
+                <div class="relative" data-dropdown>
+                    <button type="button" data-dropdown-toggle class="flex items-center gap-2 rounded-xl p-1.5 hover:bg-slate-100">
                         <span class="grid h-8 w-8 place-items-center rounded-lg bg-[#E8F0FF] text-xs font-extrabold text-[#315EBC]">
                             {{ request.user.username|slice:":2"|upper }}
                         </span>
-
                         <span class="hidden text-left lg:block">
-                            <b class="block text-xs">
-                                {{ request.user.get_full_name|default:request.user.username }}
-                            </b>
-
+                            <b class="block text-xs">{{ request.user.get_full_name|default:request.user.username }}</b>
                             <small class="block text-[10px] text-slate-500">
                                 {{ request.user.profile.get_role_display|default:"Администратор" }}
                             </small>
                         </span>
-
-                        <i data-lucide="chevron-down"
-                        class="h-4 w-4 text-slate-400"></i>
+                        <i data-lucide="chevron-down" class="h-4 w-4 text-slate-400"></i>
                     </button>
 
-                    <div data-user-menu
-                        class="absolute right-0 top-full z-50 mt-2 hidden w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-
-                        <a href="{% url 'profile' %}" class="menu-item">
-                            <i data-lucide="user-round"></i>
-                            Мой профиль
+                    <div data-dropdown-menu class="absolute right-0 top-full z-50 mt-2 hidden w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
+                        <a href="{% url 'profile' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100">
+                            <i data-lucide="user-round" class="h-4 w-4"></i> Мой профиль
                         </a>
 
                         {% if is_senior %}
-                        <a href="{% url 'users' %}" class="menu-item">
-                            <i data-lucide="users-round"></i>
-                            Пользователи
+                        <a href="{% url 'users' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100">
+                            <i data-lucide="users-round" class="h-4 w-4"></i> Пользователи
                         </a>
-
-                        <a href="{% url 'backup_export' %}" class="menu-item">
-                            <i data-lucide="download"></i>
-                            Резервная копия
+                        <a href="{% url 'backup_export' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100">
+                            <i data-lucide="download" class="h-4 w-4"></i> Резервная копия
                         </a>
                         {% endif %}
 
-                        <hr class="my-2">
+                        <hr class="my-2 border-slate-100">
 
-                        <a href="{% url 'logout' %}" class="menu-item text-red-600">
-                            <i data-lucide="log-out"></i>
-                            Выйти
+                        <a href="{% url 'logout' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50">
+                            <i data-lucide="log-out" class="h-4 w-4"></i> Выйти
                         </a>
-
                     </div>
-
                 </div>
 
             </div>
-            
         </div>
-
     </header>
-
 
     <!-- =========================
          ОСНОВНОЙ КОНТЕНТ
     ========================== -->
     <main class="mx-auto max-w-[1500px] px-4 py-7 lg:px-7">
-
-
-
-        <!-- Заголовок страницы -->
         <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
-
             <div>
-
-                <p class="eyebrow">
-                    {% now "j E Y · l" %}
-                </p>
-
+                <p class="eyebrow">{% now "j E Y · l" %}</p>
                 {% if title %}
-                <h1 class="text-2xl font-extrabold tracking-tight md:text-3xl">
-                    {{ title }}
-                </h1>
+                <h1 class="text-2xl font-extrabold tracking-tight md:text-3xl">{{ title }}</h1>
                 {% endif %}
-
-
-
             </div>
-
-
-            {% block actions %}
-            {% endblock %}
-
+            {% block actions %}{% endblock %}
         </div>
 
-
-        {% block content %}
-        {% endblock %}
-
+        {% block content %}{% endblock %}
     </main>
-
-
-    <!-- =========================
-         МЕНЮ СТАТИСТИКИ
-    ========================== -->
-    <div id="stats-menu" class="fixed z-50 hidden w-64 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
-
-        <a href="{% url 'statistics' %}" class="menu-item {% if page == 'statistics' %}bg-slate-100{% endif %}">
-            <i data-lucide="chart-no-axes-combined"></i>
-            Статистика
-        </a>
-
-        <a href="{% url 'payments_table' %}" class="menu-item {% if page == 'payments_table' %}bg-slate-100{% endif %}">
-            <i data-lucide="wallet-cards"></i>
-            Предварительные оплаты
-        </a>
-
-        <a href="{% url 'payment_history' %}" class="menu-item {% if page == 'payment_history' %}bg-slate-100{% endif %}">
-            <i data-lucide="history"></i>
-            История оплат
-        </a>
-
-        {% if is_senior %}
-        <a href="{% url 'salaries' %}" class="menu-item {% if page == 'salaries' %}bg-slate-100{% endif %}">
-            <i data-lucide="banknote"></i>
-            ЗП тренеров
-        </a>
-        {% endif %}
-
-    </div>
-
 
     <!-- =========================
          МОДАЛЬНЫЕ ОКНА
     ========================== -->
     <div data-modal-backdrop class="fixed inset-0 z-40 hidden bg-slate-950/35 backdrop-blur-sm"></div>
-
-    {% block modals %}
-    {% endblock %}
-
-
-
+    {% block modals %}{% endblock %}
 
     <!-- =========================
          ОБЩИЙ JS
     ========================== -->
     <script src="{% static 'crm/app.js' %}"></script>
 
-
-    <!-- Выпадающее меню статистики -->
+    <!-- УНИВЕРСАЛЬНЫЙ СКРИПТ ДЛЯ ВСЕХ ВЫПАДАЮЩИХ МЕНЮ -->
     <script>
-        (function () {
-            const toggle = document.querySelector("[data-stats-toggle]");
-            const menu = document.getElementById("stats-menu");
+        document.addEventListener('DOMContentLoaded', () => {
+            // Находим все обертки выпадающих меню
+            const dropdowns = document.querySelectorAll('[data-dropdown]');
 
-            if (!toggle || !menu) {
-                return;
+            // Функция закрытия всех меню (кроме переданного в исключение)
+            function closeAllDropdowns(exceptMenu = null) {
+                document.querySelectorAll('[data-dropdown-menu]').forEach(menu => {
+                    if (menu !== exceptMenu) {
+                        menu.classList.add('hidden');
+                    }
+                });
             }
 
-            toggle.addEventListener("click", function (event) {
-                event.stopPropagation();
+            // Навешиваем обработчики на каждую обертку
+            dropdowns.forEach(wrapper => {
+                const toggle = wrapper.querySelector('[data-dropdown-toggle]');
+                const menu = wrapper.querySelector('[data-dropdown-menu]');
 
-                if (menu.classList.contains("hidden")) {
-                    const rect = toggle.getBoundingClientRect();
+                if (!toggle || !menu) return;
 
-                    menu.style.top = (rect.bottom + 10) + "px";
-                    menu.style.left = Math.max(8, rect.left) + "px";
+                toggle.addEventListener('click', (e) => {
+                    e.stopPropagation(); // Останавливаем всплытие, чтобы document.click не сработал сразу
+                    
+                    const isHidden = menu.classList.contains('hidden');
+                    closeAllDropdowns(); // Закрываем все остальные открытые меню
+                    
+                    if (isHidden) {
+                        menu.classList.remove('hidden');
+                    }
+                });
+            });
 
-                    menu.classList.remove("hidden");
-                } else {
-                    menu.classList.add("hidden");
+            // Закрытие при клике вне любого меню
+            document.addEventListener('click', (e) => {
+                if (!e.target.closest('[data-dropdown]')) {
+                    closeAllDropdowns();
                 }
             });
 
-
-            document.addEventListener("click", function (event) {
-                if (
-                    !menu.contains(event.target) &&
-                    !toggle.contains(event.target)
-                ) {
-                    menu.classList.add("hidden");
-                }
-            });
-
-
-            window.addEventListener(
-                "scroll",
-                function () {
-                    menu.classList.add("hidden");
-                },
-                true
-            );
-
-
-            window.addEventListener("resize", function () {
-                menu.classList.add("hidden");
-            });
-        })();
+            // Закрытие при скролле и ресайзе окна (для стабильности позиционирования)
+            window.addEventListener('scroll', () => closeAllDropdowns(), true);
+            window.addEventListener('resize', () => closeAllDropdowns());
+        });
     </script>
 
-    <!-- Продвинутый скролл -->
+    <!-- Продвинутый скролл навигации -->
     <script>
         const nav = document.getElementById('main-nav');
-
         nav.addEventListener('wheel', (event) => {
-            if (nav.scrollWidth <= nav.clientWidth) {
-                return;
-            }
-
-            // Не ломаем Ctrl + колесо (zoom браузера)
-            if (event.ctrlKey) {
-                return;
-            }
-
+            if (nav.scrollWidth <= nav.clientWidth || event.ctrlKey) return;
             event.preventDefault();
-
             nav.scrollLeft += event.deltaY;
         }, { passive: false });
     </script>
 
-
-    {% block scripts %}
-    {% endblock %}
+    {% block scripts %}{% endblock %}
 
 </body>
-
 </html>
