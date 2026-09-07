@@ -264,7 +264,7 @@ class Child(models.Model):
 
     def strange_effective_sessions_left(self):
         left = self.sessions_left()
-        if self.has_class_today() and self.has_mark_today():
+        if self.has_class_today() and self.has_mark_today() and left!=0:
             return max(0, left + 1)
         return left
 
