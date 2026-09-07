@@ -169,6 +169,14 @@ class Child(models.Model):
     note = models.TextField("Комментарий", blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     archived_at = models.DateField("Дата ухода/архива", blank=True, null=True)
+    departure_group = models.ForeignKey(
+        Group, on_delete=models.SET_NULL, blank=True, null=True,
+        related_name="+", verbose_name="Группа на момент ухода",
+    )
+    departure_trainer = models.ForeignKey(
+        Trainer, on_delete=models.SET_NULL, blank=True, null=True,
+        related_name="+", verbose_name="Тренер на момент ухода",
+    )
 
 
     class Meta:
@@ -400,20 +408,47 @@ class Child(models.Model):
             return None
         return (end - timezone.localdate()).days
 
+    def freeze_current_history(self):
+        """Фиксирует группу, тренера и ставку в старых отметках."""
+        if not self.group_id:
+            return
+
+        self.attendances.filter(
+            group_snapshot__isnull=True,
+        ).update(
+            group_snapshot=self.group,
+            trainer_snapshot=self.group.trainer,
+            salary_rate_snapshot=self.group.salary_rate,
+        )
+
     def archive(self):
+        self.freeze_current_history()
         self.status = self.Status.ARCHIVED
         self.archived_at = timezone.localdate()
-        self.save(update_fields=['status', 'archived_at'])
+        self.departure_group = self.group
+        self.departure_trainer = self.trainer
+        self.save(update_fields=[
+            'status', 'archived_at', 'departure_group', 'departure_trainer',
+        ])
 
     def mark_as_lost(self):
+        self.freeze_current_history()
         self.status = self.Status.LOST
         self.archived_at = timezone.localdate()
-        self.save(update_fields=['status', 'archived_at'])
+        self.departure_group = self.group
+        self.departure_trainer = self.trainer
+        self.save(update_fields=[
+            'status', 'archived_at', 'departure_group', 'departure_trainer',
+        ])
 
     def restore_from_archive(self):
         self.status = self.Status.ACTIVE
         self.archived_at = None
-        self.save(update_fields=['status', 'archived_at'])
+        self.departure_group = None
+        self.departure_trainer = None
+        self.save(update_fields=[
+            'status', 'archived_at', 'departure_group', 'departure_trainer',
+        ])
 
 
 class ChildRank(models.Model):
@@ -507,6 +542,18 @@ class Attendance(models.Model):
     date = models.DateField("Дата")
     slot = models.ForeignKey(ScheduleSlot, on_delete=models.SET_NULL,
                              blank=True, null=True, verbose_name="слот")
+    group_snapshot = models.ForeignKey(
+        Group, on_delete=models.SET_NULL, blank=True, null=True,
+        related_name="+", verbose_name="Группа на момент занятия",
+    )
+    trainer_snapshot = models.ForeignKey(
+        Trainer, on_delete=models.SET_NULL, blank=True, null=True,
+        related_name="+", verbose_name="Тренер на момент занятия",
+    )
+    salary_rate_snapshot = models.DecimalField(
+        "Ставка тренера на момент занятия, ₽",
+        max_digits=10, decimal_places=2, blank=True, null=True,
+    )
     status = models.CharField("Отметка", max_length=10, choices=Status.choices, default=Status.PRESENT)
     comment = models.CharField("Комментарий", max_length=255, blank=True)
     charge_amount = models.DecimalField("Начислено за занятие в долг, ₽",

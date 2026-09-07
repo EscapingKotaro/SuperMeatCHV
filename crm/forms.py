@@ -16,6 +16,7 @@ from .models import (
     Newcomer,
     RevenueTarget,
     Role,
+    SalaryAdjustment,
     StaffProfile,
     Subscription,
     Tariff,
@@ -43,6 +44,19 @@ class ExpenseForm(StyledFormMixin, forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["date"].input_formats = ["%Y-%m-%d"]
+        self.apply_styles()
+
+
+class SalaryAdjustmentForm(StyledFormMixin, forms.ModelForm):
+    class Meta:
+        model = SalaryAdjustment
+        fields = ("trainer", "title", "amount")
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["trainer"].queryset = Trainer.objects.filter(
+            is_active=True,
+        ).order_by("full_name")
         self.apply_styles()
 
 

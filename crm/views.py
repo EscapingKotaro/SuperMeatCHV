@@ -34,6 +34,7 @@ from .forms import (
     NewcomerForm,
     ProfileForm,
     RevenueTargetForm,
+    SalaryAdjustmentForm,
     StaffCreateForm,
     StyledPasswordChangeForm,
     SubscriptionForm,
@@ -63,6 +64,7 @@ from .models import (
     Payment,
     RevenueTarget,
     Role,
+    SalaryAdjustment,
     SalaryPayout,
     StaffProfile,
     Subscription,
@@ -497,15 +499,45 @@ def mark_attendance_view(request):
     ):
         charge = child.group.single_session_price
 
-    attendance, created = Attendance.objects.update_or_create(
+    attendance = Attendance.objects.filter(
         child=child,
         date=mark_date,
         slot=None,
-        defaults={
-            "status": status,
-            "charge_amount": charge,
-        },
-    )
+    ).first()
+
+    if attendance is None:
+        created = True
+        attendance = Attendance.objects.create(
+            child=child,
+            date=mark_date,
+            slot=None,
+            group_snapshot=child.group,
+            trainer_snapshot=child.trainer,
+            salary_rate_snapshot=(
+                child.group.salary_rate
+                if child.group
+                else None
+            ),
+            status=status,
+            charge_amount=charge,
+        )
+    else:
+        created = False
+        update_fields = ["status", "charge_amount"]
+        attendance.status = status
+        attendance.charge_amount = charge
+
+        if attendance.group_snapshot_id is None and child.group:
+            attendance.group_snapshot = child.group
+            attendance.trainer_snapshot = child.trainer
+            attendance.salary_rate_snapshot = child.group.salary_rate
+            update_fields.extend([
+                "group_snapshot",
+                "trainer_snapshot",
+                "salary_rate_snapshot",
+            ])
+
+        attendance.save(update_fields=update_fields)
 
     return JsonResponse(
         {
@@ -2764,6 +2796,14 @@ def boss_page(request):
     now = timezone.now()
     month = today.replace(day=1)
 
+    if month.month == 12:
+        month_end = date(month.year + 1, 1, 1) - timedelta(days=1)
+    else:
+        month_end = (
+            date(month.year, month.month + 1, 1)
+            - timedelta(days=1)
+        )
+
     target = RevenueTarget.objects.filter(month=month).first()
     task_form = ManagerTaskForm(prefix="task")
     target_form = RevenueTargetForm(prefix="target", instance=target, initial={"month": month})
@@ -2861,37 +2901,44 @@ def boss_page(request):
     target_amount = target.amount if target else Decimal("0")
     target_percent = min(100, round(revenue * 100 / target_amount)) if target_amount else 0
 
-    salaries = (
+    salary_data = build_salary_data(month, month_end)
+    salaries = salary_data["grand_total"]
+    salary_paid = (
         SalaryPayout.objects
         .filter(month=month)
         .aggregate(value=Sum("amount"))["value"]
         or 0
     )
 
-    # KPI тренеров
+    # KPI тренеров — та же формула, что и в общей статистике.
+    group_rows = build_group_stats(month, month_end, today)
     trainer_rows = []
 
     for trainer in Trainer.objects.filter(is_active=True):
-        children = Child.objects.filter(group__trainer=trainer, status=Child.Status.ACTIVE)
-
-        marked = Attendance.objects.filter(
-            child__in=children,
-            date__gte=month,
-            status__in=[Attendance.Status.PRESENT, Attendance.Status.ABSENT],
-        ).count()
-
-        present = Attendance.objects.filter(
-            child__in=children,
-            date__gte=month,
-            status=Attendance.Status.PRESENT,
-        ).count()
+        children = Child.objects.filter(
+            group__trainer=trainer,
+            status=Child.Status.ACTIVE,
+        )
+        trainer_groups = [
+            row for row in group_rows
+            if row["group"].trainer_id == trainer.id
+        ]
+        present = sum(row["present"] for row in trainer_groups)
+        capacity = sum(row["capacity"] for row in trainer_groups)
+        lost = Child.objects.filter(
+            Q(departure_trainer=trainer)
+            | Q(departure_trainer__isnull=True, group__trainer=trainer),
+            status__in=[Child.Status.LOST, Child.Status.ARCHIVED],
+            archived_at__gte=month,
+            archived_at__lte=month_end,
+        ).distinct().count()
 
         trainer_rows.append({
             "trainer": trainer,
             "children": children.count(),
             "trial": Child.objects.filter(group__trainer=trainer, status=Child.Status.TRIAL).count(),
-            "lost": Child.objects.filter(group__trainer=trainer, status=Child.Status.LOST).count(),
-            "attendance": round(present * 100 / marked) if marked else 0,
+            "lost": lost,
+            "attendance": round(present * 100 / capacity) if capacity else 0,
         })
 
     trainer_rows.sort(key=lambda row: row["attendance"], reverse=True)
@@ -2908,6 +2955,7 @@ def boss_page(request):
         target_amount=target_amount,
         target_percent=target_percent,
         salaries=salaries,
+        salary_paid=salary_paid,
         active_count=Child.objects.filter(status=Child.Status.ACTIVE).count(),
         trainer_rows=trainer_rows,
         events=events,
@@ -3158,6 +3206,7 @@ def child_card_view(request, child_id):
         elif action == "change_group" or "change_group" in request.POST:
             new_group_id = request.POST.get("new_group")
             if new_group_id:
+                child.freeze_current_history()
                 new_group = get_object_or_404(Group, id=new_group_id)
                 child.group = new_group
                 child.save(update_fields=["group"])
@@ -3270,6 +3319,13 @@ def child_edit_view(request, child_id):
     )
 
     if request.method == "POST":
+        old_status = child.status
+        old_group = child.group
+        old_trainer = child.trainer
+
+        # Фиксируем историю до возможной смены группы/статуса.
+        child.freeze_current_history()
+
         form = ChildForm(
             request.POST,
             request.FILES,
@@ -3284,8 +3340,26 @@ def child_edit_view(request, child_id):
             if child.status != Child.Status.TRIAL:
                 child.trial_from = None
 
+            departed_statuses = (
+                Child.Status.LOST,
+                Child.Status.ARCHIVED,
+            )
+
+            if child.status in departed_statuses:
+                if old_status not in departed_statuses:
+                    child.archived_at = timezone.localdate()
+                    child.departure_group = old_group
+                    child.departure_trainer = old_trainer
+            elif old_status in departed_statuses:
+                child.archived_at = None
+                child.departure_group = None
+                child.departure_trainer = None
+
             child.save()
             form.save_m2m()
+
+            if old_group and old_group.pk != child.group_id:
+                child.schedule.clear()
 
             log_action(
                 request,
@@ -3495,6 +3569,10 @@ def group_edit_view(request, pk):
     """Редактирование группы с расписанием"""
     group = get_object_or_404(Group, pk=pk)
     if request.method == 'POST':
+        # До изменения тренера/ставки фиксируем старые посещения.
+        for child in group.children.select_related("group__trainer"):
+            child.freeze_current_history()
+
         group_form = GroupForm(request.POST, instance=group)
         slot_formset = ScheduleSlotFormSet(request.POST, instance=group)
 
@@ -3589,33 +3667,202 @@ def _sessions_held(group, month_start, month_end, today):
         d += timedelta(days=1)
     return count
 
+
+def _freeze_missing_attendance_snapshots():
+    """Фиксирует старые отметки, созданные до исторических снимков."""
+    children = (
+        Child.objects
+        .filter(
+            group__isnull=False,
+            attendances__group_snapshot__isnull=True,
+        )
+        .select_related("group__trainer")
+        .distinct()
+    )
+    for child in children:
+        child.freeze_current_history()
+
+
+def _attendance_for_group(group, month_start, month_end):
+    return Attendance.objects.filter(
+        Q(group_snapshot=group)
+        | Q(group_snapshot__isnull=True, child__group=group),
+        date__gte=month_start,
+        date__lte=month_end,
+    )
+
+
+def build_group_stats(month_start, month_end, today):
+    """Единая формула посещаемости для статистики и кабинета начальника."""
+    _freeze_missing_attendance_snapshots()
+
+    current_statuses = (
+        Child.Status.ACTIVE,
+        Child.Status.TRIAL,
+    )
+    result = []
+
+    for group in (
+        Group.objects
+        .filter(is_active=True)
+        .select_related("trainer")
+    ):
+        kids = group.children.filter(
+            status__in=current_statuses,
+        ).count()
+
+        attendance = _attendance_for_group(
+            group,
+            month_start,
+            month_end,
+        )
+        present = attendance.filter(
+            status=Attendance.Status.PRESENT,
+        ).count()
+        absent = attendance.filter(
+            status=Attendance.Status.ABSENT,
+        ).count()
+        sessions = _sessions_held(
+            group,
+            month_start,
+            month_end,
+            today,
+        )
+        capacity = kids * sessions
+
+        result.append({
+            "group": group,
+            "kids": kids,
+            "present": present,
+            "absent": absent,
+            "sessions": sessions,
+            "capacity": capacity,
+            "attendance_pct": (
+                round(present * 100 / capacity)
+                if capacity
+                else 0
+            ),
+        })
+
+    return result
+
+
 def build_salary_data(month_start, month_end):
-    """Собирает таблицу ЗП в формате как в Excel."""
-    summary_rows, grand_total = [], 0
-    trainers = []
+    """ЗП по историческим снимкам группы, тренера и ставки."""
+    _freeze_missing_attendance_snapshots()
 
-    for trainer in Trainer.objects.prefetch_related('groups', 'salary_adjustments'):
-        rows, total = [], 0
-        for group in trainer.groups.all():
-            rate = group.salary_rate or 0
-            visits = Attendance.objects.filter(
-                child__group=group, status='present',
-                date__gte=month_start, date__lte=month_end).count()
-            summa = Decimal(rate) * visits
-            rows.append({'name': group.name, 'rate': rate, 'visits': visits, 'total': summa})
-            summary_rows.append({'name': group.name, 'rate': rate, 'visits': visits, 'total': summa})
-            total += summa
+    buckets = {}
+    present_marks = (
+        Attendance.objects
+        .filter(
+            status=Attendance.Status.PRESENT,
+            date__gte=month_start,
+            date__lte=month_end,
+        )
+        .select_related(
+            "child__group__trainer",
+            "group_snapshot",
+            "trainer_snapshot",
+        )
+    )
 
-        for adj in trainer.salary_adjustments.filter(month=month_start):
-            rows.append({'name': adj.title, 'rate': '', 'visits': '', 'total': adj.amount})
-            summary_rows.append({'name': adj.title, 'rate': '', 'visits': '', 'total': adj.amount})
-            total += adj.amount
+    for mark in present_marks:
+        group = mark.group_snapshot or mark.child.group
+        trainer = mark.trainer_snapshot or (group.trainer if group else None)
+        if not group or not trainer:
+            continue
 
-        if rows:
-            trainers.append({'trainer': trainer, 'rows': rows, 'total': total})
-            grand_total += total
+        rate = (
+            mark.salary_rate_snapshot
+            if mark.salary_rate_snapshot is not None
+            else group.salary_rate
+        ) or Decimal("0")
+        rate = Decimal(rate)
 
-    return {'summary_rows': summary_rows, 'grand_total': grand_total, 'trainers': trainers}
+        key = (trainer.pk, group.pk, rate)
+        row = buckets.setdefault(
+            key,
+            {
+                "trainer": trainer,
+                "group": group,
+                "rate": rate,
+                "visits": 0,
+            },
+        )
+        row["visits"] += 1
+
+    trainer_map = {}
+    summary_rows = []
+    grand_total = Decimal("0")
+
+    for row in sorted(
+        buckets.values(),
+        key=lambda item: (
+            item["trainer"].full_name,
+            item["group"].name,
+            item["rate"],
+        ),
+    ):
+        total = row["rate"] * row["visits"]
+        trainer_data = trainer_map.setdefault(
+            row["trainer"].pk,
+            {
+                "trainer": row["trainer"],
+                "rows": [],
+                "total": Decimal("0"),
+            },
+        )
+        salary_row = {
+            "name": row["group"].name,
+            "rate": row["rate"],
+            "visits": row["visits"],
+            "total": total,
+            "is_adjustment": False,
+            "adjustment_id": None,
+        }
+        trainer_data["rows"].append(salary_row)
+        trainer_data["total"] += total
+        summary_rows.append(salary_row)
+        grand_total += total
+
+    adjustments = (
+        SalaryAdjustment.objects
+        .filter(month=month_start)
+        .select_related("trainer")
+        .order_by("trainer__full_name", "title", "pk")
+    )
+
+    for adjustment in adjustments:
+        trainer_data = trainer_map.setdefault(
+            adjustment.trainer_id,
+            {
+                "trainer": adjustment.trainer,
+                "rows": [],
+                "total": Decimal("0"),
+            },
+        )
+        salary_row = {
+            "name": adjustment.title,
+            "rate": "",
+            "visits": "",
+            "total": adjustment.amount,
+            "is_adjustment": True,
+            "adjustment_id": adjustment.pk,
+        }
+        trainer_data["rows"].append(salary_row)
+        trainer_data["total"] += adjustment.amount
+        summary_rows.append(salary_row)
+        grand_total += adjustment.amount
+
+    trainers = sorted(
+        trainer_map.values(),
+        key=lambda item: item["trainer"].full_name,
+    )
+    return {
+        "summary_rows": summary_rows,
+        "grand_total": grand_total,
+        "trainers": trainers,
+    }
 
 
 @login_required
@@ -3623,21 +3870,26 @@ def statistics_view(request):
     month_start, month_end, today = _month_range(request)
 
     children = Child.objects.all()
-    total_children = children.count()
+    current_statuses = (
+        Child.Status.ACTIVE,
+        Child.Status.TRIAL,
+    )
+    total_children = children.filter(
+        status__in=current_statuses,
+    ).count()
     active_children = children.filter(status=Child.Status.ACTIVE).count()
 
     new_qs = children.filter(created_at__date__gte=month_start, created_at__date__lte=month_end)
     new_count = new_qs.count()
-    new_kept = new_qs.filter(status=Child.Status.ACTIVE).count()
+    new_kept = new_qs.filter(status__in=current_statuses).count()
     left_count = children.filter(
         status__in=[Child.Status.LOST, Child.Status.ARCHIVED],
         archived_at__gte=month_start, archived_at__lte=month_end).count()
 
-    # Выручка
     revenue_today = Payment.objects.filter(date=today).aggregate(s=Sum('amount'))['s'] or 0
     revenue_month = Payment.objects.filter(
         date__gte=month_start, date__lte=month_end).aggregate(s=Sum('amount'))['s'] or 0
-    # Прогноз: факт месяца + ожидаемые продления (абонементы, кончающиеся до конца месяца)
+
     expected = (
         Subscription.objects
         .filter(
@@ -3653,75 +3905,36 @@ def statistics_view(request):
     potential = Decimal(revenue_month) + Decimal(expected)
 
     target = RevenueTarget.objects.filter(month=month_start).first()
-
-    # По группам: спортсмены, посещения, посещаемость
-    groups_stats = []
-
-    current_statuses = (
-        Child.Status.ACTIVE,
-        Child.Status.TRIAL,
+    target_percent = (
+        min(100, round(Decimal(revenue_month) * 100 / target.amount))
+        if target and target.amount
+        else 0
+    )
+    expenses_month = (
+        Expense.objects
+        .filter(date__gte=month_start, date__lte=month_end)
+        .aggregate(s=Sum("amount"))["s"]
+        or Decimal("0")
     )
 
-    for group in (
-        Group.objects
-        .filter(is_active=True)
-        .select_related("trainer")
-    ):
-        current_children = group.children.filter(
-            status__in=current_statuses,
-        )
+    groups_stats = build_group_stats(
+        month_start,
+        month_end,
+        today,
+    )
 
-        kids = current_children.count()
-
-        present = Attendance.objects.filter(
-            child__group=group,
-            child__status__in=current_statuses,
-            status=Attendance.Status.PRESENT,
-            date__gte=month_start,
-            date__lte=month_end,
-        ).count()
-
-        absent = Attendance.objects.filter(
-            child__group=group,
-            child__status__in=current_statuses,
-            status=Attendance.Status.ABSENT,
-            date__gte=month_start,
-            date__lte=month_end,
-        ).count()
-
-        sessions = _sessions_held(
-            group,
-            month_start,
-            month_end,
-            today,
-        )
-
-        capacity = kids * sessions
-
-        attendance_pct = (
-            round(present * 100 / capacity)
-            if capacity
-            else 0
-        )
-
-        groups_stats.append({
-            "group": group,
-            "kids": kids,
-            "present": present,
-            "absent": absent,
-            "sessions": sessions,
-            "attendance_pct": attendance_pct,
-        })
-
-    # По тренерам: ушедшие + посещаемость
     trainers_stats = []
     for t in Trainer.objects.filter(is_active=True):
         t_left = children.filter(
-            group__trainer=t, status__in=[Child.Status.LOST, Child.Status.ARCHIVED],
-            archived_at__gte=month_start, archived_at__lte=month_end).count()
+            Q(departure_trainer=t)
+            | Q(departure_trainer__isnull=True, group__trainer=t),
+            status__in=[Child.Status.LOST, Child.Status.ARCHIVED],
+            archived_at__gte=month_start,
+            archived_at__lte=month_end,
+        ).distinct().count()
         t_groups = [gs for gs in groups_stats if gs['group'].trainer_id == t.id]
         t_present = sum(gs['present'] for gs in t_groups)
-        t_capacity = sum(gs['kids'] * gs['sessions'] for gs in t_groups)
+        t_capacity = sum(gs['capacity'] for gs in t_groups)
         trainers_stats.append({
             'trainer': t,
             'left': t_left,
@@ -3732,10 +3945,12 @@ def statistics_view(request):
     context = {
         'month_start': month_start, 'month_end': month_end, 'today': today,
         'total_children': total_children, 'active_children': active_children,
-        'new_count': new_count, 'new_kept': new_count - 0 and new_kept,
+        'new_count': new_count, 'new_kept': new_kept,
         'left_count': left_count,
         'revenue_today': revenue_today, 'revenue_month': revenue_month,
-        'potential': potential, 'target': target,
+        'potential': potential, 'expected': expected,
+        'target': target, 'target_percent': target_percent,
+        'expenses_month': expenses_month,
         'groups_stats': groups_stats, 'trainers_stats': trainers_stats,
         'title': 'Статистика', 'page': 'statistics',
     }
@@ -3745,9 +3960,56 @@ def statistics_view(request):
 @login_required
 def salaries_view(request):
     month_start, month_end, today = _month_range(request)
+    can_manage_salary = user_role(request.user) in (
+        Role.SENIOR,
+        Role.BOSS,
+    )
+    adjustment_form = SalaryAdjustmentForm(prefix="adjustment")
+
+    if request.method == "POST":
+        if not can_manage_salary:
+            return HttpResponseForbidden(
+                "Изменять ручные строки ЗП может только старший администратор или начальник"
+            )
+
+        action = request.POST.get("action")
+        if action == "add_adjustment":
+            adjustment_form = SalaryAdjustmentForm(
+                request.POST,
+                prefix="adjustment",
+            )
+            if adjustment_form.is_valid():
+                adjustment = adjustment_form.save(commit=False)
+                adjustment.month = month_start
+                adjustment.save()
+                messages.success(request, "Строка ЗП добавлена")
+                return redirect(
+                    f"{reverse('salaries')}?month={month_start:%Y-%m}"
+                )
+            messages.error(request, "Проверьте ручную строку ЗП")
+
+        elif action == "delete_adjustment":
+            adjustment = get_object_or_404(
+                SalaryAdjustment,
+                pk=request.POST.get("adjustment_id"),
+                month=month_start,
+            )
+            adjustment.delete()
+            messages.success(request, "Строка ЗП удалена")
+            return redirect(
+                f"{reverse('salaries')}?month={month_start:%Y-%m}"
+            )
+
     data = build_salary_data(month_start, month_end)
-    context = {**data, 'month_start': month_start, 'month_end': month_end,
-               'title': 'ЗП тренеров', 'page': 'salaries'}
+    context = {
+        **data,
+        'month_start': month_start,
+        'month_end': month_end,
+        'can_manage_salary': can_manage_salary,
+        'adjustment_form': adjustment_form,
+        'title': 'ЗП тренеров',
+        'page': 'salaries',
+    }
     return render(request, 'crm/salaries.html', context)
 
 
@@ -3820,16 +4082,145 @@ def salaries_export_view(request):
     return response
 
 
+def build_renewal_rows(month_start, month_end, today=None):
+    """Кому и когда звонить по продлению абонемента."""
+    today = today or timezone.localdate()
+    rows = []
+    is_current_month = month_start <= today <= month_end
+
+    children = (
+        Child.objects
+        .filter(status=Child.Status.ACTIVE)
+        .select_related("group")
+        .prefetch_related("subscriptions__tariff")
+    )
+
+    for child in children:
+        subscription = (
+            child.subscriptions
+            .filter(is_active=True)
+            .order_by("end_date")
+            .first()
+        )
+        if not subscription:
+            continue
+
+        active_subscription = child.active_subscription()
+        sessions_left = child.sessions_left() if active_subscription else 0
+        projected_end = (
+            child.projected_end_date()
+            if active_subscription and sessions_left > 0
+            else None
+        )
+
+        end_candidates = [subscription.end_date]
+        if projected_end:
+            end_candidates.append(projected_end)
+
+        renewal_date = (
+            today
+            if active_subscription and sessions_left <= 0
+            else min(end_candidates)
+        )
+        call_date = renewal_date - timedelta(days=3)
+
+        if is_current_month:
+            # В текущем месяце не теряем просроченные незакрытые продления.
+            if renewal_date > month_end:
+                continue
+        elif not (month_start <= renewal_date <= month_end):
+            continue
+
+        if renewal_date <= today or sessions_left <= 0:
+            priority = 0
+            status = "Срочно"
+        elif call_date <= today:
+            priority = 1
+            status = "Позвонить сегодня"
+        elif call_date <= today + timedelta(days=3):
+            priority = 2
+            status = "В ближайшие 3 дня"
+        else:
+            priority = 3
+            status = "Запланировано"
+
+        amount = (
+            subscription.tariff.price
+            if subscription.tariff
+            else subscription.price
+        )
+
+        rows.append({
+            "child": child,
+            "group": child.group,
+            "parent_name": child.parent_name,
+            "parent_phone": child.parent_phone,
+            "subscription": subscription,
+            "sessions_left": sessions_left,
+            "projected_end": projected_end,
+            "renewal_date": renewal_date,
+            "call_date": call_date,
+            "amount": amount,
+            "priority": priority,
+            "status": status,
+        })
+
+    rows.sort(
+        key=lambda row: (
+            row["priority"],
+            row["call_date"],
+            row["renewal_date"],
+            row["child"].last_name,
+        )
+    )
+    return rows
+
+
 @login_required
 def payments_table_view(request):
     month_start, month_end, today = _month_range(request)
-    payments = Payment.objects.filter(
-        date__gte=month_start, date__lte=month_end
-    ).select_related('child', 'child__group', 'created_by', 'subscription').order_by('-date')
-    total = payments.aggregate(s=Sum('amount'))['s'] or 0
-    context = {'payments': payments, 'total': total,
-               'month_start': month_start, 'month_end': month_end,
-               'title': 'Предварительные оплаты', 'page': 'payments_table'}
+    rows = build_renewal_rows(month_start, month_end, today)
+    expected = sum(
+        (row["amount"] for row in rows),
+        Decimal("0"),
+    )
+
+    context = {
+        'rows': rows,
+        'expected': expected,
+        'urgent_count': sum(1 for row in rows if row["priority"] == 0),
+        'call_today_count': sum(1 for row in rows if row["call_date"] <= today),
+        'month_start': month_start,
+        'month_end': month_end,
+        'today': today,
+        'title': 'Предварительные оплаты',
+        'page': 'payments_table',
+    }
     return render(request, 'crm/payments_table.html', context)
+
+
+@login_required
+def payment_history_view(request):
+    month_start, month_end, today = _month_range(request)
+    payments = Payment.objects.filter(
+        date__gte=month_start,
+        date__lte=month_end,
+    ).select_related(
+        'child',
+        'child__group',
+        'created_by',
+        'subscription',
+    ).order_by('-date')
+
+    total = payments.aggregate(s=Sum('amount'))['s'] or 0
+    context = {
+        'payments': payments,
+        'total': total,
+        'month_start': month_start,
+        'month_end': month_end,
+        'title': 'История оплат',
+        'page': 'payment_history',
+    }
+    return render(request, 'crm/payment_history.html', context)
 
 

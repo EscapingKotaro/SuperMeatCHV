@@ -1,31 +1,109 @@
 {% extends 'crm/base.html' %}
 {% block actions %}
-<form method="get"><input type="date" name="month" value="{{ month_start|date:'Y-m-d' }}" class="field text-sm" onchange="this.form.submit()"></form>
+<form method="get">
+    <input type="month" name="month" value="{{ month_start|date:'Y-m' }}" class="field text-sm" onchange="this.form.submit()">
+</form>
 {% endblock %}
 {% block content %}
+<div class="mb-4 grid gap-3 sm:grid-cols-3">
+    <div class="card metric">
+        <p class="metric-label">Нужно связаться срочно</p>
+        <p class="metric-value text-red-600">{{ urgent_count }}</p>
+    </div>
+
+    <div class="card metric">
+        <p class="metric-label">Позвонить уже пора</p>
+        <p class="metric-value">{{ call_today_count }}</p>
+    </div>
+
+    <div class="card metric">
+        <p class="metric-label">Ожидаемая сумма</p>
+        <p class="metric-value">{{ expected|floatformat:0 }} ₽</p>
+    </div>
+</div>
+
 <section class="card overflow-hidden">
-    <table class="w-full text-sm">
-        <thead><tr class="bg-slate-50 text-left text-xs font-bold">
-            <th class="px-4 py-2">Дата</th><th class="px-2 py-2">Спортсмен</th>
-            <th class="px-2 py-2">Группа</th><th class="px-2 py-2">Абонемент</th>
-            <th class="px-2 py-2">Принял</th><th class="px-2 py-2 text-right">Сумма</th>
-        </tr></thead>
-        <tbody>
-        {% for p in payments %}
-            <tr class="border-b border-slate-100">
-                <td class="px-4 py-2">{{ p.date|date:"d.m.Y" }}</td>
-                <td class="px-2 py-2 font-semibold">{{ p.child }}</td>
-                <td class="px-2 py-2 text-slate-500">{{ p.child.group|default:"—" }}</td>
-                <td class="px-2 py-2 text-slate-500">{% if p.subscription %}{{ p.subscription.start_date|date:"d.m" }}–{{ p.subscription.end_date|date:"d.m" }}{% else %}—{% endif %}</td>
-                <td class="px-2 py-2 text-slate-500">{{ p.created_by|default:"—" }}</td>
-                <td class="px-2 py-2 text-right font-bold">{{ p.amount|floatformat:0 }} ₽</td>
-            </tr>
-        {% empty %}
-            <tr><td colspan="6" class="text-center py-8 text-slate-400">Нет оплат за период</td></tr>
-        {% endfor %}
-        <tr class="bg-slate-50 font-extrabold"><td colspan="5" class="px-4 py-2">Итого</td>
-            <td class="px-2 py-2 text-right">{{ total|floatformat:0 }} ₽</td></tr>
-        </tbody>
-    </table>
+    <div class="border-b border-slate-100 p-4">
+        <h2 class="font-extrabold">Кому нужно звонить по продлению</h2>
+        <p class="mt-1 text-xs text-slate-500">
+            Дата продления — более раннее окончание по занятиям или по календарю. Звонок планируется за 3 дня.
+        </p>
+    </div>
+
+    <div class="table-wrap">
+        <table class="data-table min-w-[1200px]">
+            <thead>
+                <tr>
+                    <th>Статус</th>
+                    <th>Спортсмен</th>
+                    <th>Группа</th>
+                    <th>Родитель / телефон</th>
+                    <th>Осталось</th>
+                    <th>Прогноз окончания</th>
+                    <th>Срок абонемента</th>
+                    <th>Позвонить</th>
+                    <th class="text-right">Сумма</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for row in rows %}
+                <tr>
+                    <td>
+                        <span class="badge
+                            {% if row.priority == 0 %}bg-red-100 text-red-700
+                            {% elif row.priority == 1 %}bg-orange-100 text-orange-700
+                            {% elif row.priority == 2 %}bg-amber-100 text-amber-700
+                            {% else %}bg-slate-100 text-slate-700{% endif %}">
+                            {{ row.status }}
+                        </span>
+                    </td>
+
+                    <td>
+                        <a href="{% url 'child_card' row.child.pk %}" class="font-bold hover:text-blue-600">
+                            {{ row.child }}
+                        </a>
+                    </td>
+
+                    <td>{{ row.group|default:"—" }}</td>
+
+                    <td>
+                        <b class="block">{{ row.parent_name|default:"—" }}</b>
+                        {% if row.parent_phone %}
+                            <a href="tel:{{ row.parent_phone }}" class="text-xs text-[#FF5C35]">{{ row.parent_phone }}</a>
+                        {% else %}
+                            <span class="text-xs text-slate-400">телефон не указан</span>
+                        {% endif %}
+                    </td>
+
+                    <td><b>{{ row.sessions_left }}</b></td>
+
+                    <td>
+                        {% if row.projected_end %}
+                            {{ row.projected_end|date:"d.m.Y" }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
+
+                    <td>{{ row.subscription.end_date|date:"d.m.Y" }}</td>
+
+                    <td>
+                        <b {% if row.call_date <= today %}class="text-red-600"{% endif %}>
+                            {{ row.call_date|date:"d.m.Y" }}
+                        </b>
+                    </td>
+
+                    <td class="text-right font-bold">{{ row.amount|floatformat:0 }} ₽</td>
+                </tr>
+            {% empty %}
+                <tr>
+                    <td colspan="9" class="py-10 text-center text-slate-400">
+                        На выбранный месяц звонков по продлению нет
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </section>
 {% endblock %}

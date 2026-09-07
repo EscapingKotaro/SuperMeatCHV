@@ -4,9 +4,9 @@
 {% block actions %}
 <form method="get" class="flex items-center gap-2">
     <input
-        type="date"
+        type="month"
         name="month"
-        value="{{ month_start|date:'Y-m-d' }}"
+        value="{{ month_start|date:'Y-m' }}"
         class="field text-sm"
         onchange="this.form.submit()"
     >
@@ -19,7 +19,7 @@
 <!-- =========================
      ОСНОВНЫЕ МЕТРИКИ
 ========================== -->
-<div class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+<div class="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
 
     <div class="card p-4">
         <div class="text-[10px] font-bold uppercase text-slate-400">
@@ -51,10 +51,16 @@
         <div class="mt-1 text-2xl font-extrabold text-blue-600">
             {{ new_count }}
         </div>
+    </div>
 
-        <small class="text-[10px] text-slate-500">
-            осталось {{ new_kept }}
-        </small>
+    <div class="card p-4">
+        <div class="text-[10px] font-bold uppercase text-slate-400">
+            Остались из новых
+        </div>
+
+        <div class="mt-1 text-2xl font-extrabold text-violet-600">
+            {{ new_kept }}
+        </div>
     </div>
 
 
@@ -125,7 +131,7 @@
             <div class="h-3 overflow-hidden rounded-full bg-slate-100">
                 <div
                     class="h-full rounded-full bg-[#F62E2E]"
-                    style="width: {% widthratio revenue_month target.amount 100 %}%"
+                    style="width: {{ target_percent }}%"
                 ></div>
             </div>
 
@@ -153,11 +159,29 @@
         </b>
 
         <div class="mt-1 text-xs text-slate-500">
-            Факт {{ revenue_month|floatformat:0 }} ₽ + ожидаемые продления
+            Факт {{ revenue_month|floatformat:0 }} ₽
+            + ожидаемые продления {{ expected|floatformat:0 }} ₽
         </div>
 
     </div>
 
+</div>
+
+<div class="mb-6 grid gap-3 md:grid-cols-3">
+    <a href="{% url 'payments_table' %}?month={{ month_start|date:'Y-m' }}" class="card p-4 hover:border-blue-200">
+        <div class="text-[10px] font-bold uppercase text-slate-400">Предварительные оплаты</div>
+        <div class="mt-1 font-extrabold text-blue-700">Кому и когда звонить →</div>
+    </a>
+
+    <a href="{% url 'salaries' %}?month={{ month_start|date:'Y-m' }}" class="card p-4 hover:border-emerald-200">
+        <div class="text-[10px] font-bold uppercase text-slate-400">ЗП тренеров</div>
+        <div class="mt-1 font-extrabold text-emerald-700">Расчёт и Excel →</div>
+    </a>
+
+    <a href="{% url 'expenses' %}?month={{ month_start|date:'Y-m' }}" class="card p-4 hover:border-amber-200">
+        <div class="text-[10px] font-bold uppercase text-slate-400">Расходы за месяц</div>
+        <div class="mt-1 text-xl font-extrabold">{{ expenses_month|floatformat:0 }} ₽</div>
+    </a>
 </div>
 
 

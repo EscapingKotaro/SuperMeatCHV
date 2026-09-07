@@ -95,7 +95,7 @@
                 <button
                     type="button"
                     data-stats-toggle
-                    class="nav-pill cursor-pointer {% if page == 'statistics' or page == 'payments_table' or page == 'salaries' %}active{% endif %}"
+                    class="nav-pill cursor-pointer {% if page == 'statistics' or page == 'payments_table' or page == 'payment_history' or page == 'salaries' %}active{% endif %}"
                 >
                     <i data-lucide="chart-no-axes-combined"></i>
                     Статистика
@@ -271,6 +271,10 @@
             Предварительные оплаты
         </a>
 
+        <a href="{% url 'payment_history' %}" class="menu-item {% if page == 'payment_history' %}bg-slate-100{% endif %}">
+            <i data-lucide="history"></i>
+            История оплат
+        </a>
 
         <a href="{% url 'salaries' %}" class="menu-item {% if page == 'salaries' %}bg-slate-100{% endif %}">
             <i data-lucide="banknote"></i>
