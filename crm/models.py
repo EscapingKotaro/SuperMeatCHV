@@ -158,6 +158,7 @@ class Child(models.Model):
     parent_name  = models.CharField("Родитель", max_length=200, blank=True)
     parent_phone = models.CharField("Телефон родителя", max_length=20, blank=True)
     certificate = models.ImageField("Справка (фото)", upload_to="certificates/", blank=True)
+    certificate_ok = models.BooleanField("Справка есть", default=False)
     certificate_note = models.CharField("Комментарий к справке", max_length=255, blank=True)
 
     group = models.ForeignKey(Group, on_delete=models.SET_NULL, blank=True, null=True,
@@ -222,7 +223,7 @@ class Child(models.Model):
         return f"{years} г. {months} мес."
 
     def has_certificate(self):
-        return bool(self.certificate)
+        return self.certificate_ok
 
     def sessions_left(self):
         """Остаток занятий по активным абонементам."""

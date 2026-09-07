@@ -3539,6 +3539,13 @@ def child_card_view(request, child_id):
             messages.success(request, "Разряд удалён")
             return redirect("child_card", child_id=child.pk)
 
+        elif action == "toggle_certificate":
+            child.certificate_ok = not child.certificate_ok
+            child.save(update_fields=["certificate_ok"])
+            msg = "Справка отмечена" if child.certificate_ok else "Справка убрана"
+            messages.success(request, msg)
+            return redirect("child_card", child_id=child.pk)
+
         elif action == "add_camp":
             camp_form = CampStayForm(request.POST, prefix="camp")
             if camp_form.is_valid():

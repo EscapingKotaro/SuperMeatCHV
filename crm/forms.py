@@ -235,7 +235,7 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
         model = Child
         fields = (
             "last_name", "first_name", "patronymic", "birth_date", "birth_year",
-            "address", "parent_name", "parent_phone", "certificate",
+            "address", "parent_name", "parent_phone", "certificate_ok",
             "certificate_note", "group", "status", "trial_from",
             "discount_percent", "note",
         )

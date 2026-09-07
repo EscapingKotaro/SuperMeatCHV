@@ -83,25 +83,41 @@
         </div>
 
         <!-- Справка -->
-        <div class="card p-5">
-            <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
-                <i data-lucide="file-text" class="h-4 w-4 text-slate-400"></i>Справка для занятий
-            </h3>
-            {% if child.certificate %}
-                <a href="{% url 'child_certificate' child.id %}" target="_blank" class="block">
-                    <img
-                        src="{% url 'child_certificate' child.id %}"
-                        alt="Справка"
-                        class="w-full max-h-64 object-contain rounded-lg border border-slate-200 bg-slate-50"
-                    >
-                </a>
-                {% if child.certificate_note %}
-                <p class="mt-3 text-xs text-slate-600 bg-slate-50 p-2 rounded-lg">{{ child.certificate_note }}</p>
+<div class="card p-5">
+    <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
+        <i data-lucide="file-text" class="h-4 w-4 text-slate-400"></i>Справка для занятий
+    </h3>
+
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="toggle_certificate">
+
+        <button type="submit"
+                class="w-full flex items-center justify-between p-3 rounded-xl border transition
+                       {% if child.certificate_ok %}
+                           bg-emerald-50 border-emerald-200 hover:bg-emerald-100
+                       {% else %}
+                           bg-slate-50 border-slate-200 hover:bg-slate-100
+                       {% endif %}">
+            <div class="flex items-center gap-2">
+                {% if child.certificate_ok %}
+                    <i data-lucide="check-circle-2" class="h-5 w-5 text-emerald-600"></i>
+                    <span class="text-sm font-bold text-emerald-900">Да, есть</span>
+                {% else %}
+                    <i data-lucide="x-circle" class="h-5 w-5 text-slate-400"></i>
+                    <span class="text-sm font-bold text-slate-600">Нет</span>
                 {% endif %}
-            {% else %}
-                <p class="text-xs text-slate-400 italic">Справка не прикреплена</p>
-            {% endif %}
-        </div>
+            </div>
+            <span class="text-[10px] text-slate-400">нажми, чтобы переключить</span>
+        </button>
+    </form>
+
+    {% if child.certificate_note %}
+    <p class="mt-3 text-xs text-slate-600 bg-slate-50 p-2 rounded-lg">
+        <span class="font-bold text-slate-500">Примечание:</span> {{ child.certificate_note }}
+    </p>
+    {% endif %}
+</div>
 
         <!-- Разряды -->
         <div class="card p-5">
