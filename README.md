@@ -15,6 +15,13 @@ python manage.py runserver
 логин: admin
 Пароль: FvthbrfCjcfnm
 
+## Запуск тестов
+cd /opt/crm
+
+sudo -H -u juli \
+/home/juli/juli_dev_app/venv/bin/python \
+manage.py test crm --keepdb
+
 ## Основные страницы
 
 | Экран | Адрес |
