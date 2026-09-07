@@ -173,10 +173,12 @@
         <div class="mt-1 font-extrabold text-blue-700">Кому и когда звонить →</div>
     </a>
 
+    {% if is_senior %}
     <a href="{% url 'salaries' %}?month={{ month_start|date:'Y-m' }}" class="card p-4 hover:border-emerald-200">
         <div class="text-[10px] font-bold uppercase text-slate-400">ЗП тренеров</div>
         <div class="mt-1 font-extrabold text-emerald-700">Расчёт и Excel →</div>
     </a>
+    {% endif %}
 
     <a href="{% url 'expenses' %}?month={{ month_start|date:'Y-m' }}" class="card p-4 hover:border-amber-200">
         <div class="text-[10px] font-bold uppercase text-slate-400">Расходы за месяц</div>

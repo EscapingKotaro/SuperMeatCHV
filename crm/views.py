@@ -2848,7 +2848,28 @@ def boss_page(request):
             return redirect(f"{reverse('boss')}?tasks={task_filter}#tasks")
 
         elif action == "set_target":
-            target_form = RevenueTargetForm(request.POST, prefix="target", instance=target)
+            target_month_raw = (request.POST.get("target-month") or "").strip()
+            selected_target = None
+
+            for date_format in ("%Y-%m", "%Y-%m-%d"):
+                try:
+                    selected_month = (
+                        datetime.strptime(target_month_raw, date_format)
+                        .date()
+                        .replace(day=1)
+                    )
+                    selected_target = RevenueTarget.objects.filter(
+                        month=selected_month,
+                    ).first()
+                    break
+                except ValueError:
+                    continue
+
+            target_form = RevenueTargetForm(
+                request.POST,
+                prefix="target",
+                instance=selected_target,
+            )
 
             if target_form.is_valid():
                 target = target_form.save(commit=False)
@@ -2914,7 +2935,7 @@ def boss_page(request):
     group_rows = build_group_stats(month, month_end, today)
     trainer_rows = []
 
-    for trainer in Trainer.objects.filter(is_active=True):
+    for trainer in _report_trainers(month, month_end):
         children = Child.objects.filter(
             group__trainer=trainer,
             status=Child.Status.ACTIVE,
@@ -3657,45 +3678,87 @@ def _month_range(request):
     return month_start, month_end, today
 
 def _sessions_held(group, month_start, month_end, today):
-    """Сколько занятий прошло по расписанию группы в месяце (до сегодня)."""
-    weekdays = set(ScheduleSlot.objects.filter(group=group).values_list('weekday', flat=True))
+    """Сколько дней занятий прошло по расписанию группы в месяце."""
+    weekdays = set(
+        ScheduleSlot.objects
+        .filter(group=group)
+        .values_list("weekday", flat=True)
+    )
     last = min(month_end, today)
     count, d = 0, month_start
+
     while d <= last:
         if d.weekday() in weekdays:
             count += 1
         d += timedelta(days=1)
+
     return count
 
 
-def _freeze_missing_attendance_snapshots():
-    """Фиксирует старые отметки, созданные до исторических снимков."""
-    children = (
+def _attendance_for_group(group, month_start, month_end):
+    """Отметки текущих спортсменов, относящиеся именно к этой группе."""
+    current_statuses = (
+        Child.Status.ACTIVE,
+        Child.Status.TRIAL,
+    )
+
+    return (
+        Attendance.objects
+        .filter(
+            child__group=group,
+            child__status__in=current_statuses,
+            date__gte=month_start,
+            date__lte=month_end,
+        )
+        .filter(
+            Q(group_snapshot=group)
+            | Q(group_snapshot__isnull=True)
+        )
+    )
+
+
+def _report_trainers(month_start, month_end):
+    """Активные тренеры плюс тренеры с показателями в выбранном периоде."""
+    trainer_ids = set(
+        Trainer.objects
+        .filter(is_active=True)
+        .values_list("pk", flat=True)
+    )
+
+    trainer_ids.update(
+        Group.objects
+        .filter(is_active=True)
+        .values_list("trainer_id", flat=True)
+    )
+
+    trainer_ids.update(
         Child.objects
         .filter(
-            group__isnull=False,
-            attendances__group_snapshot__isnull=True,
+            status__in=[Child.Status.LOST, Child.Status.ARCHIVED],
+            archived_at__gte=month_start,
+            archived_at__lte=month_end,
+            departure_trainer__isnull=False,
         )
-        .select_related("group__trainer")
-        .distinct()
+        .values_list("departure_trainer_id", flat=True)
     )
-    for child in children:
-        child.freeze_current_history()
 
-
-def _attendance_for_group(group, month_start, month_end):
-    return Attendance.objects.filter(
-        Q(group_snapshot=group)
-        | Q(group_snapshot__isnull=True, child__group=group),
-        date__gte=month_start,
-        date__lte=month_end,
+    trainer_ids.update(
+        Attendance.objects
+        .filter(
+            date__gte=month_start,
+            date__lte=month_end,
+            trainer_snapshot__isnull=False,
+        )
+        .values_list("trainer_snapshot_id", flat=True)
     )
+
+    return Trainer.objects.filter(
+        pk__in=trainer_ids,
+    ).order_by("full_name")
 
 
 def build_group_stats(month_start, month_end, today):
     """Единая формула посещаемости для статистики и кабинета начальника."""
-    _freeze_missing_attendance_snapshots()
-
     current_statuses = (
         Child.Status.ACTIVE,
         Child.Status.TRIAL,
@@ -3749,8 +3812,6 @@ def build_group_stats(month_start, month_end, today):
 
 def build_salary_data(month_start, month_end):
     """ЗП по историческим снимкам группы, тренера и ставки."""
-    _freeze_missing_attendance_snapshots()
-
     buckets = {}
     present_marks = (
         Attendance.objects
@@ -3890,19 +3951,16 @@ def statistics_view(request):
     revenue_month = Payment.objects.filter(
         date__gte=month_start, date__lte=month_end).aggregate(s=Sum('amount'))['s'] or 0
 
-    expected = (
-        Subscription.objects
-        .filter(
-            is_active=True,
-            child__status=Child.Status.ACTIVE,
-            start_date__lte=today,
-            end_date__gte=today,
-            end_date__lte=month_end,
-        )
-        .aggregate(s=Sum("price"))["s"]
-        or 0
+    forecast_rows = build_renewal_rows(
+        month_start,
+        month_end,
+        today,
     )
-    potential = Decimal(revenue_month) + Decimal(expected)
+    expected = sum(
+        (row["amount"] for row in forecast_rows),
+        Decimal("0"),
+    )
+    potential = Decimal(revenue_month) + expected
 
     target = RevenueTarget.objects.filter(month=month_start).first()
     target_percent = (
@@ -3924,7 +3982,7 @@ def statistics_view(request):
     )
 
     trainers_stats = []
-    for t in Trainer.objects.filter(is_active=True):
+    for t in _report_trainers(month_start, month_end):
         t_left = children.filter(
             Q(departure_trainer=t)
             | Q(departure_trainer__isnull=True, group__trainer=t),
@@ -3957,7 +4015,7 @@ def statistics_view(request):
     return render(request, 'crm/statistics.html', context)
 
 
-@login_required
+@role_required(1)
 def salaries_view(request):
     month_start, month_end, today = _month_range(request)
     can_manage_salary = user_role(request.user) in (
@@ -4013,7 +4071,7 @@ def salaries_view(request):
     return render(request, 'crm/salaries.html', context)
 
 
-@login_required
+@role_required(1)
 def salaries_export_view(request):
     """Выгрузка таблицы ЗП в Excel (формат как в ручном подсчете)."""
     from openpyxl import Workbook
@@ -4096,16 +4154,25 @@ def build_renewal_rows(month_start, month_end, today=None):
     )
 
     for child in children:
-        subscription = (
-            child.subscriptions
-            .filter(is_active=True)
-            .order_by("end_date")
-            .first()
-        )
-        if not subscription:
+        subscriptions = child.subscriptions.filter(is_active=True)
+
+        # Если следующий абонемент уже создан, продление считается оформленным:
+        # повторно звонить и включать его в потенциальную выручку не нужно.
+        if subscriptions.filter(start_date__gt=today).exists():
             continue
 
         active_subscription = child.active_subscription()
+        subscription = (
+            active_subscription
+            or subscriptions
+            .filter(start_date__lte=today)
+            .order_by("-end_date", "-pk")
+            .first()
+        )
+
+        if not subscription:
+            continue
+
         sessions_left = child.sessions_left() if active_subscription else 0
         projected_end = (
             child.projected_end_date()

@@ -276,10 +276,12 @@
             История оплат
         </a>
 
+        {% if is_senior %}
         <a href="{% url 'salaries' %}" class="menu-item {% if page == 'salaries' %}bg-slate-100{% endif %}">
             <i data-lucide="banknote"></i>
             ЗП тренеров
         </a>
+        {% endif %}
 
     </div>
 
