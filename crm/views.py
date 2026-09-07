@@ -120,13 +120,15 @@ def page_context(request, page, **extra):
 
 
 def log_action(request, action, obj, description):
-    AuditEvent.objects.create(
+    event = AuditEvent.objects.create(
         actor=request.user,
         action=action,
         object_type=obj.__class__.__name__ if obj else "",
         object_id=str(obj.pk) if obj and obj.pk else "",
         description=description,
     )
+    request._crm_audit_logged = True
+    return event
 
 
 def login_page(request):
@@ -189,6 +191,12 @@ def generate_class_dates(group, start_date, limit=60):
 
 @login_required
 def logout_page(request):
+    log_action(
+        request,
+        "auth.logout",
+        request.user,
+        f"Выход из CRM: {request.user}",
+    )
     logout(request)
     return redirect("login")
 
@@ -2806,7 +2814,11 @@ def boss_page(request):
 
     target = RevenueTarget.objects.filter(month=month).first()
     task_form = ManagerTaskForm(prefix="task")
-    target_form = RevenueTargetForm(prefix="target", instance=target, initial={"month": month})
+    target_form = RevenueTargetForm(
+        prefix="target",
+        instance=target,
+        initial={"month": month},
+    )
 
     if request.method == "POST":
         action = request.POST.get("action")
@@ -2876,13 +2888,18 @@ def boss_page(request):
                 target.set_by = request.user
                 target.save()
 
-                log_action(request, "revenue_target.save", target, f"Цель выручки: {target.amount} ₽")
+                log_action(
+                    request,
+                    "revenue_target.save",
+                    target,
+                    f"Цель выручки: {target.amount} ₽",
+                )
                 messages.success(request, "Цель обновлена")
                 return redirect("boss")
 
             messages.error(request, "Проверьте параметры цели")
 
-    # Задачи
+    # Задачи.
     all_tasks = list(
         ManagerTask.objects
         .select_related("assignee", "created_by", "completed_by")
@@ -2902,9 +2919,21 @@ def boss_page(request):
         elif task.scheduled_at:
             task.is_overdue_now = task.scheduled_at < now
 
-    active_tasks = [t for t in all_tasks if not t.is_done and not t.is_overdue_now]
-    overdue_tasks_list = [t for t in all_tasks if t.is_overdue_now]
-    done_tasks = [t for t in all_tasks if t.is_done]
+    active_tasks = [
+        task
+        for task in all_tasks
+        if not task.is_done and not task.is_overdue_now
+    ]
+    overdue_tasks_list = [
+        task
+        for task in all_tasks
+        if task.is_overdue_now
+    ]
+    done_tasks = [
+        task
+        for task in all_tasks
+        if task.is_done
+    ]
 
     task_filter = request.GET.get("tasks", "active")
     if task_filter not in {"active", "overdue", "done", "all"}:
@@ -2917,10 +2946,41 @@ def boss_page(request):
         "all": all_tasks,
     }[task_filter]
 
-    # Финансы
-    revenue = Payment.objects.filter(date__gte=month).aggregate(value=Sum("amount"))["value"] or 0
+    # Финансы. Текущая выручка — факт с начала месяца по сегодня.
+    revenue = (
+        Payment.objects
+        .filter(
+            date__gte=month,
+            date__lte=today,
+        )
+        .aggregate(value=Sum("amount"))["value"]
+        or Decimal("0")
+    )
+
+    forecast_rows = build_renewal_rows(
+        month,
+        month_end,
+        today,
+    )
+    expected_revenue = sum(
+        (row["amount"] for row in forecast_rows),
+        Decimal("0"),
+    )
+    potential_revenue = Decimal(revenue) + expected_revenue
+
     target_amount = target.amount if target else Decimal("0")
-    target_percent = min(100, round(revenue * 100 / target_amount)) if target_amount else 0
+    target_percent = (
+        min(
+            100,
+            round(
+                Decimal(revenue)
+                * 100
+                / target_amount
+            ),
+        )
+        if target_amount
+        else 0
+    )
 
     salary_data = build_salary_data(month, month_end)
     salaries = salary_data["grand_total"]
@@ -2928,11 +2988,46 @@ def boss_page(request):
         SalaryPayout.objects
         .filter(month=month)
         .aggregate(value=Sum("amount"))["value"]
-        or 0
+        or Decimal("0")
     )
 
-    # KPI тренеров — та же формула, что и в общей статистике.
-    group_rows = build_group_stats(month, month_end, today)
+    # KPI пробных занятий. Пробник = реально пришёл на пробное.
+    trial_qs = (
+        Newcomer.objects
+        .filter(
+            trial_at__date__gte=month,
+            trial_at__date__lte=month_end,
+            attended=True,
+            lesson_cancelled=False,
+        )
+    )
+
+    trial_by_trainer = {
+        row["trainer_id"]: row["total"]
+        for row in (
+            trial_qs
+            .exclude(trainer__isnull=True)
+            .values("trainer_id")
+            .annotate(total=Count("id"))
+        )
+    }
+    retained_by_trainer = {
+        row["trainer_id"]: row["total"]
+        for row in (
+            trial_qs
+            .filter(paid=True)
+            .exclude(trainer__isnull=True)
+            .values("trainer_id")
+            .annotate(total=Count("id"))
+        )
+    }
+
+    # KPI тренеров — посещаемость использует ту же формулу, что Глава 3.
+    group_rows = build_group_stats(
+        month,
+        month_end,
+        today,
+    )
     trainer_rows = []
 
     for trainer in _report_trainers(month, month_end):
@@ -2941,58 +3036,276 @@ def boss_page(request):
             status=Child.Status.ACTIVE,
         )
         trainer_groups = [
-            row for row in group_rows
+            row
+            for row in group_rows
             if row["group"].trainer_id == trainer.id
         ]
-        present = sum(row["present"] for row in trainer_groups)
-        capacity = sum(row["capacity"] for row in trainer_groups)
-        lost = Child.objects.filter(
-            Q(departure_trainer=trainer)
-            | Q(departure_trainer__isnull=True, group__trainer=trainer),
-            status__in=[Child.Status.LOST, Child.Status.ARCHIVED],
-            archived_at__gte=month,
-            archived_at__lte=month_end,
-        ).distinct().count()
+
+        present = sum(
+            row["present"]
+            for row in trainer_groups
+        )
+        capacity = sum(
+            row["capacity"]
+            for row in trainer_groups
+        )
+        trial = trial_by_trainer.get(
+            trainer.id,
+            0,
+        )
+        retained = retained_by_trainer.get(
+            trainer.id,
+            0,
+        )
+        lost = (
+            Child.objects
+            .filter(
+                Q(departure_trainer=trainer)
+                | Q(
+                    departure_trainer__isnull=True,
+                    group__trainer=trainer,
+                ),
+                status__in=[
+                    Child.Status.LOST,
+                    Child.Status.ARCHIVED,
+                ],
+                archived_at__gte=month,
+                archived_at__lte=month_end,
+            )
+            .distinct()
+            .count()
+        )
 
         trainer_rows.append({
             "trainer": trainer,
             "children": children.count(),
-            "trial": Child.objects.filter(group__trainer=trainer, status=Child.Status.TRIAL).count(),
+            "trial": trial,
+            "retained": retained,
+            "retention_pct": (
+                round(retained * 100 / trial)
+                if trial
+                else 0
+            ),
             "lost": lost,
-            "attendance": round(present * 100 / capacity) if capacity else 0,
+            "attendance_capacity": capacity,
+            "attendance": (
+                round(present * 100 / capacity)
+                if capacity
+                else 0
+            ),
         })
 
-    trainer_rows.sort(key=lambda row: row["attendance"], reverse=True)
+    trainer_rows.sort(
+        key=lambda row: (
+            row["attendance"],
+            row["retained"],
+            row["children"],
+        ),
+        reverse=True,
+    )
 
+    # Топы Главы 6.
+    top_trainers_attendance = [
+        row
+        for row in trainer_rows
+        if row["attendance_capacity"] > 0
+    ][:5]
+
+    top_groups_attendance = sorted(
+        [
+            row
+            for row in group_rows
+            if row["capacity"] > 0
+        ],
+        key=lambda row: (
+            row["attendance_pct"],
+            row["present"],
+        ),
+        reverse=True,
+    )[:5]
+
+    top_trial_groups = [
+        {
+            "name": row["group__name"],
+            "count": row["total"],
+        }
+        for row in (
+            trial_qs
+            .exclude(group__isnull=True)
+            .values(
+                "group_id",
+                "group__name",
+            )
+            .annotate(total=Count("id"))
+            .order_by(
+                "-total",
+                "group__name",
+            )[:5]
+        )
+    ]
+
+    top_competition_groups = [
+        {
+            "name": row["child__group__name"],
+            "count": row["total"],
+        }
+        for row in (
+            CompetitionEntry.objects
+            .filter(
+                competition__date__gte=month,
+                competition__date__lte=month_end,
+                child__group__isnull=False,
+            )
+            .values(
+                "child__group_id",
+                "child__group__name",
+            )
+            .annotate(
+                total=Count(
+                    "child",
+                    distinct=True,
+                ),
+            )
+            .order_by(
+                "-total",
+                "child__group__name",
+            )[:5]
+        )
+    ]
+
+    # Журнал действий.
     all_logs = request.GET.get("all_logs") == "1"
-    events = AuditEvent.objects.select_related("actor")
-    if not all_logs:
-        events = events[:12]
+    events_qs = (
+        AuditEvent.objects
+        .select_related("actor")
+        .order_by("-created_at")
+    )
+    events_count = events_qs.count()
+    events = (
+        events_qs
+        if all_logs
+        else events_qs[:12]
+    )
 
-    return render(request, "crm/boss.html", page_context(
-        request, "boss",
-        revenue=revenue,
-        target=target,
-        target_amount=target_amount,
-        target_percent=target_percent,
-        salaries=salaries,
-        salary_paid=salary_paid,
-        active_count=Child.objects.filter(status=Child.Status.ACTIVE).count(),
-        trainer_rows=trainer_rows,
-        events=events,
-        all_logs=all_logs,
+    return render(
+        request,
+        "crm/boss.html",
+        page_context(
+            request,
+            "boss",
+            revenue=revenue,
+            expected_revenue=expected_revenue,
+            potential_revenue=potential_revenue,
+            target=target,
+            target_amount=target_amount,
+            target_percent=target_percent,
+            salaries=salaries,
+            salary_paid=salary_paid,
+            active_count=Child.objects.filter(
+                status=Child.Status.ACTIVE,
+            ).count(),
+            trainer_rows=trainer_rows,
+            top_trainers_attendance=top_trainers_attendance,
+            top_groups_attendance=top_groups_attendance,
+            top_trial_groups=top_trial_groups,
+            top_competition_groups=top_competition_groups,
+            events=events,
+            events_count=events_count,
+            all_logs=all_logs,
 
-        overdue_tasks=len(overdue_tasks_list),
-        displayed_tasks=displayed_tasks,
-        task_filter=task_filter,
-        task_active_count=len(active_tasks),
-        task_overdue_count=len(overdue_tasks_list),
-        task_done_count=len(done_tasks),
-        task_total_count=len(all_tasks),
+            overdue_tasks=len(overdue_tasks_list),
+            displayed_tasks=displayed_tasks,
+            task_filter=task_filter,
+            task_active_count=len(active_tasks),
+            task_overdue_count=len(overdue_tasks_list),
+            task_done_count=len(done_tasks),
+            task_total_count=len(all_tasks),
 
-        task_form=task_form,
-        target_form=target_form,
-    ))
+            task_form=task_form,
+            target_form=target_form,
+        ),
+    )
+
+
+@role_required(2)
+def boss_logs_export(request):
+    """Полная выгрузка журнала действий начальнику."""
+    today = timezone.localdate()
+
+    log_action(
+        request,
+        "audit.export",
+        None,
+        "Выгружен полный журнал действий CRM",
+    )
+
+    events = (
+        AuditEvent.objects
+        .select_related("actor")
+        .order_by("-created_at")
+    )
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Журнал действий"
+
+    headers = [
+        "Дата и время",
+        "Сотрудник",
+        "Действие",
+        "Объект",
+        "Описание",
+    ]
+    ws.append(headers)
+
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+
+    for event in events:
+        actor = "Система"
+        if event.actor:
+            actor = (
+                event.actor.get_full_name()
+                or event.actor.username
+            )
+
+        object_label = ""
+        if event.object_type:
+            object_label = event.object_type
+            if event.object_id:
+                object_label += f" #{event.object_id}"
+
+        ws.append([
+            timezone.localtime(event.created_at).strftime(
+                "%d.%m.%Y %H:%M:%S"
+            ),
+            actor,
+            event.action,
+            object_label,
+            event.description,
+        ])
+
+    widths = {
+        "A": 21,
+        "B": 28,
+        "C": 30,
+        "D": 24,
+        "E": 70,
+    }
+    for column, width in widths.items():
+        ws.column_dimensions[column].width = width
+
+    response = HttpResponse(
+        content_type=(
+            "application/vnd.openxmlformats-officedocument."
+            "spreadsheetml.sheet"
+        ),
+    )
+    response["Content-Disposition"] = (
+        f'attachment; filename="crm_audit_{today:%Y-%m-%d}.xlsx"'
+    )
+    wb.save(response)
+    return response
 
 
 @role_required(1)
@@ -3728,6 +4041,18 @@ def _report_trainers(month_start, month_end):
     trainer_ids.update(
         Group.objects
         .filter(is_active=True)
+        .values_list("trainer_id", flat=True)
+    )
+
+    trainer_ids.update(
+        Newcomer.objects
+        .filter(
+            trial_at__date__gte=month_start,
+            trial_at__date__lte=month_end,
+            attended=True,
+            lesson_cancelled=False,
+            trainer__isnull=False,
+        )
         .values_list("trainer_id", flat=True)
     )
 

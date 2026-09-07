@@ -10,6 +10,7 @@ from .models import (
     Apparatus,
     ApparatusScore,
     Attendance,
+    AuditEvent,
     Child,
     Competition,
     CompetitionEntry,
@@ -2375,6 +2376,189 @@ class CrmWorkflowTests(TestCase):
         self.assertEqual(
             statistics.context["expected"],
             Decimal("0"),
+        )
+
+    def test_boss_dashboard_has_potential_revenue_and_full_trainer_kpi(self):
+        today = timezone.localdate()
+        next_month = (
+            today.replace(day=28)
+            + timedelta(days=4)
+        ).replace(day=1)
+        month_end = next_month - timedelta(days=1)
+
+        subscription = Subscription.objects.create(
+            child=self.child,
+            start_date=today - timedelta(days=5),
+            end_date=month_end,
+            sessions_total=8,
+            price=Decimal("6000"),
+            is_active=True,
+        )
+        Payment.objects.create(
+            child=self.child,
+            subscription=subscription,
+            amount=Decimal("1000"),
+            date=today,
+            created_by=self.admin,
+        )
+
+        Newcomer.objects.create(
+            full_name="Пробник KPI",
+            trial_at=timezone.now(),
+            trainer=self.trainer,
+            group=self.group,
+            attended=True,
+            paid=True,
+        )
+
+        competition = Competition.objects.create(
+            name="Тест соревнований KPI",
+            date=today,
+            city="Москва",
+        )
+        CompetitionEntry.objects.create(
+            child=self.child,
+            competition=competition,
+            category="Общая",
+        )
+
+        self.client.login(
+            username="boss",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("boss"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["revenue"],
+            Decimal("1000"),
+        )
+        self.assertEqual(
+            response.context["expected_revenue"],
+            Decimal("6000"),
+        )
+        self.assertEqual(
+            response.context["potential_revenue"],
+            Decimal("7000"),
+        )
+
+        trainer_row = next(
+            row
+            for row in response.context["trainer_rows"]
+            if row["trainer"].pk == self.trainer.pk
+        )
+        self.assertEqual(trainer_row["trial"], 1)
+        self.assertEqual(trainer_row["retained"], 1)
+        self.assertEqual(trainer_row["retention_pct"], 100)
+
+        self.assertEqual(
+            response.context["top_trial_groups"][0]["name"],
+            self.group.name,
+        )
+        self.assertEqual(
+            response.context["top_competition_groups"][0]["name"],
+            self.group.name,
+        )
+
+    def test_audit_middleware_records_unlogged_successful_actions(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "date": timezone.localdate().isoformat(),
+                "status": Attendance.Status.PRESENT,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        event = AuditEvent.objects.filter(
+            actor=self.admin,
+            action="mark_attendance",
+        ).first()
+
+        self.assertIsNotNone(event)
+        self.assertIn(
+            "отметки посещения",
+            event.description.lower(),
+        )
+
+    def test_explicit_audit_event_is_not_duplicated_by_middleware(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("payments"),
+            {
+                "action": "payment",
+                "child_id": self.child.pk,
+                "amount": "1500",
+                "date": timezone.localdate().isoformat(),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("payments"),
+        )
+
+        self.assertEqual(
+            AuditEvent.objects.filter(
+                actor=self.admin,
+                action="payment.create",
+            ).count(),
+            1,
+        )
+
+        self.assertFalse(
+            AuditEvent.objects.filter(
+                actor=self.admin,
+                action="payments.payment",
+            ).exists()
+        )
+
+    def test_boss_can_export_full_audit_log_and_manager_cannot(self):
+        AuditEvent.objects.create(
+            actor=self.admin,
+            action="test.action",
+            description="Тестовое действие",
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        self.assertEqual(
+            self.client.get(
+                reverse("boss_logs_export"),
+            ).status_code,
+            403,
+        )
+
+        self.client.logout()
+        self.client.login(
+            username="boss",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("boss_logs_export"),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response["Content-Type"],
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
     def test_expired_subscription_with_debt_creates_notification(self):

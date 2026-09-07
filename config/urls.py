@@ -83,6 +83,7 @@ urlpatterns = [
 
     # Руководитель
     path("boss/", views.boss_page, name="boss"),
+    path("boss/logs/export/", views.boss_logs_export, name="boss_logs_export"),
 
     # Пользователи
     path("users/", views.users_page, name="users"),
