@@ -3119,7 +3119,7 @@ class CrmWorkflowTests(TestCase):
             f"до {today:%d.%m}",
         )
 
-    def test_subscription_end_marker_is_not_shown_earlier_than_seven_days(self):
+    def test_subscription_end_marker_is_shown_even_earlier_than_seven_days(self):
         today = timezone.localdate()
         self._create_daily_schedule()
         Subscription.objects.create(
@@ -3160,7 +3160,7 @@ class CrmWorkflowTests(TestCase):
             response,
             f"до {projected_end:%d.%m}",
         )
-        self.assertNotContains(
+        self.assertContains(
             response,
             "border-r-2 border-red-500",
         )
