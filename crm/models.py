@@ -248,47 +248,39 @@ class Child(models.Model):
 
     def has_mark_today(self):
         today = timezone.localdate()
-        return self.attendances.filter(
-            date=today, status__in=('present', 'absent')
-        ).exists()
-
-    def effective_sessions_left(self):
-        left = self.sessions_left()
-        if self.has_class_today() and not self.has_mark_today():
-            return max(0, left - 1)
-        return left
-
-    def strange_effective_sessions_left(self):
-        left = self.sessions_left()
-        if self.has_class_today() and self.has_mark_today() and left!=0:
-            return max(0, left + 1)
-        return left
+        return self.attendances.filter(date=today).exists()
 
     def projected_end_date(self):
-        left = self.strange_effective_sessions_left()
-        if left <= 0:
+        left = self.sessions_left()
+        if left <= 0 or not self.group:
             return None
-        active_sub = self.active_subscription()
-        if not active_sub or not self.group:
-            return None
-        start = timezone.localdate()
+
+        today = timezone.localdate()
+        start = today + timedelta(days=1) if self.has_mark_today() else today
         return calculate_projected_end_date(self.group, start, left)
 
     def sessions_left_on_date(self, target_date):
-        left = self.effective_sessions_left()
+        """Остаток занятий на начало указанной даты."""
+        left = self.sessions_left()
         if left <= 0 or not self.group:
             return 0
+
         today = timezone.localdate()
         if target_date <= today:
             return left
+
         slots = ScheduleSlot.objects.filter(group=self.group)
         count = 0
-        current = today + timedelta(days=1)
-        while current <= target_date:
-            for slot in slots:
-                if current.weekday() == slot.weekday:
-                    count += 1
+        current = today
+        today_is_already_marked = self.has_mark_today()
+
+        while current < target_date:
+            if not (current == today and today_is_already_marked):
+                for slot in slots:
+                    if current.weekday() == slot.weekday:
+                        count += 1
             current += timedelta(days=1)
+
         return max(0, left - count)
 
     def debt_sessions(self):
