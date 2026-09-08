@@ -7,6 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
+from .forms import ChildForm
 from .models import Child
 
 
@@ -61,6 +62,8 @@ class CertificateManagementTests(TestCase):
         self.assertContains(card, 'enctype="multipart/form-data"')
         self.assertContains(card, "Открыть фото справки")
         self.assertContains(card, "Удалить фото")
+        self.assertNotContains(card, "toggle_certificate")
+        self.assertNotContains(card, "нажми, чтобы переключить")
 
     def test_replacement_deletes_old_file_and_delete_removes_new_file(self):
         self.upload("first.gif")
@@ -82,8 +85,12 @@ class CertificateManagementTests(TestCase):
 
         self.child.refresh_from_db()
         self.assertFalse(self.child.certificate)
-        self.assertTrue(self.child.certificate_ok)
+        self.assertFalse(self.child.certificate_ok)
         self.assertFalse(os.path.exists(new_path))
+
+    def test_child_form_does_not_expose_manual_certificate_switch(self):
+        form = ChildForm()
+        self.assertNotIn("certificate_ok", form.fields)
 
     def test_invalid_image_does_not_replace_existing_photo(self):
         self.upload("valid.gif")

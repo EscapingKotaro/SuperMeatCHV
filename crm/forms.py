@@ -247,16 +247,13 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
         model = Child
         fields = (
             "last_name", "first_name", "patronymic", "birth_date", "birth_year",
-            "address", "parent_name", "parent_phone", "certificate_ok",
+            "address", "parent_name", "parent_phone",
             "certificate_note", "group", "status", "trial_from",
             "discount_percent", "note",
         )
         widgets = {
             "birth_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "trial_from": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
-            "certificate": forms.ClearableFileInput(
-                attrs={"accept": "image/*"},
-            ),
             "note": forms.Textarea(attrs={"rows": 3}),
         }
 
@@ -267,7 +264,6 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
         self.fields["address"].label = "Адрес прописки"
         self.fields["group"].required = True
         self.fields["group"].empty_label = "— Выберите группу —"
-      #  self.fields["certificate"].label = "Справка для занятий спортом (фото)"
         self.apply_styles()
 
     def clean(self):

@@ -52,7 +52,8 @@ def child_certificate_manage_view(request, child_id):
             file_name = child.certificate.name
             storage = child.certificate.storage
             child.certificate = ""
-            child.save(update_fields=["certificate"])
+            child.certificate_ok = False
+            child.save(update_fields=["certificate", "certificate_ok"])
             storage.delete(file_name)
 
             from .views import log_action
