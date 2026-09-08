@@ -1718,6 +1718,122 @@ class CrmWorkflowTests(TestCase):
             url=f"{reverse('newcomers')}?edit={newcomer.pk}",
         ).exists())
 
+    def test_newcomer_paid_flag_is_not_user_editable(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("newcomers"),
+            {"create": "1"},
+        )
+
+        self.assertNotContains(
+            response,
+            'name="paid"',
+        )
+
+        response = self.client.post(
+            reverse("newcomers"),
+            {
+                "full_name": "Ручная оплата запрещена",
+                "paid": "on",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("newcomers"),
+        )
+
+        newcomer = Newcomer.objects.get(
+            full_name="Ручная оплата запрещена",
+        )
+
+        self.assertFalse(
+            newcomer.paid,
+        )
+
+    def test_real_payment_marks_newcomer_paid_and_promotes_trial_child(self):
+        newcomer = Newcomer.objects.create(
+            full_name="Петров Иван",
+            group=self.group,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("newcomers"),
+            {
+                "action": "convert",
+                "newcomer_id": newcomer.pk,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("payments"),
+        )
+
+        newcomer.refresh_from_db()
+        child = newcomer.child
+
+        self.assertEqual(
+            child.status,
+            Child.Status.TRIAL,
+        )
+        self.assertFalse(
+            newcomer.paid,
+        )
+
+        payments_page = self.client.get(
+            reverse("payments"),
+        )
+
+        self.assertIn(
+            child,
+            list(payments_page.context["children"]),
+        )
+
+        response = self.client.post(
+            reverse("payments"),
+            {
+                "action": "payment",
+                "child_id": child.pk,
+                "amount": "1500",
+                "date": timezone.localdate().isoformat(),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("payments"),
+        )
+
+        child.refresh_from_db()
+        newcomer.refresh_from_db()
+
+        self.assertEqual(
+            child.status,
+            Child.Status.ACTIVE,
+        )
+        self.assertIsNone(
+            child.trial_from,
+        )
+        self.assertTrue(
+            newcomer.paid,
+        )
+        self.assertTrue(
+            Payment.objects.filter(
+                child=child,
+                amount=Decimal("1500"),
+            ).exists()
+        )
+
     def test_editing_newcomer_without_trial_change_does_not_notify(self):
         trial_at = timezone.now() + timedelta(days=1)
 

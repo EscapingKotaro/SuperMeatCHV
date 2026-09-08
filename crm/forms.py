@@ -422,7 +422,7 @@ class NewcomerForm(StyledFormMixin, forms.ModelForm):
         model = Newcomer
         fields = (
             "full_name", "birth_date", "age_text", "phone", "source", "trial_at",
-            "trainer", "group", "attended", "paid", "lesson_cancelled", "comment",
+            "trainer", "group", "attended", "lesson_cancelled", "comment",
         )
         widgets = {
             "birth_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),

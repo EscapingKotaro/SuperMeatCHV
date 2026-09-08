@@ -336,6 +336,7 @@ class NewcomerAdmin(admin.ModelAdmin):
     list_display = ("full_name", "trial_at", "attended", "paid", "lesson_cancelled", "child")
     list_filter = ("attended", "paid", "lesson_cancelled", "trainer")
     search_fields = ("full_name", "phone", "comment")
+    readonly_fields = ("paid",)
 
 
 

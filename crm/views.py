@@ -599,7 +599,10 @@ def payments_page(request):
                 return render(request, "crm/payments.html", page_context(
                     request, "payments", tariff_form=tariff_form,
                     subscription_form=SubscriptionForm(prefix="subscription"), tariffs=Tariff.objects.all(),
-                    subscriptions=Subscription.objects.select_related("child", "tariff"), children=Child.objects.filter(status=Child.Status.ACTIVE),
+                    subscriptions=Subscription.objects.select_related("child", "tariff"),
+                    children=Child.objects.filter(
+                        status__in=[Child.Status.ACTIVE, Child.Status.TRIAL],
+                    ),
                     renewals=[], urgent_count=0, expected=0, editing_tariff=editing_tariff,
                 ))
         elif action == "toggle_tariff":
@@ -649,7 +652,9 @@ def payments_page(request):
         rows=rows,
         month_start=month_start,
         month_end=month_end,
-        children=Child.objects.filter(status=Child.Status.ACTIVE),
+        children=Child.objects.filter(
+            status__in=[Child.Status.ACTIVE, Child.Status.TRIAL],
+        ),
         urgent_count=sum(
             1 for row in rows
             if row["status"] == "Срочно"
@@ -2240,8 +2245,12 @@ def newcomers_page(request):
                 newcomer.lead.child = child
                 newcomer.lead.save(update_fields=["child"])
             log_action(request, "newcomer.convert", child, f"Новичок {newcomer.full_name} перенесён в спортсмены")
-            messages.success(request, "Карточка спортсмена создана")
-            return redirect("payments" if newcomer.paid else "attendance")
+            messages.success(
+                request,
+                "Карточка спортсмена создана. "
+                "Если оплата получена — зафиксируйте её в продлениях.",
+            )
+            return redirect("payments")
             
         if form.is_valid():
             newcomer = form.save()

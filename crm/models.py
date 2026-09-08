@@ -529,6 +529,22 @@ class Payment(models.Model):
         verbose_name_plural = "Оплаты"
         ordering = ("-date",)
 
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+
+        if Decimal(str(self.amount)) <= 0:
+            return
+
+        if self.child.status == Child.Status.TRIAL:
+            self.child.status = Child.Status.ACTIVE
+            self.child.trial_from = None
+            self.child.save(update_fields=["status", "trial_from"])
+
+        Newcomer.objects.filter(
+            child_id=self.child_id,
+            paid=False,
+        ).update(paid=True)
+
     def __str__(self):
         return f"{self.child} · {self.amount} · {self.date:%d.%m.%y}"
 
