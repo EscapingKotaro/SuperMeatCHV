@@ -1803,9 +1803,13 @@ def task_recipient_ids(task):
 
 def boss_ids():
     return set(
-        StaffProfile.objects
-        .filter(role=Role.BOSS, user__is_active=True)
-        .values_list("user_id", flat=True)
+        get_user_model().objects
+        .filter(is_active=True)
+        .filter(
+            Q(is_superuser=True)
+            | Q(profile__role__in=(Role.BOSS, Role.ADMIN))
+        )
+        .values_list("id", flat=True)
     )
 
 def notify_admins(actor, kind, message, url=""):
@@ -1870,14 +1874,14 @@ def can_complete_manager_task(user, task):
     return (
         task.assignee_id is None
         or task.assignee_id == user.pk
-        or user_role(user) == Role.BOSS
+        or has_min_role(user, 2)
     )
 
 
 def can_manage_manager_task(user, task):
     return (
         task.created_by_id == user.pk
-        or user_role(user) == Role.BOSS
+        or has_min_role(user, 2)
     )
 
 
@@ -2002,6 +2006,11 @@ def notifications_page(request):
                 "Это задача другого пользователя"
             )
 
+        if task.is_done and not has_min_role(request.user, 2):
+            return HttpResponseForbidden(
+                "Возвращать выполненные задачи может только руководитель"
+            )
+
         toggle_manager_task(
             task,
             request.user,
@@ -2054,7 +2063,7 @@ def notifications_page(request):
     # Обычный список задач
     task_qs = ManagerTask.objects.filter(is_done=False)
 
-    if user_role(request.user) != Role.BOSS:
+    if not has_min_role(request.user, 2):
         task_qs = task_qs.filter(
             Q(assignee=request.user) | Q(assignee__isnull=True)
         )
@@ -2272,6 +2281,7 @@ def newcomers_page(request):
 def calendar_page(request):
     today = timezone.localdate()
     now = timezone.now()
+    can_manage_team_tasks = has_min_role(request.user, 2)
 
     try:
         anchor = date.fromisoformat(
@@ -2337,7 +2347,7 @@ def calendar_page(request):
 
     scope = request.GET.get(
         "scope",
-        "all",
+        "all" if can_manage_team_tasks else "mine",
     )
 
     state = request.GET.get(
@@ -2349,13 +2359,17 @@ def calendar_page(request):
         "all",
         "mine",
     }:
-        scope = "all"
+        scope = "all" if can_manage_team_tasks else "mine"
 
     if state not in {
         "open",
         "done",
         "all",
     }:
+        state = "open"
+
+    if not can_manage_team_tasks:
+        scope = "mine"
         state = "open"
 
     def back():
@@ -2375,16 +2389,18 @@ def calendar_page(request):
         .first()
     )
 
-    if (
-        editing
-        and not can_manage_manager_task(
+    if editing and (
+        not can_manage_manager_task(
             request.user,
             editing,
         )
+        or (
+            editing.is_done
+            and not can_manage_team_tasks
+        )
     ):
         return HttpResponseForbidden(
-            "Редактировать чужую задачу "
-            "может только начальник"
+            "Недостаточно прав для редактирования этой задачи"
         )
 
     form = ManagerTaskForm(
@@ -2397,46 +2413,6 @@ def calendar_page(request):
             "action",
             "save",
         )
-
-        if action == "set_shift":
-            profile, _ = (
-                StaffProfile.objects
-                .get_or_create(
-                    user=request.user
-                )
-            )
-
-            try:
-                profile.shift_anchor = (
-                    date.fromisoformat(
-                        request.POST.get(
-                            "shift_anchor",
-                            "",
-                        )
-                    )
-                )
-
-                profile.save(
-                    update_fields=[
-                        "shift_anchor"
-                    ]
-                )
-
-                messages.success(
-                    request,
-                    "График 2/2 пересчитан",
-                )
-
-            except (
-                ValueError,
-                TypeError,
-            ):
-                messages.error(
-                    request,
-                    "Укажите первый рабочий день",
-                )
-
-            return back()
 
         if action == "toggle":
             task = get_object_or_404(
@@ -2452,6 +2428,11 @@ def calendar_page(request):
             ):
                 return HttpResponseForbidden(
                     "Это задача другого пользователя"
+                )
+
+            if task.is_done and not can_manage_team_tasks:
+                return HttpResponseForbidden(
+                    "Возвращать выполненные задачи может только руководитель"
                 )
 
             toggle_manager_task(
@@ -2501,6 +2482,11 @@ def calendar_page(request):
                     "может только начальник"
                 )
 
+            if task.is_done and not can_manage_team_tasks:
+                return HttpResponseForbidden(
+                    "Удалять выполненные задачи может только руководитель"
+                )
+
             title = task.title
 
             notify_task(
@@ -2540,6 +2526,9 @@ def calendar_page(request):
                     else request.user
                 )
 
+                if not can_manage_team_tasks:
+                    task.assignee = request.user
+
                 task.save()
 
                 notify_task(
@@ -2578,14 +2567,21 @@ def calendar_page(request):
                 "Проверьте поля задачи",
             )
 
-    tasks = list(
-        ManagerTask.objects
-        .select_related(
-            "assignee",
-            "created_by",
-            "completed_by",
+    task_qs = ManagerTask.objects.select_related(
+        "assignee",
+        "created_by",
+        "completed_by",
+    )
+
+    if not can_manage_team_tasks:
+        task_qs = task_qs.filter(
+            is_done=False,
+        ).filter(
+            Q(assignee=request.user) | Q(assignee__isnull=True)
         )
-        .order_by(
+
+    tasks = list(
+        task_qs.order_by(
             "scheduled_at",
             "due_date",
             "-created_at",
@@ -2665,42 +2661,6 @@ def calendar_page(request):
             ),
         )
 
-    profiles = list(
-        StaffProfile.objects
-        .select_related(
-            "user",
-            "branch",
-        )
-        .filter(
-            user__is_active=True
-        )
-        .exclude(
-            role=Role.BOSS
-        )
-    )
-
-    work_map = defaultdict(list)
-
-    for profile in profiles:
-        if not profile.shift_anchor:
-            continue
-
-        for offset in range(
-            grid_days_count
-        ):
-            day = (
-                grid_start
-                + timedelta(days=offset)
-            )
-
-            if (
-                day
-                - profile.shift_anchor
-            ).days % 4 in (0, 1):
-                work_map[day].append(
-                    profile
-                )
-
     days = []
 
     for offset in range(
@@ -2717,8 +2677,6 @@ def calendar_page(request):
             if task.calendar_date == day
         ])
 
-        workers = work_map[day]
-
         days.append({
             "date": day,
             "month_start": day.replace(
@@ -2734,14 +2692,6 @@ def calendar_page(request):
                 0,
                 len(items) - 2,
             ),
-            "workers": workers,
-            "working_names": ", ".join(
-                (
-                    profile.user.get_full_name()
-                    or profile.user.username
-                )
-                for profile in workers
-            ),
         })
 
     selected_tasks = sort_tasks([
@@ -2750,14 +2700,6 @@ def calendar_page(request):
         if task.calendar_date
         == selected_day
     ])
-
-    selected_workers = (
-        work_map[selected_day]
-    )
-
-    today_workers = (
-        work_map[today]
-    )
 
     undated_tasks = [
         task
@@ -2789,8 +2731,6 @@ def calendar_page(request):
             month_end=month_end,
             selected_day=selected_day,
             selected_tasks=selected_tasks,
-            selected_workers=selected_workers,
-            today_workers=today_workers,
             undated_tasks=undated_tasks,
             month_task_count=month_task_count,
             prev_start=prev_start,
@@ -2801,6 +2741,7 @@ def calendar_page(request):
             today=today,
             scope=scope,
             state=state,
+            can_manage_team_tasks=can_manage_team_tasks,
         ),
     )
 

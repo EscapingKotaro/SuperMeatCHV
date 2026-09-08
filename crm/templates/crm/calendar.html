@@ -3,19 +3,21 @@
 {% block actions %}
 <button data-modal="task-modal" class="btn btn-primary">
     <i data-lucide="plus"></i>
-    Новая задача
+    {% if can_manage_team_tasks %}Новая задача{% else %}Напоминание{% endif %}
 </button>
 {% endblock %}
 
 {% block content %}
+<div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-start">
+<aside data-calendar-sidebar class="space-y-3 xl:sticky xl:top-24 xl:col-start-2 xl:row-start-1">
 
 <!-- =========================================
      ВЕРХНЯЯ ПАНЕЛЬ
 ========================================= -->
-<section class="card mb-4 overflow-hidden">
-    <div class="p-3 sm:p-4">
+<section class="card overflow-hidden">
+    <div class="p-3">
 
-        <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div class="flex items-center justify-between gap-2">
 
             <!-- Месяц + навигация -->
             <div class="min-w-0">
@@ -23,10 +25,10 @@
                 <div class="flex items-center justify-between gap-2 sm:justify-start">
 
                     <div class="min-w-0">
-                        <div class="truncate text-lg font-extrabold tracking-tight sm:text-xl">
+                        <div class="truncate text-sm font-extrabold tracking-tight">
                             {{ month_start|date:"F Y" }}
                         </div>
-                        <div class="mt-0.5 text-[10px] text-slate-400">
+                        <div class="mt-0.5 text-[9px] text-slate-400">
                             {{ month_task_count }} задач в этом месяце
                         </div>
                     </div>
@@ -34,7 +36,7 @@
                     <div class="flex shrink-0 items-center gap-1">
                         <a
                             href="?start={{ prev_start|date:'Y-m-d' }}&day={{ prev_start|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
-                            class="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white transition hover:bg-slate-50 sm:h-10 sm:w-10"
+                            class="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 bg-white transition hover:bg-slate-50"
                             title="Предыдущий месяц"
                         >
                             <i data-lucide="chevron-left" class="h-4 w-4"></i>
@@ -42,7 +44,7 @@
 
                         <a
                             href="?start={{ today_start|date:'Y-m-d' }}&day={{ today|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
-                            class="btn btn-soft h-9 px-3 text-[11px] sm:h-10 sm:text-xs"
+                            class="rounded-lg px-2 py-1 text-[10px] font-bold text-slate-500 transition hover:bg-slate-50 hover:text-slate-900"
                         >
                             <i data-lucide="calendar-days"></i>
                             Сегодня
@@ -50,7 +52,7 @@
 
                         <a
                             href="?start={{ next_start|date:'Y-m-d' }}&day={{ next_start|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
-                            class="grid h-9 w-9 place-items-center rounded-xl border border-slate-200 bg-white transition hover:bg-slate-50 sm:h-10 sm:w-10"
+                            class="grid h-7 w-7 place-items-center rounded-lg border border-slate-200 bg-white transition hover:bg-slate-50"
                             title="Следующий месяц"
                         >
                             <i data-lucide="chevron-right" class="h-4 w-4"></i>
@@ -66,22 +68,23 @@
     </div>
 
 
-    <!-- Фильтры -->
-    <div class="border-t bg-slate-50/60 px-3 py-2.5 sm:px-4">
+    <!-- Фильтры доступны только руководству; менеджеру нужен только его активный список. -->
+    {% if can_manage_team_tasks %}
+    <div class="border-t bg-slate-50/60 px-2 py-2">
 
         <div class="scrollbar-none flex gap-2 overflow-x-auto">
 
             <div class="flex shrink-0 rounded-lg bg-slate-200/60 p-0.5">
                 <a
                     href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=all&state={{ state }}"
-                    class="rounded-md px-3 py-1.5 text-[11px] font-bold transition {% if scope == 'all' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-500 hover:text-slate-900{% endif %}"
+                    class="rounded-md px-2 py-1 text-[10px] font-bold transition {% if scope == 'all' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-500 hover:text-slate-900{% endif %}"
                 >
-                    Все задачи
+                    Все
                 </a>
 
                 <a
                     href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope=mine&state={{ state }}"
-                    class="rounded-md px-3 py-1.5 text-[11px] font-bold transition {% if scope == 'mine' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-500 hover:text-slate-900{% endif %}"
+                    class="rounded-md px-2 py-1 text-[10px] font-bold transition {% if scope == 'mine' %}bg-white text-slate-900 shadow-sm{% else %}text-slate-500 hover:text-slate-900{% endif %}"
                 >
                     Мои
                 </a>
@@ -90,21 +93,21 @@
             <div class="flex shrink-0 items-center gap-1">
                 <a
                     href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=open"
-                    class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition {% if state == 'open' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
+                    class="rounded-lg px-2 py-1 text-[10px] font-bold transition {% if state == 'open' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
                 >
                     Активные
                 </a>
 
                 <a
                     href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=done"
-                    class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition {% if state == 'done' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
+                    class="rounded-lg px-2 py-1 text-[10px] font-bold transition {% if state == 'done' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
                 >
-                    Выполненные
+                    Готовые
                 </a>
 
                 <a
                     href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state=all"
-                    class="rounded-lg px-3 py-1.5 text-[11px] font-bold transition {% if state == 'all' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
+                    class="rounded-lg px-2 py-1 text-[10px] font-bold transition {% if state == 'all' %}bg-[#17202A] text-white{% else %}text-slate-500 hover:bg-white{% endif %}"
                 >
                     Все
                 </a>
@@ -112,23 +115,24 @@
         </div>
 
     </div>
+    {% endif %}
 </section>
 
 
 <!-- =========================================
      МЕСЯЦ
 ========================================= -->
-<section class="card mb-3 overflow-hidden">
+<section class="card overflow-hidden">
 
     <!-- Дни недели -->
     <div class="grid grid-cols-7 border-b bg-[#FAFBFC]">
-        <div class="py-1.5 text-center text-[8px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[9px]">Пн</div>
-        <div class="py-1.5 text-center text-[8px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[9px]">Вт</div>
-        <div class="py-1.5 text-center text-[8px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[9px]">Ср</div>
-        <div class="py-1.5 text-center text-[8px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[9px]">Чт</div>
-        <div class="py-1.5 text-center text-[8px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[9px]">Пт</div>
-        <div class="py-1.5 text-center text-[8px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[9px]">Сб</div>
-        <div class="py-1.5 text-center text-[8px] font-extrabold uppercase tracking-[0.08em] text-slate-400 sm:text-[9px]">Вс</div>
+        <div class="py-1 text-center text-[7px] font-extrabold uppercase tracking-[0.08em] text-slate-400">Пн</div>
+        <div class="py-1 text-center text-[7px] font-extrabold uppercase tracking-[0.08em] text-slate-400">Вт</div>
+        <div class="py-1 text-center text-[7px] font-extrabold uppercase tracking-[0.08em] text-slate-400">Ср</div>
+        <div class="py-1 text-center text-[7px] font-extrabold uppercase tracking-[0.08em] text-slate-400">Чт</div>
+        <div class="py-1 text-center text-[7px] font-extrabold uppercase tracking-[0.08em] text-slate-400">Пт</div>
+        <div class="py-1 text-center text-[7px] font-extrabold uppercase tracking-[0.08em] text-slate-400">Сб</div>
+        <div class="py-1 text-center text-[7px] font-extrabold uppercase tracking-[0.08em] text-slate-400">Вс</div>
     </div>
 
 
@@ -138,11 +142,8 @@
         {% for day in days %}
         <a
             href="?start={{ day.month_start|date:'Y-m-d' }}&day={{ day.date|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
-            title="{% if day.task_count %}{{ day.task_count }} задач{% endif %}{% if day.task_count and day.workers %} · {% endif %}{% if day.workers %}На смене: {{ day.working_names }}{% endif %}"
-            class="relative flex min-h-[58px] min-w-0 flex-col bg-white p-1.5 transition
-            sm:min-h-[64px] sm:p-2
-            lg:min-h-[72px]
-            xl:min-h-[76px]
+            title="{% if day.task_count %}{{ day.task_count }} задач{% else %}Нет задач{% endif %}"
+            class="relative flex h-9 min-w-0 items-center justify-center bg-white transition
             {% if not day.in_month %}bg-slate-50/80{% else %}hover:bg-slate-50{% endif %}
             {% if day.date == selected_day %}
                 z-10 bg-blue-50 ring-2 ring-inset ring-[#315EBC]
@@ -151,12 +152,10 @@
             {% endif %}"
         >
 
-            <!-- Число и задачи -->
-            <div class="flex items-start justify-between gap-1">
+            <!-- Число и компактный индикатор задач -->
+            <div class="flex items-center gap-1">
 
-                <span class="text-sm font-extrabold leading-none
-                    sm:text-base
-                    lg:text-lg
+                <span class="text-[11px] font-extrabold leading-none
                     {% if not day.in_month %}
                         text-slate-300
                     {% elif day.date == today %}
@@ -173,11 +172,9 @@
 
                 {% if day.task_count %}
                 <span
-                    class="inline-flex min-w-4 items-center justify-center rounded-md bg-blue-50 px-1 py-0.5 text-[7px] font-extrabold text-blue-600 sm:min-w-5 sm:text-[8px]"
+                    class="h-1.5 w-1.5 rounded-full {% if day.date == selected_day %}bg-[#315EBC]{% else %}bg-blue-500{% endif %}"
                     title="{{ day.task_count }} задач"
-                >
-                    {{ day.task_count }}
-                </span>
+                ></span>
                 {% endif %}
 
             </div>
@@ -194,12 +191,13 @@
     </div>
 
 </section>
+</aside>
 
-
+<div class="min-w-0 space-y-4 xl:col-start-1 xl:row-start-1">
 <!-- =========================================
      ВЫБРАННЫЙ ДЕНЬ
 ========================================= -->
-<section class="card mb-4 overflow-hidden">
+<section class="card overflow-hidden">
 
     <div class="flex flex-col gap-3 border-b px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
 
@@ -226,7 +224,7 @@
                 </div>
 
                 <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500 sm:text-[11px]">
-                    <span>{{ selected_tasks|length }} задач</span>
+                    <span>{{ selected_tasks|length }} задач{% if not can_manage_team_tasks %} · только активные{% endif %}</span>
 
                 </div>
             </div>
@@ -234,7 +232,7 @@
 
         <button data-modal="task-modal" class="btn btn-primary w-full sm:w-auto">
             <i data-lucide="plus"></i>
-            Добавить задачу
+            {% if can_manage_team_tasks %}Добавить задачу{% else %}Добавить напоминание{% endif %}
         </button>
     </div>
 
@@ -462,6 +460,8 @@
     </div>
 </details>
 {% endif %}
+</div>
+</div>
 
 {% endblock %}
 
@@ -474,9 +474,9 @@
 
         <div class="modal-head">
             <div>
-                <b>{% if editing %}Изменить задачу{% else %}Новая задача{% endif %}</b>
+                <b>{% if editing %}Изменить{% elif can_manage_team_tasks %}Новая задача{% else %}Новое напоминание{% endif %}</b>
                 <p class="text-xs text-slate-500">
-                    Задача появится в календаре и уведомлениях
+                    {% if can_manage_team_tasks %}Задача появится в календаре и уведомлениях{% else %}Личное напоминание в вашем календаре{% endif %}
                 </p>
             </div>
 
@@ -487,6 +487,7 @@
 
         <div class="modal-body grid gap-4">
             {% for field in form %}
+            {% if field.name != "assignee" or can_manage_team_tasks %}
             <label>
                 <span class="label">{{ field.label }}</span>
                 {{ field }}
@@ -503,6 +504,7 @@
                 </small>
                 {% endif %}
             </label>
+            {% endif %}
             {% endfor %}
 
             {% if form.non_field_errors %}

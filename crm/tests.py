@@ -1068,7 +1068,9 @@ class CrmWorkflowTests(TestCase):
                 "action": "save",
                 "title": "Позвонить поставщику",
                 "description": "Уточнить доставку",
-                "assignee": self.admin.pk,
+                # Рядовой менеджер не может назначить задачу коллеге:
+                # crafted POST должен быть принудительно привязан к нему самому.
+                "assignee": self.senior.pk,
                 "scheduled_at": start_at.strftime(
                     "%Y-%m-%dT%H:%M"
                 ),
@@ -1084,7 +1086,7 @@ class CrmWorkflowTests(TestCase):
         
         self.assertRedirects(
             response,
-            f"{reverse('calendar')}?start={month_start.isoformat()}&day={today.isoformat()}&scope=all&state=open"
+            f"{reverse('calendar')}?start={month_start.isoformat()}&day={today.isoformat()}&scope=mine&state=open"
         )
 
         task = ManagerTask.objects.get(
@@ -1190,7 +1192,7 @@ class CrmWorkflowTests(TestCase):
 
         self.assertRedirects(
             response,
-            f"{reverse('calendar')}?start={month_start.isoformat()}&day={today.isoformat()}&scope=all&state=open",
+            f"{reverse('calendar')}?start={month_start.isoformat()}&day={today.isoformat()}&scope=mine&state=open",
         )
 
         self.assertFalse(
@@ -1314,7 +1316,32 @@ class CrmWorkflowTests(TestCase):
         )
 
 
-    def test_completed_task_can_be_returned_to_work(self):
+    def test_manager_cannot_reopen_completed_task(self):
+        task = ManagerTask.objects.create(
+            title="Уже выполнено",
+            assignee=self.admin,
+            created_by=self.boss,
+            is_done=True,
+            done_at=timezone.now(),
+            completed_by=self.admin,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("notifications"),
+            {"task_id": task.pk},
+        )
+
+        self.assertEqual(response.status_code, 403)
+        task.refresh_from_db()
+        self.assertTrue(task.is_done)
+
+
+    def test_boss_can_return_completed_task_to_work(self):
         task = ManagerTask.objects.create(
             title="Вернуть в работу",
             assignee=self.admin,
@@ -1326,7 +1353,7 @@ class CrmWorkflowTests(TestCase):
         )
 
         self.client.login(
-            username="admin",
+            username="boss",
             password="TestPass123!",
         )
 
@@ -1359,6 +1386,151 @@ class CrmWorkflowTests(TestCase):
         self.assertEqual(
             task.completion_comment,
             "",
+        )
+
+
+    def test_manager_calendar_forces_personal_open_scope(self):
+        today = timezone.localdate()
+
+        own = ManagerTask.objects.create(
+            title="Моя активная задача",
+            assignee=self.admin,
+            created_by=self.boss,
+            due_date=today,
+        )
+        common = ManagerTask.objects.create(
+            title="Общая активная задача",
+            assignee=None,
+            created_by=self.boss,
+            due_date=today,
+        )
+        foreign = ManagerTask.objects.create(
+            title="Чужая активная задача",
+            assignee=self.senior,
+            created_by=self.boss,
+            due_date=today,
+        )
+        completed = ManagerTask.objects.create(
+            title="Моя выполненная задача",
+            assignee=self.admin,
+            created_by=self.boss,
+            due_date=today,
+            is_done=True,
+            done_at=timezone.now(),
+            completed_by=self.admin,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("calendar"),
+            {
+                "start": today.replace(day=1).isoformat(),
+                "day": today.isoformat(),
+                "scope": "all",
+                "state": "all",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context["scope"], "mine")
+        self.assertEqual(response.context["state"], "open")
+        self.assertFalse(response.context["can_manage_team_tasks"])
+
+        selected_ids = {
+            task.pk for task in response.context["selected_tasks"]
+        }
+        self.assertEqual(selected_ids, {own.pk, common.pk})
+        self.assertNotIn(foreign.pk, selected_ids)
+        self.assertNotIn(completed.pk, selected_ids)
+
+        edit_response = self.client.get(
+            reverse("calendar"),
+            {"edit": completed.pk},
+        )
+        self.assertEqual(edit_response.status_code, 403)
+
+        self.assertContains(response, "data-calendar-sidebar")
+        self.assertContains(
+            response,
+            "xl:grid-cols-[minmax(0,1fr)_18rem]",
+        )
+        self.assertNotContains(response, "На смене:")
+        self.assertNotContains(response, "Готовые")
+
+
+    def test_boss_calendar_can_view_completed_team_tasks(self):
+        today = timezone.localdate()
+        completed = ManagerTask.objects.create(
+            title="Выполненная задача команды",
+            assignee=self.admin,
+            created_by=self.boss,
+            due_date=today,
+            is_done=True,
+            done_at=timezone.now(),
+            completed_by=self.admin,
+        )
+
+        self.client.login(
+            username="boss",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("calendar"),
+            {
+                "start": today.replace(day=1).isoformat(),
+                "day": today.isoformat(),
+                "scope": "all",
+                "state": "done",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["can_manage_team_tasks"])
+        self.assertEqual(response.context["state"], "done")
+        self.assertIn(completed, response.context["selected_tasks"])
+        self.assertContains(response, "Готовые")
+
+
+    def test_admin_role_inherits_boss_task_permissions(self):
+        user_model = get_user_model()
+        root = user_model.objects.create_user(
+            "root-admin",
+            password="TestPass123!",
+            is_staff=True,
+        )
+        StaffProfile.objects.create(
+            user=root,
+            role=Role.ADMIN,
+        )
+
+        task = ManagerTask.objects.create(
+            title="Чужая задача для проверки ADMIN",
+            assignee=self.admin,
+            created_by=self.boss,
+            due_date=timezone.localdate(),
+        )
+
+        self.client.login(
+            username="root-admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("calendar"),
+            {
+                "action": "delete",
+                "task_id": task.pk,
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            ManagerTask.objects.filter(pk=task.pk).exists()
         )
 
 
