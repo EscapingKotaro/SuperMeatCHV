@@ -23,6 +23,8 @@ from .models import (
     Group,
     Trainer,
     ScheduleSlot,
+    role_rank,
+    user_rank,
 )
 
 
@@ -199,8 +201,18 @@ class StaffCreateForm(StyledFormMixin, UserCreationForm):
         model = get_user_model()
         fields = ("first_name", "last_name","username",  "email", "role")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, actor=None, **kwargs):
+        self.actor = actor
         super().__init__(*args, **kwargs)
+
+        if actor is not None:
+            actor_rank = user_rank(actor)
+            self.fields["role"].choices = [
+                (value, label)
+                for value, label in Role.choices
+                if role_rank(value) <= actor_rank
+            ]
+
         self.apply_styles()
 
     def save(self, commit=True):

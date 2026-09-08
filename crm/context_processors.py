@@ -3,7 +3,13 @@ from datetime import timedelta
 from django.urls import reverse
 from django.utils import timezone
 
-from .models import Child, Notification, Role, Subscription, user_role
+from .models import (
+    Child,
+    Notification,
+    Subscription,
+    has_min_role,
+    user_role,
+)
 
 
 def sync_subscription_notifications(user):
@@ -148,8 +154,8 @@ def crm_role_context(request):
 
     return {
         "current_role": role,
-        "is_boss": role == Role.BOSS,
-        "is_senior": role in (Role.SENIOR, Role.BOSS),
+        "is_boss": has_min_role(request.user, 2),
+        "is_senior": has_min_role(request.user, 1),
         "notification_count": Notification.objects.filter(
             recipient=request.user,
             read_at__isnull=True,

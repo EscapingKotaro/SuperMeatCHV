@@ -71,6 +71,8 @@ from .models import (
     Subscription,
     Tariff,
     Trainer,
+    has_min_role,
+    user_rank,
     user_role,
 )
 
@@ -97,7 +99,7 @@ def role_required(min_rank):
         @wraps(view)
         @login_required
         def wrapped(request, *args, **kwargs):
-            if {Role.MANAGER: 0, Role.SENIOR: 1, Role.BOSS: 2, Role.ADMIN: 3}[user_role(request.user)] < min_rank:
+            if not has_min_role(request.user, min_rank):
                 return HttpResponseForbidden("Недостаточно прав")
             return view(request, *args, **kwargs)
 
@@ -108,13 +110,14 @@ def role_required(min_rank):
 
 def page_context(request, page, **extra):
     title, subtitle = PAGE_META[page]
+    role = user_role(request.user)
     context = {
         "page": page,
         "title": title,
         "subtitle": subtitle,
-        "current_role": user_role(request.user),
-        "is_boss": user_role(request.user) in (Role.SENIOR, Role.BOSS, Role.ADMIN),
-        "is_senior": user_role(request.user) in (Role.SENIOR, Role.BOSS, Role.ADMIN),
+        "current_role": role,
+        "is_boss": has_min_role(request.user, 2),
+        "is_senior": has_min_role(request.user, 1),
     }
     context.update(extra)
     return context
@@ -698,10 +701,7 @@ def expenses_page(request):
     if selected_category:
         filter_url += f"&category={selected_category}"
 
-    can_manage_all = user_role(request.user) in (
-        Role.SENIOR,
-        Role.BOSS,
-    )
+    can_manage_all = has_min_role(request.user, 1)
 
     editing = (
         Expense.objects
@@ -3353,32 +3353,57 @@ def boss_logs_export(request):
     return response
 
 
+def can_manage_staff_account(actor, target):
+    if actor.pk == target.pk:
+        return False
+    if target.is_superuser and not actor.is_superuser:
+        return False
+    return user_rank(actor) >= user_rank(target)
+
+
 @role_required(1)
 def users_page(request):
-    form = StaffCreateForm(request.POST or None)
+    form = StaffCreateForm(
+        request.POST or None,
+        actor=request.user,
+    )
     if request.method == "POST":
         action = request.POST.get("action")
-        if action == "create" and form.is_valid():
-            if form.cleaned_data["role"] == Role.BOSS and user_role(request.user) != Role.BOSS:
-                form.add_error("role", "Только начальник может создать аккаунт начальника")
-            else:
+
+        if action == "create":
+            if form.is_valid():
                 user = form.save()
                 log_action(request, "user.create", user, f"Создан пользователь {user.username}")
                 messages.success(request, "Пользователь создан")
                 return redirect("users")
-        if action == "toggle":
-            user = get_object_or_404(get_user_model(), pk=request.POST.get("user_id"))
+
+        elif action == "toggle":
+            user = get_object_or_404(
+                get_user_model(),
+                pk=request.POST.get("user_id"),
+                is_staff=True,
+            )
             if user == request.user:
                 messages.error(request, "Нельзя отключить собственный аккаунт")
-            elif user_role(user) == Role.BOSS and user_role(request.user) != Role.BOSS:
-                return HttpResponseForbidden("Только начальник управляет аккаунтом начальника")
-            else:
-                user.is_active = not user.is_active
-                user.save(update_fields=["is_active"])
-                log_action(request, "user.toggle", user, f"Аккаунт {user.username}: {'включён' if user.is_active else 'отключён'}")
-                messages.success(request, "Статус пользователя изменён")
+                return redirect("users")
+            if not can_manage_staff_account(request.user, user):
+                return HttpResponseForbidden(
+                    "Недостаточно прав для управления этим аккаунтом"
+                )
+
+            user.is_active = not user.is_active
+            user.save(update_fields=["is_active"])
+            log_action(
+                request,
+                "user.toggle",
+                user,
+                f"Аккаунт {user.username}: {'включён' if user.is_active else 'отключён'}",
+            )
+            messages.success(request, "Статус пользователя изменён")
             return redirect("users")
+
         messages.error(request, "Проверьте форму пользователя")
+
     users = get_user_model().objects.select_related("profile").filter(is_staff=True).order_by("-is_active", "last_name", "username")
     return render(request, "crm/users.html", page_context(request, "users", users=users, form=form))
 
@@ -4400,10 +4425,7 @@ def statistics_view(request):
 @role_required(1)
 def salaries_view(request):
     month_start, month_end, today = _month_range(request)
-    can_manage_salary = user_role(request.user) in (
-        Role.SENIOR,
-        Role.BOSS,
-    )
+    can_manage_salary = has_min_role(request.user, 1)
     adjustment_form = SalaryAdjustmentForm(prefix="adjustment")
 
     if request.method == "POST":

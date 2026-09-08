@@ -23,8 +23,20 @@ def user_role(user):
     return Role(p.role) if p else Role.MANAGER
 
 
+def role_rank(role):
+    return RANK[Role(role)]
+
+
+def user_rank(user):
+    return role_rank(user_role(user))
+
+
+def has_min_role(user, min_rank):
+    return user_rank(user) >= min_rank
+
+
 class StaffProfile(models.Model):
-    """Роль пользователя (менеджер / старший / начальник)."""
+    """Роль пользователя (менеджер / старший / начальник / админ)."""
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
                                 related_name="profile", verbose_name="пользователь")
     role = models.CharField(max_length=10, choices=Role.choices, default=Role.MANAGER)
