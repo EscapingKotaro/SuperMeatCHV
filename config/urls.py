@@ -4,6 +4,7 @@ from django.urls import path
 
 from crm import views
 from crm import staff_views
+from crm import intake_views
 
 
 urlpatterns = [
@@ -58,10 +59,10 @@ urlpatterns = [
     path("notifications/", views.notifications_page, name="notifications"),
 
     # Заявки
-    path("applications/", views.applications_page, name="applications"),
+    path("applications/", intake_views.applications_page, name="applications"),
 
     # Новички
-    path("newcomers/", views.newcomers_page, name="newcomers"),
+    path("newcomers/", intake_views.newcomers_page, name="newcomers"),
 
     # Календарь
     path("calendar/", views.calendar_page, name="calendar"),

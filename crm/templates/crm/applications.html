@@ -4,9 +4,9 @@
     <button data-modal="import-modal" class="btn btn-soft">
         <i data-lucide="clipboard-paste">
         </i>Вставить из рекламы</button>
-    <button data-modal="lead-modal" class="btn btn-primary">
+    <a href="{% url 'applications' %}?create=1" class="btn btn-primary">
         <i data-lucide="plus">
-        </i>Добавить заявку</button>
+        </i>Добавить заявку</a>
 </div>
 {% endblock %}
 {% block content %}
@@ -65,18 +65,19 @@
 </section>
 {% endblock %}
 {% block modals %}
-<section id="lead-modal" class="modal {% if editing %}open{% endif %}">
+<section id="lead-modal" class="modal {% if editing or request.GET.create == "1" %}open{% endif %}">
     <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="save">
+        <input type="hidden" name="editing_id" value="{{ editing.pk|default:'' }}">
         <div class="modal-head">
             <b>
                 {% if editing %}Изменить заявку{% else %}Новая заявка{% endif %}
             </b>
-            <button type="button" data-close>
+            <a href="{% url 'applications' %}" aria-label="Закрыть">
                 <i data-lucide="x">
                 </i>
-            </button>
+            </a>
         </div>
         <div class="modal-body grid max-h-[70vh] gap-4 overflow-y-auto sm:grid-cols-2">
             {% for field in form %}
@@ -85,7 +86,7 @@
             {% endfor %}
         </div>
         <div class="modal-foot">
-            <button type="button" data-close class="btn btn-soft">Отмена</button>
+            <a href="{% url 'applications' %}" class="btn btn-soft">Отмена</a>
             <button class="btn btn-primary">Сохранить</button>
         </div>
     </form>
@@ -116,7 +117,7 @@
 </section>
 {% endblock %}
 {% block scripts %}
-{% if editing %}
+{% if editing or request.GET.create == "1" %}
 <script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>
 {% endif %}
 {% endblock %}
