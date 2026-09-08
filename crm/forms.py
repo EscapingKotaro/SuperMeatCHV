@@ -265,6 +265,8 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
         self.fields["birth_date"].input_formats = ["%Y-%m-%d"]
         self.fields["trial_from"].input_formats = ["%Y-%m-%d"]
         self.fields["address"].label = "Адрес прописки"
+        self.fields["group"].required = True
+        self.fields["group"].empty_label = "— Выберите группу —"
       #  self.fields["certificate"].label = "Справка для занятий спортом (фото)"
         self.apply_styles()
 

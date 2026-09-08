@@ -95,6 +95,7 @@ class Command(BaseCommand):
         for i in range(1, 21):  # 20 детей
             last_name = random.choice(LAST_NAMES)
             middle_name = random.choice(MIDDLE_NAMES)
+            group = random.choice(groups)
             child = Child.objects.create(
                 last_name=last_name,
                 first_name="Игорь",
@@ -103,16 +104,19 @@ class Command(BaseCommand):
                 address="г. Игоревск, ул. Игоревская, д. 1",
                 parent_name=f"Игорь {last_name} (папа)",
                 parent_phone=f"+7-911-111-22-{i:02d}",
+                group=group,
                 status=random.choice(['active', 'trial', 'archived']),
                 trial_from=date.today() - timedelta(days=random.randint(0, 60)),
                 discount_percent=random.choice([0, 5, 10, 15]),
                 note="Тестовый Игорь",
             )
-            # Назначаем группу
-            child.group = random.choice(groups)
             # Назначаем личный график (несколько слотов)
-            child.save()
-            child.schedule.set(random.sample(list(ScheduleSlot.objects.filter(group=child.group)), k=2))
+            child.schedule.set(
+                random.sample(
+                    list(ScheduleSlot.objects.filter(group=group)),
+                    k=2,
+                )
+            )
             children.append(child)
 
             # Разряды по годам

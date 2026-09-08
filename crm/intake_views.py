@@ -1,4 +1,5 @@
-from django.shortcuts import get_object_or_404
+from django.contrib import messages
+from django.shortcuts import get_object_or_404, redirect
 
 from . import views
 from .models import Lead, Newcomer
@@ -55,10 +56,21 @@ def applications_page(request):
 
 
 def newcomers_page(request):
-    if (
-        request.method == "POST"
-        and request.POST.get("action", "save") == "save"
-    ):
+    action = request.POST.get("action", "save")
+
+    if request.method == "POST" and action == "convert":
+        newcomer = get_object_or_404(
+            Newcomer,
+            pk=request.POST.get("newcomer_id"),
+        )
+        if not newcomer.child_id and newcomer.group_id is None:
+            messages.error(
+                request,
+                "Сначала назначьте новичку группу",
+            )
+            return redirect("newcomers")
+
+    if request.method == "POST" and action == "save":
         _set_form_target(request, Newcomer)
     else:
         _start_clean_create(request)
