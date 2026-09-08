@@ -226,23 +226,19 @@ class Child(models.Model):
         return self.certificate_ok
 
     def sessions_left(self):
-        """Остаток занятий по активным абонементам."""
+        """Остаток занятий по текущему действующему абонементу."""
         today = timezone.localdate()
-        left = 0
+        subscription = self.active_subscription()
+        if not subscription:
+            return 0
 
-        subscriptions = self.subscriptions.filter(
-            is_active=True,
-        )
+        used = self.attendances.filter(
+            status__in=("present", "absent"),
+            date__gte=subscription.start_date,
+            date__lte=today,
+        ).count()
 
-        for sub in subscriptions:
-            used = self.attendances.filter(
-                status__in=("present", "absent"),
-                date__lte=today,
-            ).count()
-
-            left += max(0, sub.sessions_total - used)
-
-        return left
+        return max(0, subscription.sessions_total - used)
 
     def has_class_today(self):
         today = timezone.localdate()
