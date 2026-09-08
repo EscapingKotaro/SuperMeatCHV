@@ -3402,81 +3402,60 @@ from .models import Child, Group, calculate_projected_end_date # Не забуд
 
 @login_required
 def revenue_forecast_view(request):
+    """Прогноз ближайших продлений на едином источнике расчёта."""
     today = timezone.localdate()
-    days = []
-    processed_child_ids = set()
+    horizon_end = today + timedelta(days=3)
 
+    days_by_date = {}
     for i in range(4):
         current_date = today + timedelta(days=i)
-        
-        children = Child.objects.filter(status=Child.Status.ACTIVE).select_related('group')
-        
-        urgent_list = []
-        one_left_list = []
-        forecast_list = []
+        days_by_date[current_date] = {
+            "date": current_date,
+            "weekday": current_date.strftime("%A"),
+            "total": Decimal("0"),
+            "urgent": [],
+            "one_left": [],
+            "forecast": [],
+        }
 
-        for child in children:
-            if child.id in processed_child_ids:
-                continue
+    # Используем тот же расчёт, что статистика и таблица продлений.
+    rows = build_renewal_rows(
+        today,
+        horizon_end,
+        today=today,
+    )
 
-            active_sub = child.active_subscription()
-            if not active_sub:
-                continue
+    for row in rows:
+        display_date = max(today, row["renewal_date"])
+        day = days_by_date.get(display_date)
+        if day is None:
+            continue
 
-            left_on_date = child.sessions_left_on_date(current_date)
+        item = {
+            "name": f"{row['child'].last_name} {row['child'].first_name}",
+            "parent_name": row["parent_name"],
+            "parent_phone": row["parent_phone"],
+            "amount": row["amount"],
+        }
 
-            # Блок 1: Срочно (0 занятий)
-            if left_on_date == 0:
-                urgent_list.append({
-                    'name': f"{child.last_name} {child.first_name}",
-                    'parent_name': child.parent_name,
-                    'parent_phone': child.parent_phone,
-                    'amount': active_sub.price
-                })
-                processed_child_ids.add(child.id)
-                continue
+        if row["renewal_date"] <= today or row["sessions_left"] <= 0:
+            day["urgent"].append(item)
+        elif row["sessions_left"] == 1:
+            day["one_left"].append(item)
+        else:
+            day["forecast"].append(item)
 
-            # Блок 2: Осталось 1 занятие
-            if left_on_date == 1:
-                one_left_list.append({
-                    'name': f"{child.last_name} {child.first_name}",
-                    'parent_name': child.parent_name,
-                    'parent_phone': child.parent_phone,
-                    'amount': active_sub.price
-                })
-                processed_child_ids.add(child.id)
-                continue
+        day["total"] += row["amount"]
 
-            # Блок 3: Прогноз (до окончания менее 5 календарных дней)
-            proj_end = calculate_projected_end_date(child.group, current_date, left_on_date)
-            if proj_end and (proj_end - current_date).days < 5:
-                forecast_list.append({
-                    'name': f"{child.last_name} {child.first_name}",
-                    'parent_name': child.parent_name,
-                    'parent_phone': child.parent_phone,
-                    'amount': active_sub.price
-                })
-                processed_child_ids.add(child.id)
-
-        total_day = sum(item['amount'] for item in urgent_list + one_left_list + forecast_list)
-
-        days.append({
-            'date': current_date,
-            'weekday': current_date.strftime("%A"),
-            'total': total_day,
-            'urgent': urgent_list,
-            'one_left': one_left_list,
-            'forecast': forecast_list,
-        })
+    days = list(days_by_date.values())
 
     context = {
-        'days': days,
-        'title': 'Прогноз доходов',
-        'subtitle': 'Ожидаемые продления на ближайшие 4 дня',
-        'page': 'revenue_forecast'
+        "days": days,
+        "title": "Прогноз доходов",
+        "subtitle": "Ожидаемые продления на ближайшие 4 дня",
+        "page": "revenue_forecast",
     }
-    return render(request, 'crm/revenue_forecast.html', context)
-
+    return render(request, "crm/revenue_forecast.html", context)
 
 from django.shortcuts import render, get_object_or_404, redirect
 from django.contrib.auth.decorators import login_required
