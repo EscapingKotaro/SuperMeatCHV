@@ -3,6 +3,7 @@ from django.contrib.auth.decorators import login_required
 from django.urls import path
 
 from crm import views
+from crm import staff_views
 
 
 urlpatterns = [
@@ -86,6 +87,7 @@ urlpatterns = [
 
     # Пользователи
     path("users/", views.users_page, name="users"),
+    path("users/<int:user_id>/update/", staff_views.staff_update_view, name="user_update"),
 
     # Профиль
     path("profile/", views.profile_page, name="profile"),

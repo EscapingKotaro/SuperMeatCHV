@@ -36,15 +36,46 @@
                             {% if item.is_active %}Активен{% else %}Отключён{% endif %}
                         </span>
                     </td>
-                    <td>
+                    <td class="min-w-[280px]">
+                        {% with target_role=item.profile.role|default:"manager" %}
+                        {% if item == request.user %}
+                        <span class="text-xs text-slate-400">Текущий аккаунт</span>
+                        {% elif item.is_superuser and not request.user.is_superuser %}
+                        <span class="text-xs text-slate-400">Системный аккаунт</span>
+                        {% elif current_role == "senior" and target_role == "boss" or current_role == "senior" and target_role == "admin" or current_role == "boss" and target_role == "admin" %}
+                        <span class="text-xs text-slate-400">Недостаточно прав</span>
+                        {% else %}
+                        <details class="mb-2">
+                            <summary class="btn btn-soft cursor-pointer">Изменить</summary>
+                            <form method="post" action="{% url 'user_update' item.pk %}" class="mt-2 grid gap-2 rounded-xl border p-3">
+                                {% csrf_token %}
+                                <input class="field" name="first_name" value="{{ item.first_name }}" placeholder="Имя">
+                                <input class="field" name="last_name" value="{{ item.last_name }}" placeholder="Фамилия">
+                                <input class="field" name="username" value="{{ item.username }}" placeholder="Логин" required>
+                                <input class="field" type="email" name="email" value="{{ item.email }}" placeholder="Email">
+                                <select class="field" name="role" required>
+                                    <option value="manager" {% if target_role == "manager" %}selected{% endif %}>Менеджер</option>
+                                    <option value="senior" {% if target_role == "senior" %}selected{% endif %}>Старший менеджер</option>
+                                    {% if current_role == "boss" or current_role == "admin" %}
+                                    <option value="boss" {% if target_role == "boss" %}selected{% endif %}>Начальник</option>
+                                    {% endif %}
+                                    {% if current_role == "admin" %}
+                                    <option value="admin" {% if target_role == "admin" %}selected{% endif %}>Админ</option>
+                                    {% endif %}
+                                </select>
+                                <button class="btn btn-primary">Сохранить</button>
+                            </form>
+                        </details>
                         <form method="post">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="toggle">
                             <input type="hidden" name="user_id" value="{{ item.pk }}">
-                            <button class="btn btn-soft" {% if item == request.user %}disabled{% endif %}>
+                            <button class="btn btn-soft">
                                 {% if item.is_active %}Отключить{% else %}Включить{% endif %}
                             </button>
                         </form>
+                        {% endif %}
+                        {% endwith %}
                     </td>
                 </tr>
                 {% endfor %}
