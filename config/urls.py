@@ -5,6 +5,7 @@ from django.urls import path
 from crm import views
 from crm import staff_views
 from crm import intake_views
+from crm import certificate_views
 
 
 urlpatterns = [
@@ -25,6 +26,7 @@ urlpatterns = [
     path("children/create/", views.child_create_view, name="child_create"),
     path("children/<int:child_id>/", views.child_card_view, name="child_card"),
     path("children/<int:child_id>/certificate/", views.child_certificate_view, name="child_certificate"),
+    path("children/<int:child_id>/certificate/manage/", certificate_views.child_certificate_manage_view, name="child_certificate_manage"),
     path("children/<int:child_id>/edit/", views.child_edit_view, name="child_edit"),
     path("children/<int:child_id>/delete/", views.child_delete_view, name="child_delete"),
     path("children/<int:child_id>/archive/", views.archive_child_view, name="archive_child"),
