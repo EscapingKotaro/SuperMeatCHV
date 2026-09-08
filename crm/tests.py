@@ -2740,3 +2740,139 @@ class CrmWorkflowTests(TestCase):
             response,
             "Подтвердите приход спортсменов",
         )
+
+    def _create_daily_schedule(self):
+        for weekday in range(7):
+            ScheduleSlot.objects.create(
+                group=self.group,
+                weekday=weekday,
+                start_time=time(18, 0),
+            )
+
+    def _attendance_child_row(self, response):
+        return next(
+            row
+            for row in response.context["children_data"]
+            if row["child"].pk == self.child.pk
+        )
+
+    def test_subscription_end_marker_uses_projected_date_and_shifts_for_excused(self):
+        today = timezone.localdate()
+        self._create_daily_schedule()
+        Subscription.objects.create(
+            child=self.child,
+            start_date=today - timedelta(days=2),
+            end_date=today + timedelta(days=30),
+            sessions_total=3,
+            price=Decimal("3000"),
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=today - timedelta(days=2),
+            status=Attendance.Status.PRESENT,
+        )
+        movable_mark = Attendance.objects.create(
+            child=self.child,
+            date=today - timedelta(days=1),
+            status=Attendance.Status.EXCUSED,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("attendance"),
+            {"group_id": self.group.pk},
+        )
+        row = self._attendance_child_row(response)
+        expected_with_excused = today + timedelta(days=1)
+
+        self.assertEqual(
+            row["subscription_end"],
+            expected_with_excused,
+        )
+        self.assertTrue(
+            row["subscription_ending_soon"],
+        )
+        self.assertEqual(
+            response.context["week_data"][row["subscription_end_index"]]["date"],
+            expected_with_excused,
+        )
+        self.assertContains(
+            response,
+            f"до {expected_with_excused:%d.%m}",
+        )
+        self.assertContains(
+            response,
+            "border-r-2 border-red-500",
+        )
+
+        movable_mark.status = Attendance.Status.ABSENT
+        movable_mark.save(update_fields=["status"])
+
+        response = self.client.get(
+            reverse("attendance"),
+            {"group_id": self.group.pk},
+        )
+        row = self._attendance_child_row(response)
+
+        self.assertEqual(
+            row["subscription_end"],
+            today,
+        )
+        self.assertEqual(
+            response.context["week_data"][row["subscription_end_index"]]["date"],
+            today,
+        )
+        self.assertContains(
+            response,
+            f"до {today:%d.%m}",
+        )
+
+    def test_subscription_end_marker_is_not_shown_earlier_than_seven_days(self):
+        today = timezone.localdate()
+        self._create_daily_schedule()
+        Subscription.objects.create(
+            child=self.child,
+            start_date=today,
+            end_date=today + timedelta(days=60),
+            sessions_total=20,
+            price=Decimal("6000"),
+        )
+        projected_end = today + timedelta(days=19)
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "ref_date": projected_end.isoformat(),
+            },
+        )
+        row = self._attendance_child_row(response)
+
+        self.assertEqual(
+            row["subscription_end"],
+            projected_end,
+        )
+        self.assertFalse(
+            row["subscription_ending_soon"],
+        )
+        self.assertEqual(
+            response.context["week_data"][row["subscription_end_index"]]["date"],
+            projected_end,
+        )
+        self.assertContains(
+            response,
+            f"до {projected_end:%d.%m}",
+        )
+        self.assertNotContains(
+            response,
+            "border-r-2 border-red-500",
+        )

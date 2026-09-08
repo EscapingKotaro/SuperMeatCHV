@@ -322,7 +322,10 @@ def attendance_view(request):
 
         entries = []
         sub_end_index = None
-        subscription_ending_soon = False
+        subscription_ending_soon = (
+            projected_end is not None
+            and 0 <= (projected_end - today).days <= 7
+        )
 
         for idx, wd in enumerate(week_data):
             status = att_map.get(wd['date'], '')
@@ -330,9 +333,6 @@ def attendance_view(request):
             
             if projected_end and wd['date'] == projected_end:
                 sub_end_index = idx
-            
-            if projected_end and wd['date'] >= projected_end - timedelta(days=7) and wd['date'] <= projected_end:
-                subscription_ending_soon = True
 
         # Авто-перевод в потерянные, если пробный истек (только для не-архивных)
         if not show_archived and child.is_trial_expired():
@@ -347,7 +347,7 @@ def attendance_view(request):
             'debt': child.debt(),
             'has_certificate': child.has_certificate(),
             'discount_percent': child.discount_percent,
-            'subscription_end': active_sub.end_date if active_sub else None,
+            'subscription_end': projected_end,
             'subscription_end_index': sub_end_index,
             'subscription_ending_soon': subscription_ending_soon,
             'is_trial': child.status == Child.Status.TRIAL,
