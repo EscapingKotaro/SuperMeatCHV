@@ -2021,7 +2021,7 @@ class CrmWorkflowTests(TestCase):
         )
 
         response = self.client.get(
-            reverse("payments_table"),
+            reverse("payments"),
             {"month": future_end.strftime("%Y-%m")},
         )
 
@@ -2058,7 +2058,7 @@ class CrmWorkflowTests(TestCase):
             {"month": month},
         )
         prepayments = self.client.get(
-            reverse("payments_table"),
+            reverse("payments"),
             {"month": month},
         )
 
@@ -2300,7 +2300,7 @@ class CrmWorkflowTests(TestCase):
         )
 
         response = self.client.get(
-            reverse("payments_table"),
+            reverse("payments"),
             {"month": today.strftime("%Y-%m")},
         )
         self.assertEqual(response.status_code, 200)
@@ -2352,7 +2352,7 @@ class CrmWorkflowTests(TestCase):
 
         month = today.strftime("%Y-%m")
         prepayments = self.client.get(
-            reverse("payments_table"),
+            reverse("payments"),
             {"month": month},
         )
         statistics = self.client.get(

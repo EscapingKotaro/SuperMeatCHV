@@ -627,20 +627,37 @@ def payments_page(request):
             log_action(request, "subscription.cancel", subscription, f"Отменён абонемент {subscription}")
             messages.success(request, "Абонемент отменён без удаления истории")
         return redirect("payments")
-    today = timezone.localdate()
-    limit = today + timedelta(days=14)
-    renewals = []
-    for child in Child.objects.filter(status=Child.Status.ACTIVE).select_related("group"):
-        sub = child.active_subscription()
-        if sub and sub.end_date <= limit:
-            renewals.append({"child": child, "subscription": sub, "debt": child.debt(), "days": (sub.end_date-today).days})
-    renewals.sort(key=lambda item: item["subscription"].end_date)
+
+    month_start, month_end, today = _month_range(request)
+    rows = build_renewal_rows(
+        month_start,
+        month_end,
+        today,
+    )
+    expected = sum(
+        (row["amount"] for row in rows),
+        Decimal("0"),
+    )
+
     return render(request, "crm/payments.html", page_context(
-        request, "payments", renewals=renewals, children=Child.objects.filter(status=Child.Status.ACTIVE),
-        urgent_count=sum(1 for x in renewals if x["days"] <= 3), expected=sum((x["subscription"].price for x in renewals), Decimal("0")),
-        tariffs=Tariff.objects.all(), subscriptions=Subscription.objects.select_related("child", "tariff")[:100],
-        tariff_form=tariff_form, subscription_form=subscription_form,
-        editing_tariff=editing_tariff, editing_subscription=editing_subscription,
+        request,
+        "payments",
+        renewals=rows,
+        rows=rows,
+        month_start=month_start,
+        month_end=month_end,
+        children=Child.objects.filter(status=Child.Status.ACTIVE),
+        urgent_count=sum(
+            1 for row in rows
+            if row["status"] == "Срочно"
+        ),
+        expected=expected,
+        tariffs=Tariff.objects.all(),
+        subscriptions=Subscription.objects.select_related("child", "tariff")[:100],
+        tariff_form=tariff_form,
+        subscription_form=subscription_form,
+        editing_tariff=editing_tariff,
+        editing_subscription=editing_subscription,
     ))
 
 
