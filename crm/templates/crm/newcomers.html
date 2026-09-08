@@ -68,6 +68,7 @@
     <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="save">
+        <input type="hidden" name="form_mode" value="{% if editing %}edit{% else %}create{% endif %}">
         <input type="hidden" name="editing_id" value="{{ editing.pk|default:'' }}">
         <div class="modal-head">
             <b>

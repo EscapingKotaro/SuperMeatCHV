@@ -27,6 +27,7 @@ class IntakeEditRegressionTests(TestCase):
             f"{reverse('applications')}?edit={old.pk}",
             {
                 "action": "save",
+                "form_mode": "create",
                 "editing_id": "",
                 "full_name": "Новая заявка",
                 "status": Lead.Status.NEW,
@@ -51,6 +52,7 @@ class IntakeEditRegressionTests(TestCase):
             reverse("applications"),
             {
                 "action": "save",
+                "form_mode": "edit",
                 "editing_id": str(lead.pk),
                 "full_name": "После редактирования",
                 "status": Lead.Status.CONTACTED,
@@ -72,6 +74,7 @@ class IntakeEditRegressionTests(TestCase):
             f"{reverse('newcomers')}?edit={old.pk}",
             {
                 "action": "save",
+                "form_mode": "create",
                 "editing_id": "",
                 "full_name": "Новый новичок",
             },
@@ -94,6 +97,7 @@ class IntakeEditRegressionTests(TestCase):
             reverse("newcomers"),
             {
                 "action": "save",
+                "form_mode": "edit",
                 "editing_id": str(newcomer.pk),
                 "full_name": "После редактирования",
                 "attended": "on",
@@ -105,6 +109,50 @@ class IntakeEditRegressionTests(TestCase):
         self.assertEqual(newcomer.full_name, "После редактирования")
         self.assertTrue(newcomer.attended)
         self.assertEqual(Newcomer.objects.count(), 1)
+
+    def test_legacy_query_edit_remains_supported(self):
+        lead = Lead.objects.create(
+            full_name="Старая заявка",
+            status=Lead.Status.NEW,
+        )
+        newcomer = Newcomer.objects.create(
+            full_name="Старый новичок",
+        )
+
+        lead_response = self.client.post(
+            f"{reverse('applications')}?edit={lead.pk}",
+            {
+                "full_name": "Обновлённая заявка",
+                "status": Lead.Status.CONTACTED,
+            },
+        )
+        newcomer_response = self.client.post(
+            f"{reverse('newcomers')}?edit={newcomer.pk}",
+            {
+                "full_name": "Обновлённый новичок",
+            },
+        )
+
+        self.assertRedirects(
+            lead_response,
+            reverse("applications"),
+        )
+        self.assertRedirects(
+            newcomer_response,
+            reverse("newcomers"),
+        )
+
+        lead.refresh_from_db()
+        newcomer.refresh_from_db()
+
+        self.assertEqual(
+            lead.full_name,
+            "Обновлённая заявка",
+        )
+        self.assertEqual(
+            newcomer.full_name,
+            "Обновлённый новичок",
+        )
 
     def test_create_buttons_use_clean_create_urls(self):
         applications = self.client.get(reverse("applications"))
