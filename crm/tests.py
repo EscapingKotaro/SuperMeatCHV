@@ -372,6 +372,191 @@ class CrmWorkflowTests(TestCase):
         self.assertFalse(self.child.certificate_ok)
         self.assertFalse(self.child.has_certificate())
 
+    def test_required_documents_alert_missing_expiry_and_expired(self):
+        today = timezone.localdate()
+
+        self.assertEqual(
+            {item["key"] for item in self.child.document_alerts(today)},
+            {"certificate", "insurance", "permission"},
+        )
+
+        self.child.certificate = "certificates/reference.jpg"
+        self.child.insurance = "child_documents/insurance/policy.pdf"
+        self.child.permission = "child_documents/permission/permit.pdf"
+        self.child.certificate_valid_until = today + timedelta(days=30)
+        self.child.insurance_valid_until = today + timedelta(days=30)
+        self.child.permission_valid_until = today + timedelta(days=30)
+        self.child.save(update_fields=[
+            "certificate",
+            "insurance",
+            "permission",
+            "certificate_valid_until",
+            "insurance_valid_until",
+            "permission_valid_until",
+        ])
+
+        self.assertEqual(self.child.document_alerts(today), [])
+
+        self.child.insurance_valid_until = today - timedelta(days=1)
+        self.child.save(update_fields=["insurance_valid_until"])
+        alerts = self.child.document_alerts(today)
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(alerts[0]["key"], "insurance")
+        self.assertEqual(alerts[0]["state"], "expired")
+
+        self.child.insurance_valid_until = None
+        self.child.save(update_fields=["insurance_valid_until"])
+        alerts = self.child.document_alerts(today)
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(alerts[0]["state"], "no_expiry")
+
+    def test_child_document_manage_uploads_and_deletes_insurance(self):
+        today = timezone.localdate()
+        valid_until = today + timedelta(days=60)
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse(
+                "child_certificate_manage",
+                args=[self.child.pk],
+            ),
+            {
+                "action": "upload",
+                "kind": "insurance",
+                "valid_until": valid_until.isoformat(),
+                "document": SimpleUploadedFile(
+                    "insurance.pdf",
+                    b"%PDF-test-insurance",
+                    content_type="application/pdf",
+                ),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.child.refresh_from_db()
+        self.assertTrue(self.child.insurance)
+        self.assertEqual(
+            self.child.insurance_valid_until,
+            valid_until,
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                actor=self.admin,
+                action="child.document.upload",
+                object_id=str(self.child.pk),
+            ).exists()
+        )
+
+        download = self.client.get(
+            reverse(
+                "child_document",
+                args=[self.child.pk, "insurance"],
+            ),
+        )
+        self.assertEqual(download.status_code, 200)
+
+        response = self.client.post(
+            reverse(
+                "child_certificate_manage",
+                args=[self.child.pk],
+            ),
+            {
+                "action": "delete",
+                "kind": "insurance",
+            },
+        )
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.child.refresh_from_db()
+        self.assertFalse(self.child.insurance)
+        self.assertIsNone(self.child.insurance_valid_until)
+
+    def test_child_card_and_attendance_use_document_alert(self):
+        today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        card = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertEqual(card.status_code, 200)
+        self.assertContains(card, 'data-child-documents')
+        self.assertContains(
+            card,
+            'data-child-document="certificate"',
+        )
+        self.assertContains(
+            card,
+            'data-child-document="insurance"',
+        )
+        self.assertContains(
+            card,
+            'data-child-document="permission"',
+        )
+        self.assertContains(card, 'name="valid_until"')
+
+        attendance = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "period": "day",
+                "ref_date": today.isoformat(),
+            },
+        )
+        self.assertEqual(attendance.status_code, 200)
+        self.assertContains(
+            attendance,
+            'data-athlete-indicator="documents-alert"',
+        )
+        self.assertNotContains(
+            attendance,
+            'data-athlete-indicator="certificate"',
+        )
+
+        valid_until = today + timedelta(days=30)
+        self.child.certificate = "certificates/reference.jpg"
+        self.child.insurance = "child_documents/insurance/policy.pdf"
+        self.child.permission = "child_documents/permission/permit.pdf"
+        self.child.certificate_valid_until = valid_until
+        self.child.insurance_valid_until = valid_until
+        self.child.permission_valid_until = valid_until
+        self.child.save(update_fields=[
+            "certificate",
+            "insurance",
+            "permission",
+            "certificate_valid_until",
+            "insurance_valid_until",
+            "permission_valid_until",
+        ])
+
+        attendance = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "period": "day",
+                "ref_date": today.isoformat(),
+            },
+        )
+        self.assertNotContains(
+            attendance,
+            'data-athlete-indicator="documents-alert"',
+        )
+
     def test_role_access_to_boss_page(self):
         self.client.login(username="admin", password="TestPass123!")
         self.assertEqual(self.client.get(reverse("boss")).status_code, 403)

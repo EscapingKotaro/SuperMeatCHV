@@ -604,6 +604,19 @@ def attendance_view(request):
                 subscription.pk,
             ),
         )
+        document_alerts = child.document_alerts(today)
+        document_alert_text = ", ".join(
+            (
+                f"{item['label']}: нет"
+                if item["state"] == "missing"
+                else (
+                    f"{item['label']}: срок не указан"
+                    if item["state"] == "no_expiry"
+                    else f"{item['label']}: просрочен"
+                )
+            )
+            for item in document_alerts
+        )
 
         entries = []
         sub_end_index = None
@@ -688,7 +701,8 @@ def attendance_view(request):
             'sessions_total': active_sub.sessions_total if active_sub else 0,
             'subscription_id': active_sub.pk if active_sub else None,
             'debt': child.debt(),
-            'has_certificate': child.has_certificate(),
+            'document_alert_count': len(document_alerts),
+            'document_alert_text': document_alert_text,
             'discount_percent': child.discount_percent,
             'subscription_end': subscription_end,
             'subscription_end_index': sub_end_index,
@@ -4690,6 +4704,8 @@ def child_card_view(request, child_id):
         'today': today,
         'rank_form': rank_form,
         'camp_form': camp_form,
+        'document_statuses': child.required_document_statuses(today),
+        'document_alerts': child.document_alerts(today),
         'child_form': getattr(request, '_child_form', None) or ChildForm(instance=child),
         'editing_child_inline': hasattr(request, '_child_form') or request.GET.get("edit") == "1",
         'page': 'child_card'

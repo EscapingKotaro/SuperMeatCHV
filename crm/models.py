@@ -392,6 +392,31 @@ class Child(models.Model):
     certificate = models.ImageField("Справка (фото)", upload_to="certificates/", blank=True)
     certificate_ok = models.BooleanField("Справка есть", default=False)
     certificate_note = models.CharField("Комментарий к справке", max_length=255, blank=True)
+    certificate_valid_until = models.DateField(
+        "Справка действует до",
+        blank=True,
+        null=True,
+    )
+    insurance = models.FileField(
+        "Страховка",
+        upload_to="child_documents/insurance/",
+        blank=True,
+    )
+    insurance_valid_until = models.DateField(
+        "Страховка действует до",
+        blank=True,
+        null=True,
+    )
+    permission = models.FileField(
+        "Разрешение",
+        upload_to="child_documents/permission/",
+        blank=True,
+    )
+    permission_valid_until = models.DateField(
+        "Разрешение действует до",
+        blank=True,
+        null=True,
+    )
 
     group = models.ForeignKey(Group, on_delete=models.PROTECT, blank=False,
                               related_name="children", verbose_name="группа")
@@ -440,6 +465,56 @@ class Child(models.Model):
     def has_certificate(self):
         """Наличие справки определяется только прикреплённым файлом."""
         return bool(self.certificate)
+
+    def required_document_statuses(self, on_date=None):
+        """Состояние обязательных документов спортсмена на выбранную дату."""
+        check_date = on_date or timezone.localdate()
+        statuses = []
+        for key, label, file_field, valid_until in (
+            (
+                "certificate",
+                "Справка",
+                self.certificate,
+                self.certificate_valid_until,
+            ),
+            (
+                "insurance",
+                "Страховка",
+                self.insurance,
+                self.insurance_valid_until,
+            ),
+            (
+                "permission",
+                "Разрешение",
+                self.permission,
+                self.permission_valid_until,
+            ),
+        ):
+            if not file_field:
+                state = "missing"
+            elif valid_until is None:
+                state = "no_expiry"
+            elif valid_until < check_date:
+                state = "expired"
+            else:
+                state = "valid"
+
+            statuses.append({
+                "key": key,
+                "label": label,
+                "present": bool(file_field),
+                "valid_until": valid_until,
+                "state": state,
+            })
+        return statuses
+
+    def document_alerts(self, on_date=None):
+        """Отсутствующие, просроченные или без срока обязательные документы."""
+        return [
+            item
+            for item in self.required_document_statuses(on_date)
+            if item["state"] != "valid"
+        ]
 
     def sessions_left(self):
         """Остаток занятий по текущему действующему абонементу."""

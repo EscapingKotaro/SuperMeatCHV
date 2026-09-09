@@ -237,11 +237,14 @@
                                                 <i data-lucide="coins" class="h-5 w-5"></i>
                                             </span>
                                             {% endif %}
-                                            {% if item.has_certificate %}
-                                            <span class="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-blue-600"
-                                                  title="Справка есть"
-                                                  data-athlete-indicator="certificate">
-                                                <i data-lucide="file-text" class="h-5 w-5"></i>
+                                            {% if item.document_alert_count %}
+                                            <span class="relative grid h-7 w-7 place-items-center rounded-lg bg-red-50 text-red-600"
+                                                  title="Документы: {{ item.document_alert_text }}"
+                                                  data-athlete-indicator="documents-alert">
+                                                <i data-lucide="triangle-alert" class="h-5 w-5"></i>
+                                                <span class="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-red-600 px-1 text-[9px] font-extrabold text-white">
+                                                    {{ item.document_alert_count }}
+                                                </span>
                                             </span>
                                             {% endif %}
                                             {% if item.discount_percent > 0 %}
