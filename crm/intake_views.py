@@ -22,8 +22,9 @@ def _set_form_target(request, model):
         query.pop("edit", None)
 
     elif editing_id:
-        get_object_or_404(model, pk=editing_id)
-        query["edit"] = editing_id
+        target_id = views._optional_pk(editing_id)
+        get_object_or_404(model, pk=target_id)
+        query["edit"] = str(target_id)
 
     elif form_mode == "edit":
         # Явный edit без цели не должен случайно создать новую запись

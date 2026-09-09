@@ -480,6 +480,71 @@ class CrmWorkflowTests(TestCase):
         response = self.client.get(reverse("expenses"))
         self.assertRedirects(response, f"{reverse('login')}?next={reverse('expenses')}")
 
+    def test_malformed_optional_object_ids_do_not_crash_pages(self):
+        competition = Competition.objects.create(
+            name="Проверка некорректного id",
+            date=timezone.localdate(),
+        )
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        cases = (
+            ("attendance", {"group_id": "not-a-pk"}),
+            ("payments", {"edit_tariff": "not-a-pk"}),
+            ("payments", {"edit_subscription": "not-a-pk"}),
+            ("expenses", {"edit": "not-a-pk"}),
+            ("competitions", {"competition": "not-a-pk"}),
+            ("competitions", {"edit_competition": "not-a-pk"}),
+            (
+                "competitions",
+                {
+                    "competition": competition.pk,
+                    "edit_apparatus": "not-a-pk",
+                },
+            ),
+            (
+                "competitions",
+                {
+                    "competition": competition.pk,
+                    "edit_entry": "not-a-pk",
+                },
+            ),
+            ("applications", {"edit": "not-a-pk"}),
+            ("newcomers", {"edit": "not-a-pk"}),
+            ("calendar", {"edit": "not-a-pk"}),
+            ("trainer_list", {"edit": "not-a-pk"}),
+            ("group_list", {"edit": "not-a-pk"}),
+            ("camps", {"edit": "not-a-pk"}),
+        )
+
+        for route_name, query in cases:
+            with self.subTest(route_name=route_name, query=query):
+                response = self.client.get(
+                    reverse(route_name),
+                    query,
+                )
+                self.assertEqual(response.status_code, 200)
+
+    def test_malformed_explicit_intake_edit_id_returns_404(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        for route_name in ("applications", "newcomers"):
+            with self.subTest(route_name=route_name):
+                response = self.client.post(
+                    reverse(route_name),
+                    {
+                        "action": "save",
+                        "form_mode": "edit",
+                        "editing_id": "not-a-pk",
+                    },
+                )
+                self.assertEqual(response.status_code, 404)
+
     def test_base_uses_single_explicit_dropdown_and_modal_controller(self):
         self.client.login(
             username="admin",

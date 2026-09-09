@@ -132,6 +132,16 @@ def page_context(request, page, **extra):
     return context
 
 
+def _optional_pk(value):
+    """Convert an optional request primary key without leaking ValueError."""
+    if value in (None, ""):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _attendance_visual_settings(user):
     profile = (
         StaffProfile.objects
@@ -304,7 +314,9 @@ def _save_active_child(request, form):
 def attendance_view(request):
     inline_child_form = getattr(request, "_child_create_form", None)
     inline_child_group_id = getattr(request, "_child_create_group_id", None)
-    group_id = inline_child_group_id or request.GET.get('group_id')
+    group_id = _optional_pk(
+        inline_child_group_id or request.GET.get("group_id")
+    )
     ref_date_str = request.GET.get('ref_date')
     sort_by = request.GET.get('sort', 'name')
     show_archived = request.GET.get('show_archived') == '1'
@@ -1662,8 +1674,8 @@ def attendance_reason_view(request):
 @login_required
 @transaction.atomic
 def payments_page(request):
-    editing_tariff = Tariff.objects.filter(pk=request.GET.get("edit_tariff")).first()
-    editing_subscription = Subscription.objects.filter(pk=request.GET.get("edit_subscription")).first()
+    editing_tariff = Tariff.objects.filter(pk=_optional_pk(request.GET.get("edit_tariff"))).first()
+    editing_subscription = Subscription.objects.filter(pk=_optional_pk(request.GET.get("edit_subscription"))).first()
     tariff_form = TariffForm(request.POST or None, prefix="tariff", instance=editing_tariff)
     subscription_form = SubscriptionForm(
         request.POST or None, prefix="subscription", instance=editing_subscription,
@@ -1810,7 +1822,7 @@ def expenses_page(request):
 
     editing = (
         Expense.objects
-        .filter(pk=request.GET.get("edit"))
+        .filter(pk=_optional_pk(request.GET.get("edit")))
         .select_related("created_by")
         .first()
     )
@@ -2138,13 +2150,13 @@ def competitions_page(request):
 
     selected = (
         competitions.filter(
-            pk=request.GET.get("competition"),
+            pk=_optional_pk(request.GET.get("competition")),
         ).first()
         or competitions.first()
     )
 
     editing_competition = competitions.filter(
-        pk=request.GET.get("edit_competition"),
+        pk=_optional_pk(request.GET.get("edit_competition")),
     ).first()
 
     editing_apparatus = None
@@ -2152,11 +2164,11 @@ def competitions_page(request):
 
     if selected:
         editing_apparatus = selected.apparatus.filter(
-            pk=request.GET.get("edit_apparatus"),
+            pk=_optional_pk(request.GET.get("edit_apparatus")),
         ).first()
 
         editing_entry = selected.entries.filter(
-            pk=request.GET.get("edit_entry"),
+            pk=_optional_pk(request.GET.get("edit_entry")),
         ).first()
 
     competition_form = CompetitionForm(
@@ -3234,7 +3246,7 @@ def notifications_page(request):
 def _intake_form_instance(request, model):
     """Resolve the form target from the submitted modal, not a stale query string."""
     query_editing = model.objects.filter(
-        pk=request.GET.get("edit"),
+        pk=_optional_pk(request.GET.get("edit")),
     ).first()
 
     if (
@@ -3257,7 +3269,7 @@ def _intake_form_instance(request, model):
     if form_mode == "create":
         return None
     if form_mode == "edit" and editing_id:
-        return get_object_or_404(model, pk=editing_id)
+        return get_object_or_404(model, pk=_optional_pk(editing_id))
 
     raise Http404("Некорректная цель редактирования")
 
@@ -3533,7 +3545,7 @@ def calendar_page(request):
     editing = (
         ManagerTask.objects
         .filter(
-            pk=request.GET.get("edit")
+            pk=_optional_pk(request.GET.get("edit"))
         )
         .first()
     )
@@ -5149,9 +5161,10 @@ from .forms import TrainerForm, GroupForm, ScheduleSlotFormSet
 @login_required
 def trainer_list_view(request):
     """Список тренеров и встроенное редактирование."""
-    if request.GET.get("edit") or request.GET.get("create"):
+    editing_id = _optional_pk(request.GET.get("edit"))
+    if editing_id is not None or request.GET.get("create"):
         request._inline_trainer = True
-        return trainer_edit_view(request, request.GET["edit"]) if request.GET.get("edit") else trainer_create_view(request)
+        return trainer_edit_view(request, editing_id) if editing_id is not None else trainer_create_view(request)
     trainers = Trainer.objects.all().prefetch_related('groups').order_by('full_name')
     context = {
         'trainers': trainers,
@@ -5239,9 +5252,10 @@ def trainer_delete_view(request, pk):
 @login_required
 def group_list_view(request):
     """Список групп и встроенное редактирование."""
-    if request.GET.get("edit") or request.GET.get("create"):
+    editing_id = _optional_pk(request.GET.get("edit"))
+    if editing_id is not None or request.GET.get("create"):
         request._inline_group = True
-        return group_edit_view(request, request.GET["edit"]) if request.GET.get("edit") else group_create_view(request)
+        return group_edit_view(request, editing_id) if editing_id is not None else group_create_view(request)
     groups = Group.objects.select_related('trainer').prefetch_related('schedule', 'children').order_by('trainer__full_name', 'trainer_id', 'name')
     context = {
         'groups': groups,
@@ -6035,7 +6049,8 @@ def cancel_subscription_view(request):
 
 @login_required
 def camps_page(request):
-    editing = get_object_or_404(Camp, pk=request.GET["edit"]) if request.GET.get("edit") else None
+    editing_id = _optional_pk(request.GET.get("edit"))
+    editing = get_object_or_404(Camp, pk=editing_id) if editing_id is not None else None
     legacy_camp = editing is not None and (editing.start_date is None or editing.end_date is None)
     form = CampEventForm(request.POST or None, instance=editing)
     if request.method == "POST" and form.is_valid():
