@@ -3231,10 +3231,41 @@ def notifications_page(request):
         today=today,
     ))
 
+def _intake_form_instance(request, model):
+    """Resolve the form target from the submitted modal, not a stale query string."""
+    query_editing = model.objects.filter(
+        pk=request.GET.get("edit"),
+    ).first()
+
+    if (
+        request.method != "POST"
+        or request.POST.get("action", "save") != "save"
+    ):
+        return query_editing
+
+    has_explicit_target = (
+        "form_mode" in request.POST
+        or "editing_id" in request.POST
+    )
+    if not has_explicit_target:
+        # Backward compatibility for old forms that posted to ?edit=<pk>.
+        return query_editing
+
+    form_mode = request.POST.get("form_mode", "").strip()
+    editing_id = request.POST.get("editing_id", "").strip()
+
+    if form_mode == "create":
+        return None
+    if form_mode == "edit" and editing_id:
+        return get_object_or_404(model, pk=editing_id)
+
+    raise Http404("Некорректная цель редактирования")
+
+
 @login_required
 @transaction.atomic
 def applications_page(request):
-    editing = Lead.objects.filter(pk=request.GET.get("edit")).first()
+    editing = _intake_form_instance(request, Lead)
     form = LeadForm(request.POST or None, instance=editing)
     if request.method == "POST":
         action = request.POST.get("action", "save")
@@ -3322,7 +3353,7 @@ def applications_page(request):
 @login_required
 @transaction.atomic
 def newcomers_page(request):
-    editing = Newcomer.objects.filter(pk=request.GET.get("edit")).first()
+    editing = _intake_form_instance(request, Newcomer)
     old_trial_at = editing.trial_at if editing else None
     form = NewcomerForm(request.POST or None, instance=editing)
     if request.method == "POST":
