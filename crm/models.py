@@ -235,7 +235,8 @@ class Child(models.Model):
         return f"{years} г. {months} мес."
 
     def has_certificate(self):
-        return self.certificate_ok
+        """Наличие справки определяется только прикреплённым файлом."""
+        return bool(self.certificate)
 
     def sessions_left(self):
         """Остаток занятий по текущему действующему абонементу."""

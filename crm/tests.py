@@ -48,6 +48,46 @@ class CrmWorkflowTests(TestCase):
         response = self.client.get(reverse("expenses"))
         self.assertRedirects(response, f"{reverse('login')}?next={reverse('expenses')}")
 
+    def test_certificate_presence_uses_file_not_legacy_flag(self):
+        self.child.certificate = ""
+        self.child.certificate_ok = True
+        self.child.save(
+            update_fields=["certificate", "certificate_ok"],
+        )
+
+        self.assertFalse(self.child.has_certificate())
+
+        self.child.certificate = "certificates/reference.jpg"
+        self.child.certificate_ok = False
+        self.child.save(
+            update_fields=["certificate", "certificate_ok"],
+        )
+
+        self.assertTrue(self.child.has_certificate())
+
+    def test_child_card_legacy_certificate_toggle_cannot_change_state(self):
+        self.child.certificate = ""
+        self.child.certificate_ok = False
+        self.child.save(
+            update_fields=["certificate", "certificate_ok"],
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("child_card", args=[self.child.pk]),
+            {"action": "toggle_certificate"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.child.refresh_from_db()
+        self.assertFalse(self.child.certificate_ok)
+        self.assertFalse(self.child.has_certificate())
+
     def test_role_access_to_boss_page(self):
         self.client.login(username="admin", password="TestPass123!")
         self.assertEqual(self.client.get(reverse("boss")).status_code, 403)
