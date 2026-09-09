@@ -1,0 +1,10 @@
+[Unit]
+Description=Check unpaid CRM trials every minute
+
+[Timer]
+OnCalendar=*-*-* *:*:00
+Persistent=true
+Unit=expire-trials.service
+
+[Install]
+WantedBy=timers.target

@@ -3,9 +3,52 @@ from decimal import Decimal
 
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
-from django.db import models
+from django.db import models, transaction
+from django.core.validators import MaxValueValidator
 from django.db.models import Sum
 from django.utils import timezone
+
+
+def age_label(birth_date=None, birth_year=None, age_text="", today=None):
+    """Общий возраст с русскими склонениями; свободный текст сохраняется."""
+    today = today or timezone.localdate()
+    def plural(n, forms):
+        return forms[2] if 11 <= n % 100 <= 14 else forms[0] if n % 10 == 1 else forms[1] if 2 <= n % 10 <= 4 else forms[2]
+    if birth_date:
+        total = max(0, (today.year - birth_date.year) * 12 + today.month - birth_date.month - (today.day < birth_date.day))
+        years, months = divmod(total, 12)
+    elif birth_year:
+        years, months = max(0, today.year - birth_year), 0
+    else:
+        import re
+        match = re.fullmatch(r"\s*(\d+)(?:[,.](\d{1,2}))?\s*(?:г\.?|лет|года?|месяцев)?\s*", age_text or "")
+        if not match:
+            return age_text or "—"
+        years, months = int(match[1]), int(match[2] or 0)
+        if "месяцев" in (age_text or ""):
+            years, months = divmod(years, 12)
+    parts = []
+    if years:
+        parts.append(f"{years} {plural(years, ('год', 'года', 'лет'))}")
+    if months or not years:
+        parts.append(f"{months} {plural(months, ('месяц', 'месяца', 'месяцев'))}")
+    return " ".join(parts)
+
+
+def expire_trials(today=None):
+    """Идемпотентный обход всех групп. Платёж и уход блокируют одного ребёнка."""
+    today = today or timezone.localdate()
+    count = 0
+    candidates = Child.objects.filter(status=Child.Status.TRIAL, trial_from__lte=today - timedelta(days=14)).values_list("pk", flat=True)
+    for pk in candidates.iterator():
+        with transaction.atomic():
+            child = Child.objects.select_for_update(of=("self",)).select_related("group__trainer").filter(pk=pk).first()
+            if not child or child.status != Child.Status.TRIAL or not child.trial_from or child.trial_from > today - timedelta(days=14) or child.payments.filter(amount__gt=0).exists():
+                continue
+            child.mark_as_lost(on_date=today)
+            AuditEvent.objects.create(action="trial.expired", object_type="Child", object_id=str(child.pk), description=f"Пробный период истёк без оплаты: {child}")
+            count += 1
+    return count
 
 
 class Role(models.TextChoices):
@@ -52,8 +95,8 @@ def calculate_projected_end_date(group, start_date, sessions_count):
     if sessions_count <= 0 or not group:
         return None
         
-    slots = ScheduleSlot.objects.filter(group=group).order_by('weekday', 'start_time')
-    if not slots.exists():
+    slots = list(group.schedule.all())
+    if not slots:
         return None
         
     current_date = start_date
@@ -173,7 +216,7 @@ class Child(models.Model):
     certificate_ok = models.BooleanField("Справка есть", default=False)
     certificate_note = models.CharField("Комментарий к справке", max_length=255, blank=True)
 
-    group = models.ForeignKey(Group, on_delete=models.SET_NULL, blank=True, null=True,
+    group = models.ForeignKey(Group, on_delete=models.SET_NULL, blank=False, null=True,
                               related_name="children", verbose_name="группа")
     schedule = models.ManyToManyField(ScheduleSlot, blank=True, verbose_name="личный график",
                                       help_text="Пусто — ребёнок ходит по графику группы")
@@ -209,30 +252,13 @@ class Child(models.Model):
 
     def active_subscription(self):
         today = timezone.localdate()
-        return self.subscriptions.filter(is_active=True, start_date__lte=today, end_date__gte=today).order_by("end_date").first()
+        cached = getattr(self, "_prefetched_objects_cache", {}).get("subscriptions")
+        if cached is not None:
+            return min((sub for sub in cached if sub.is_active and not sub.cancelled_at and sub.start_date <= today <= sub.end_date), key=lambda sub: sub.end_date, default=None)
+        return self.subscriptions.filter(is_active=True, cancelled_at__isnull=True, start_date__lte=today, end_date__gte=today).order_by("end_date").first()
 
     def age_display(self):
-        today = timezone.localdate()
-
-        if not self.birth_date:
-            return f"{max(today.year - self.birth_year, 0)} г."
-
-        years = today.year - self.birth_date.year
-        months = today.month - self.birth_date.month
-
-        if today.day < self.birth_date.day:
-            months -= 1
-
-        if months < 0:
-            years -= 1
-            months += 12
-
-        if years == 0:
-            return f"{months} мес."
-        if months == 0:
-            return f"{years} г."
-
-        return f"{years} г. {months} мес."
+        return age_label(self.birth_date, self.birth_year)
 
     def has_certificate(self):
         """Наличие справки определяется только прикреплённым файлом."""
@@ -245,11 +271,8 @@ class Child(models.Model):
         if not subscription:
             return 0
 
-        used = self.attendances.filter(
-            status__in=("present", "absent"),
-            date__gte=subscription.start_date,
-            date__lte=today,
-        ).count()
+        cached = getattr(self, "_prefetched_objects_cache", {}).get("attendances")
+        used = sum(mark.status in ("present", "absent") and subscription.start_date <= mark.date <= today for mark in cached) if cached is not None else self.attendances.filter(status__in=("present", "absent"), date__gte=subscription.start_date, date__lte=today).count()
 
         return max(0, subscription.sessions_total - used)
 
@@ -261,7 +284,8 @@ class Child(models.Model):
 
     def has_mark_today(self):
         today = timezone.localdate()
-        return self.attendances.filter(date=today).exists()
+        cached = getattr(self, "_prefetched_objects_cache", {}).get("attendances")
+        return any(mark.date == today for mark in cached) if cached is not None else self.attendances.filter(date=today).exists()
 
     def projected_end_date(self):
         left = self.sessions_left()
@@ -297,30 +321,22 @@ class Child(models.Model):
         return max(0, left - count)
 
     def debt_sessions(self):
-        paid_sessions = sum(sub.sessions_total for sub in self.subscriptions.all())
+        paid_sessions = sum(sub.sessions_total for sub in self.subscriptions.filter(cancelled_at__isnull=True))
         used_sessions = self.attendances.filter(status__in=("present", "absent")).count()
         return max(0, used_sessions - paid_sessions)
 
     def debt(self):
-        """Денежный долг: начисления минус оплаты."""
-        subscriptions_total = (
-            self.subscriptions.aggregate(s=Sum("price"))["s"] or Decimal(0)
-        )
+        """Денежный долг: неотменённые начисления минус реальные оплаты."""
+        return max(Decimal(0), -self.balance())
 
-        attendance_charges = (
-            self.attendances.aggregate(s=Sum("charge_amount"))["s"] or Decimal(0)
-        )
-
-        paid = (
-            self.payments.aggregate(s=Sum("amount"))["s"] or Decimal(0)
-        )
-
-        return max(
-            Decimal(0),
-            Decimal(subscriptions_total)
-            + Decimal(attendance_charges)
-            - Decimal(paid),
-        )
+    def related_total(self, relation, field, exclude_cancelled=False):
+        cached = getattr(self, "_prefetched_objects_cache", {}).get(relation)
+        if cached is not None:
+            return sum((getattr(row, field) or Decimal(0) for row in cached if not exclude_cancelled or row.cancelled_at is None), Decimal(0))
+        queryset = getattr(self, relation).all()
+        if exclude_cancelled:
+            queryset = queryset.filter(cancelled_at__isnull=True)
+        return queryset.aggregate(total=Sum(field))["total"] or Decimal(0)
 
     def missed_percent(self):
         """Процент пропущенных занятий."""
@@ -378,19 +394,13 @@ class Child(models.Model):
         return promos
 
     def total_paid(self):
-        """Общая сумма оплат."""
-        return self.payments.aggregate(s=Sum("amount"))["s"] or Decimal(0)
+        return self.related_total("payments", "amount")
 
     def total_spent(self):
-        """Общая сумма абонементов."""
-        return self.subscriptions.aggregate(s=Sum("price"))["s"] or Decimal(0)
+        return self.related_total("subscriptions", "price", exclude_cancelled=True)
 
     def balance(self):
-        """Баланс = оплаты - абонементы - занятия в долг."""
-        attendance_charges = (
-            self.attendances.aggregate(s=Sum("charge_amount"))["s"] or Decimal(0)
-        )
-        return self.total_paid() - self.total_spent() - attendance_charges
+        return self.total_paid() - self.total_spent() - self.related_total("attendances", "charge_amount")
 
     def is_trial_expired(self):
         """Проверяем, истёк ли пробный период (14 дней)"""
@@ -437,10 +447,12 @@ class Child(models.Model):
             'status', 'archived_at', 'departure_group', 'departure_trainer',
         ])
 
-    def mark_as_lost(self):
+    def mark_as_lost(self, on_date=None):
+        if self.status == self.Status.LOST:
+            return
         self.freeze_current_history()
         self.status = self.Status.LOST
-        self.archived_at = timezone.localdate()
+        self.archived_at = on_date or timezone.localdate()
         self.departure_group = self.group
         self.departure_trainer = self.trainer
         self.save(update_fields=[
@@ -501,6 +513,9 @@ class Subscription(models.Model):
     end_date = models.DateField("Окончание")
     sessions_total = models.PositiveSmallIntegerField("Занятий в абонементе", default=8)
     price = models.DecimalField("Стоимость", max_digits=10, decimal_places=2)
+    promo_percent = models.PositiveSmallIntegerField("Акция, %", default=0, validators=[MaxValueValidator(100)])
+    discount_percent = models.PositiveSmallIntegerField("Индивидуальная скидка на момент покупки, %", default=0, validators=[MaxValueValidator(100)])
+    cancelled_at = models.DateTimeField("Отменён", null=True, blank=True)
     promo = models.CharField("Акция / промо", max_length=100, blank=True)
     promo_end_date = models.DateField("Дата окончания акции", blank=True, null=True)
     is_active = models.BooleanField("Действует", default=True)
@@ -512,6 +527,13 @@ class Subscription(models.Model):
 
     def __str__(self):
         return f"{self.child} · {self.start_date:%d.%m.%y}–{self.end_date:%d.%m.%y}"
+
+    def cancel(self):
+        if self.cancelled_at is None:
+            self.is_active = False
+            self.cancelled_at = timezone.now()
+            self.save(update_fields=["is_active", "cancelled_at"])
+
 
 
 class Payment(models.Model):
@@ -531,20 +553,16 @@ class Payment(models.Model):
         ordering = ("-date",)
 
     def save(self, *args, **kwargs):
-        super().save(*args, **kwargs)
-
-        if Decimal(str(self.amount)) <= 0:
-            return
-
-        if self.child.status == Child.Status.TRIAL:
-            self.child.status = Child.Status.ACTIVE
-            self.child.trial_from = None
-            self.child.save(update_fields=["status", "trial_from"])
-
-        Newcomer.objects.filter(
-            child_id=self.child_id,
-            paid=False,
-        ).update(paid=True)
+        with transaction.atomic():
+            child = Child.objects.select_for_update().get(pk=self.child_id)
+            super().save(*args, **kwargs)
+            if Decimal(str(self.amount)) > 0 and child.status == Child.Status.TRIAL:
+                Child.objects.filter(pk=child.pk).update(status=Child.Status.ACTIVE, trial_from=None)
+                self.child.status = Child.Status.ACTIVE
+                self.child.trial_from = None
+            Newcomer.objects.filter(child_id=self.child_id).update(
+                paid=Payment.objects.filter(child_id=self.child_id, amount__gt=0).exists()
+            )
 
     def __str__(self):
         return f"{self.child} · {self.amount} · {self.date:%d.%m.%y}"
@@ -610,6 +628,17 @@ class Competition(models.Model):
 
     def __str__(self):
         return f"{self.name} · {self.date:%d.%m.%y}"
+
+
+class CompetitionDocument(models.Model):
+    competition = models.ForeignKey(Competition, on_delete=models.CASCADE, related_name="documents")
+    child = models.ForeignKey(Child, on_delete=models.SET_NULL, null=True, blank=True, verbose_name="Спортсмен (необязательно)")
+    title = models.CharField("Название", max_length=200)
+    file = models.FileField("Документ", upload_to="competition_documents/%Y/%m/")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.title
 
 
 class Apparatus(models.Model):
@@ -825,6 +854,12 @@ def recalculate_competition_places(competition):
             last_place = place
 
 class Camp(models.Model):
+    class Kind(models.TextChoices):
+        CAMP = "camp", "Лагерь"
+        TRAINING = "training", "Сборы"
+    kind = models.CharField("Тип", max_length=12, choices=Kind.choices, default=Kind.CAMP)
+    start_date = models.DateField("Начало", null=True, blank=True)
+    end_date = models.DateField("Окончание", null=True, blank=True)
     name = models.CharField("Название лагеря", max_length=200)
 
     class Meta:
@@ -1031,6 +1066,7 @@ class Notification(models.Model):
     event_key = models.CharField(
         "Ключ события", max_length=160, blank=True, null=True,
     )
+    resolved_at = models.DateTimeField("Закрыто", null=True, blank=True)
     read_at = models.DateTimeField("Прочитано", null=True, blank=True)
     created_at = models.DateTimeField("Создано", auto_now_add=True)
 
@@ -1081,6 +1117,26 @@ class Lead(models.Model):
         verbose_name_plural = "Заявки"
         ordering = ("-created_at",)
 
+    @property
+    def current_newcomer(self):
+        return next(iter(self.newcomers.all()), None)
+
+    @property
+    def current_trial(self):
+        return self.current_newcomer or self
+
+    def age_display(self):
+        return age_label(self.birth_date, age_text=self.age_text)
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            super().save(*args, **kwargs)
+            shared = ("full_name", "birth_date", "age_text", "phone", "source")
+            fields = kwargs.get("update_fields")
+            values = {key: getattr(self, key) for key in shared if fields is None or key in fields}
+            if values:
+                self.newcomers.update(**values, updated_at=timezone.now())
+
     def __str__(self):
         return self.full_name
 
@@ -1113,6 +1169,37 @@ class Newcomer(models.Model):
         verbose_name = "Новичок"
         verbose_name_plural = "Новички"
         ordering = ("-created_at",)
+
+    @property
+    def application_date(self):
+        return self.lead.created_at if self.lead_id else self.created_at
+
+    def age_display(self):
+        return age_label(self.birth_date, age_text=self.age_text)
+
+    @property
+    def has_paid(self):
+        if not self.child_id:
+            return False
+        cached = getattr(self.child, "_prefetched_objects_cache", {}).get("payments")
+        return any(payment.amount > 0 for payment in cached) if cached is not None else self.child.payments.filter(amount__gt=0).exists()
+
+    def save(self, *args, **kwargs):
+        with transaction.atomic():
+            if self.lead_id:
+                Lead.objects.select_for_update().get(pk=self.lead_id)
+            # paid is never accepted as manual input.
+            self.paid = self.has_paid
+            if kwargs.get("update_fields") is not None:
+                kwargs["update_fields"] = set(kwargs["update_fields"]) | {"paid"}
+            super().save(*args, **kwargs)
+            if self.lead_id:
+                fields = kwargs.get("update_fields")
+                shared = ("full_name", "birth_date", "age_text", "phone", "source")
+                values = {key: getattr(self, key) for key in shared if fields is None or key in fields}
+                if values:
+                    Lead.objects.filter(pk=self.lead_id).update(**values, updated_at=timezone.now())
+                    Newcomer.objects.filter(lead_id=self.lead_id).exclude(pk=self.pk).update(**values, updated_at=timezone.now())
 
     def __str__(self):
         return self.full_name
@@ -1149,3 +1236,15 @@ class User(AbstractUser):
         return self.get_full_name() or self.username
 
     
+
+
+# paid remains a compatibility cache; UI reads real Payment rows.
+from django.db.models.signals import post_delete
+from django.dispatch import receiver
+
+
+@receiver(post_delete, sender=Payment)
+def refresh_newcomer_payment_after_delete(sender, instance, **kwargs):
+    Newcomer.objects.filter(child_id=instance.child_id).update(
+        paid=Payment.objects.filter(child_id=instance.child_id, amount__gt=0).exists()
+    )

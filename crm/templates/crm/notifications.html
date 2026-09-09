@@ -2,6 +2,7 @@
 
 
 {% block content %}
+<form method="post" class="mb-4">{% csrf_token %}<button class="btn btn-soft" name="action" value="mark_read">Отметить уведомления прочитанными ({{ unread_count }})</button></form>
 
 <div class="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
 

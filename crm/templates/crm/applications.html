@@ -21,7 +21,7 @@
                     <th>Заявка</th>
                     <th>Контакт</th>
                     <th>Источник</th>
-                    <th>Пробное</th>
+                    <th>Тренер / группа</th><th>Пробное</th><th>Приход / оплата</th><th>Комментарий</th>
                     <th>Статус</th>
                     <th>Действия</th>
                 </tr>
@@ -31,14 +31,17 @@
                 <tr class="{% if lead.imported_from_ad %}bg-blue-50/70{% endif %}">
                     <td>
                         <b>{{ lead.full_name }}</b>
-                        <small class="block text-slate-500">{{ lead.age_text|default:lead.birth_date }}</small>
+                        <small class="block text-slate-500">{{ lead.age_display }} · {{ lead.created_at|date:"d.m.Y" }}</small>
                     </td>
                     <td>{{ lead.phone|default:"—" }}</td>
                     <td>{{ lead.source|default:"Не указан" }}{% if lead.imported_from_ad %}
                         <span class="badge ml-1 bg-blue-100 text-blue-700">из рекламы</span>
                         {% endif %}
                     </td>
-                    <td>{{ lead.trial_at|date:"d.m.Y H:i"|default:"Не назначено" }}</td>
+                    <td>{{ lead.current_trial.trainer|default:"—" }}<small class="block">{{ lead.current_trial.group|default:"—" }}</small></td>
+                    <td>{{ lead.current_trial.trial_at|date:"d.m.Y H:i"|default:"Не назначено" }}</td>
+                    <td>{% if lead.current_newcomer %}{% if lead.current_newcomer.lesson_cancelled %}Отменено{% elif lead.current_newcomer.attended %}Пришёл{% else %}Не подтверждён{% endif %}<small class="block">{% if lead.current_newcomer.has_paid %}Оплачено{% else %}Нет оплаты{% endif %}</small>{% else %}—{% endif %}</td>
+                    <td class="max-w-xs whitespace-pre-line">{{ lead.current_trial.comment|default:"—" }}</td>
                     <td>{{ lead.get_status_display }}</td>
                     <td>
                         <div class="flex flex-wrap gap-2">
@@ -56,7 +59,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="6" class="py-12 text-center text-slate-500">Заявок пока нет</td>
+                    <td colspan="9" class="py-12 text-center text-slate-500">Заявок пока нет</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -65,7 +68,7 @@
 </section>
 {% endblock %}
 {% block modals %}
-<section id="lead-modal" class="modal {% if editing or request.GET.create == "1" %}open{% endif %}">
+<section id="lead-modal" class="modal {% if editing or form.errors or request.GET.create == "1" %}open{% endif %}">
     <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="save">
@@ -83,7 +86,7 @@
         <div class="modal-body grid max-h-[70vh] gap-4 overflow-y-auto sm:grid-cols-2">
             {% for field in form %}
             <label class="{% if field.name == 'comment' %}sm:col-span-2{% endif %}">
-                <span class="label">{{ field.label }}</span>{{ field }}</label>
+                <span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}<small>{{ field.help_text }}</small></label>
             {% endfor %}
         </div>
         <div class="modal-foot">
@@ -118,7 +121,7 @@
 </section>
 {% endblock %}
 {% block scripts %}
-{% if editing or request.GET.create == "1" %}
+{% if editing or form.errors or request.GET.create == "1" %}
 <script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>
 {% endif %}
 {% endblock %}

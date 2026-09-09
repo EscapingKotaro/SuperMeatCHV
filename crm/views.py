@@ -1,3 +1,5 @@
+from .forms import CampEventForm, CompetitionDocumentForm
+from .intake_parser import parse_application
 import mimetypes
 from collections import defaultdict
 from datetime import date, datetime, timedelta
@@ -42,7 +44,6 @@ from .forms import (
     TariffForm,
 )
 
-from .context_processors import sync_subscription_notifications
 
 from .models import (
     Apparatus,
@@ -80,7 +81,8 @@ from .models import (
 PAGE_META = {
     "attendance": ("Табель", "Отмечайте посещения прямо в таблице"),
     "statistics": ("Статистика", "Главные показатели клуба"),
-    "payments": ("Продления", "Кому пора напомнить об оплате"),
+    "payments": ("Абонементы и оплаты", ""),
+    "camps": ("Лагеря и сборы", ""),
     "expenses": ("Расходы", "Бытовые закупки и другие расходы"),
     "competitions": ("Соревнования", "Баллы, места и история выступлений"),
     "notifications": ("Уведомления", "Задачи и события, требующие внимания"),
@@ -176,23 +178,16 @@ from .forms import ChildForm
 
 def generate_class_dates(group, start_date, limit=60):
     """Генерирует только даты, в которые у группы есть занятия."""
-    slots = ScheduleSlot.objects.filter(
-        group=group,
-    ).order_by("weekday", "start_time")
-    if not slots:
+    weekdays = set(ScheduleSlot.objects.filter(group=group).values_list("weekday", flat=True))
+    if not weekdays:
         return []
-
     dates = []
     current = start_date
-    end_limit = start_date + timedelta(days=180)
-
-    while current <= end_limit and len(dates) < limit:
-        for slot in slots:
-            if current.weekday() == slot.weekday:
-                dates.append(current)
+    while len(dates) < limit:
+        if current.weekday() in weekdays:
+            dates.append(current)
         current += timedelta(days=1)
-
-    return sorted(set(dates))
+    return dates
 
 
 @login_required
@@ -242,7 +237,7 @@ def attendance_view(request):
         ref_date = today
 
     # 3. Табель показывает только реальные дни занятий группы.
-    start_of_week = ref_date - timedelta(days=ref_date.weekday())
+    start_of_week = ref_date - timedelta(days=35)
     all_class_dates = generate_class_dates(
         group,
         start_of_week,
@@ -275,7 +270,7 @@ def attendance_view(request):
         current_index = len(all_class_dates) - 1
 
     start_idx = max(0, current_index - 4)
-    end_idx = min(len(all_class_dates), current_index + 6)
+    end_idx = min(len(all_class_dates), current_index + 4)
     window_dates = all_class_dates[start_idx:end_idx]
 
     schedule_by_weekday = {}
@@ -387,16 +382,13 @@ def attendance_view(request):
                     else:
                         break
 
-        # Авто-перевод в потерянные, если пробный истек (только для не-архивных)
-        if not show_archived and child.is_trial_expired():
-            child.mark_as_lost()
-
         children_data.append({
             'child': child,
             'initials': f"{child.last_name[0]}{child.first_name[0]}".upper(),
             'age': child.age_display(),
             'sessions_left': sessions_left,
             'sessions_total': active_sub.sessions_total if active_sub else 0,
+            'subscription_id': active_sub.pk if active_sub else None,
             'debt': child.debt(),
             'has_certificate': child.has_certificate(),
             'discount_percent': child.discount_percent,
@@ -409,18 +401,9 @@ def attendance_view(request):
             'attendance_entries': entries,
         })
 
-    # 7. Переключатель дат двигается по соседним окнам занятий.
-    if len(window_dates) >= 2:
-        window_span = (window_dates[-1] - window_dates[0]).days
-    else:
-        window_span = 7
-
-    prev_ref = (
-        window_dates[0] - timedelta(days=window_span)
-    ).strftime('%Y-%m-%d')
-    next_ref = (
-        window_dates[-1] + timedelta(days=window_span)
-    ).strftime('%Y-%m-%d')
+    # Плавный сдвиг на одно занятие без пропусков между окнами.
+    prev_ref = all_class_dates[current_index - 1].isoformat()
+    next_ref = all_class_dates[current_index + 1].isoformat()
 
     # Базовые параметры для ссылок, чтобы сортировка не слетала
     base_params = f"group_id={group.id}&ref_date={{}}&sort={sort_by}"
@@ -618,30 +601,31 @@ def mark_attendance_view(request):
     )
 
 @login_required
+@transaction.atomic
 def payments_page(request):
     editing_tariff = Tariff.objects.filter(pk=request.GET.get("edit_tariff")).first()
     editing_subscription = Subscription.objects.filter(pk=request.GET.get("edit_subscription")).first()
     tariff_form = TariffForm(request.POST or None, prefix="tariff", instance=editing_tariff)
     subscription_form = SubscriptionForm(
         request.POST or None, prefix="subscription", instance=editing_subscription,
-        initial={"start_date": timezone.localdate()},
+        initial={"start_date": timezone.localdate(), "child": request.GET.get("child")} if editing_subscription is None else None,
     )
     if request.method == "POST":
         action = request.POST.get("action", "payment")
         if action == "payment":
             child = get_object_or_404(Child, pk=request.POST.get("child_id"))
+            from django import forms as django_forms
             try:
-                amount = Decimal(request.POST.get("amount", "0"))
-            except InvalidOperation:
-                amount = Decimal("0")
-            if amount <= 0:
-                messages.error(request, "Сумма должна быть больше нуля")
+                amount = django_forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2).clean(request.POST.get("amount"))
+                payment_date = django_forms.DateField().clean(request.POST.get("date") or timezone.localdate())
+            except django_forms.ValidationError:
+                messages.error(request, "Укажите корректную дату и положительную сумму оплаты")
             else:
                 payment = Payment.objects.create(
                     child=child,
                     subscription=child.active_subscription(),
                     amount=amount,
-                    date=request.POST.get("date") or timezone.localdate(),
+                    date=payment_date,
                     created_by=request.user,
                 )
                 log_action(request, "payment.create", payment, f"Принята оплата {amount} ₽ от {child}")
@@ -672,25 +656,22 @@ def payments_page(request):
             subscription_form = SubscriptionForm(request.POST, prefix="subscription", instance=editing_subscription)
             if subscription_form.is_valid():
                 subscription = subscription_form.save()
-                Subscription.objects.filter(
-                    child=subscription.child, is_active=True,
-                ).exclude(pk=subscription.pk).update(is_active=False)
-                if subscription.child.status == Child.Status.TRIAL:
-                    subscription.child.status = Child.Status.ACTIVE
-                    subscription.child.trial_from = None
-                    subscription.child.save(update_fields=["status", "trial_from"])
+                if subscription.is_active:
+                    Subscription.objects.filter(
+                        child=subscription.child, is_active=True,
+                        start_date__lte=subscription.end_date, end_date__gte=subscription.start_date,
+                    ).exclude(pk=subscription.pk).update(is_active=False)
                 log_action(request, "subscription.save", subscription, f"Сохранён абонемент {subscription}")
                 messages.success(request, "Абонемент назначен")
             else:
                 messages.error(request, "Проверьте данные абонемента")
-                return redirect("payments")
         elif action == "cancel_subscription":
             subscription = get_object_or_404(Subscription, pk=request.POST.get("subscription_id"))
-            subscription.is_active = False
-            subscription.save(update_fields=["is_active"])
+            subscription.cancel()
             log_action(request, "subscription.cancel", subscription, f"Отменён абонемент {subscription}")
             messages.success(request, "Абонемент отменён без удаления истории")
-        return redirect("payments")
+        if action != "save_subscription" or not subscription_form.errors:
+            return redirect("payments")
 
     month_start, month_end, today = _month_range(request)
     rows = build_renewal_rows(
@@ -718,6 +699,8 @@ def payments_page(request):
             if row["status"] == "Срочно"
         ),
         expected=expected,
+        tariff_preview=list(Tariff.objects.values("id", "price", "sessions_total", "duration_days")),
+        child_discounts=list(Child.objects.values("id", "discount_percent")),
         tariffs=Tariff.objects.all(),
         subscriptions=Subscription.objects.select_related("child", "tariff")[:100],
         tariff_form=tariff_form,
@@ -1132,6 +1115,18 @@ def competitions_page(request):
         instance=editing_entry,
         competition=selected,
     )
+
+    document_form = CompetitionDocumentForm(competition=selected)
+    if request.method == "POST" and request.POST.get("action") == "upload_document":
+        selected = get_object_or_404(Competition, pk=request.POST.get("competition_id"))
+        document_form = CompetitionDocumentForm(request.POST, request.FILES, competition=selected)
+        if document_form.is_valid():
+            document = document_form.save(commit=False)
+            document.competition = selected
+            document.save()
+            log_action(request, "competition.document", document, f"Добавлен документ: {document.title}")
+            return redirect(f"{reverse('competitions')}?competition={selected.pk}#documents")
+        messages.error(request, "Проверьте документ")
 
     score_draft = {}
 
@@ -1718,6 +1713,8 @@ def competitions_page(request):
             "competitions",
             competitions=competitions,
             selected=selected,
+            document_form=document_form,
+            documents=selected.documents.select_related("child") if selected else [],
             apparatus=apparatus,
             entry_rows=entry_rows,
             competition_form=competition_form,
@@ -1967,10 +1964,10 @@ def toggle_manager_task(task, user, completion_comment=""):
 @login_required
 def notifications_page(request):
     if request.method == "POST":
-        action = request.POST.get(
-            "action",
-            "toggle_task",
-        )
+        action = request.POST.get("action", "toggle_task")
+        if action == "mark_read":
+            Notification.objects.filter(recipient=request.user, read_at__isnull=True).update(read_at=timezone.now())
+            return redirect("notifications")
 
         if action == "confirm_trial":
             newcomer = get_object_or_404(
@@ -2100,28 +2097,15 @@ def notifications_page(request):
 
         return redirect("notifications")
 
-    sync_subscription_notifications(
-        request.user
-    )
-
-    sync_subscription_notifications(request.user)
-    
     # Последние уведомления пользователя
     event_notifications = list(
         Notification.objects
-        .filter(recipient=request.user)
+        .filter(recipient=request.user, resolved_at__isnull=True)
         .select_related("actor", "task")[:50]
     )
     
 
-    unread_count = sum(n.read_at is None for n in event_notifications)
-
-    # После открытия страницы считаем уведомления прочитанными
-    if unread_count:
-        Notification.objects.filter(
-            recipient=request.user,
-            read_at__isnull=True,
-        ).update(read_at=timezone.now())
+    unread_count = Notification.objects.filter(recipient=request.user, read_at__isnull=True, resolved_at__isnull=True).count()
 
     # Обычный список задач
     task_qs = ManagerTask.objects.filter(is_done=False)
@@ -2165,6 +2149,7 @@ def notifications_page(request):
     debt_count = Notification.objects.filter(
         recipient=request.user,
         kind=Notification.Kind.SUBSCRIPTION_DEBT,
+        resolved_at__isnull=True,
     ).count()
 
     open_task_count = task_qs.count()
@@ -2188,6 +2173,7 @@ def notifications_page(request):
     ))
 
 @login_required
+@transaction.atomic
 def applications_page(request):
     editing = Lead.objects.filter(pk=request.GET.get("edit")).first()
     form = LeadForm(request.POST or None, instance=editing)
@@ -2195,17 +2181,9 @@ def applications_page(request):
         action = request.POST.get("action", "save")
         if action == "import_raw":
             raw = request.POST.get("raw_application", "")
-            parsed = {}
-            aliases = {"имя": "full_name", "фио": "full_name", "телефон": "phone", "возраст": "age_text", "источник": "source", "кампания": "source", "комментарий": "comment"}
-            for line in raw.splitlines():
-                if ":" not in line:
-                    continue
-                key, value = line.split(":", 1)
-                target = aliases.get(key.strip().lower())
-                if target and value.strip():
-                    parsed[target] = value.strip()
+            parsed = parse_application(raw)
             if parsed.get("full_name"):
-                parsed.setdefault("source", "VK Реклама")
+                parsed.setdefault("source", "Реклама")
                 lead = Lead.objects.create(imported_from_ad=True, **parsed)
 
                 notify_admins(
@@ -2221,7 +2199,10 @@ def applications_page(request):
                 messages.error(request, "Не удалось распознать имя. Используйте строку «Имя: ...»")
             return redirect("applications")
         if action == "create_newcomer":
-            lead = get_object_or_404(Lead, pk=request.POST.get("lead_id"))
+            lead = get_object_or_404(Lead.objects.select_for_update(), pk=request.POST.get("lead_id"))
+            if lead.newcomers.exists():
+                messages.info(request, "Новичок из этой заявки уже создан")
+                return redirect("newcomers")
             newcomer = Newcomer.objects.create(
                 lead=lead,
                 full_name=lead.full_name,
@@ -2265,7 +2246,8 @@ def applications_page(request):
             messages.success(request, "Заявка сохранена")
             return redirect("applications")
         messages.error(request, "Проверьте данные заявки")
-    leads = Lead.objects.select_related("trainer", "group").prefetch_related("newcomers")
+    from django.db.models import Prefetch
+    leads = Lead.objects.select_related("trainer", "group").prefetch_related(Prefetch("newcomers", queryset=Newcomer.objects.select_related("trainer", "group", "child").prefetch_related("child__payments")))
     return render(request, "crm/applications.html", page_context(
         request, "applications", leads=leads, form=form, editing=editing,
         imported_count=leads.filter(imported_from_ad=True, status=Lead.Status.NEW).count(),
@@ -2273,6 +2255,7 @@ def applications_page(request):
 
 
 @login_required
+@transaction.atomic
 def newcomers_page(request):
     editing = Newcomer.objects.filter(pk=request.GET.get("edit")).first()
     old_trial_at = editing.trial_at if editing else None
@@ -2281,6 +2264,9 @@ def newcomers_page(request):
         action = request.POST.get("action", "save")
         if action == "convert":
             newcomer = get_object_or_404(Newcomer, pk=request.POST.get("newcomer_id"))
+            if newcomer.lead_id:
+                Lead.objects.select_for_update().get(pk=newcomer.lead_id)
+            newcomer = Newcomer.objects.select_for_update().get(pk=newcomer.pk)
             if newcomer.child:
                 messages.info(request, "Карточка спортсмена уже создана")
                 return redirect("newcomers")
@@ -2293,8 +2279,8 @@ def newcomers_page(request):
                 birth_year=newcomer.birth_date.year if newcomer.birth_date else timezone.localdate().year - 7,
                 parent_phone=newcomer.phone,
                 group=newcomer.group,
-                status=Child.Status.ACTIVE if newcomer.paid else Child.Status.TRIAL,
-                trial_from=None if newcomer.paid else timezone.localdate(),
+                status=Child.Status.TRIAL,
+                trial_from=timezone.localdate(),
                 note=newcomer.comment,
             )
             newcomer.child = child
@@ -2339,7 +2325,7 @@ def newcomers_page(request):
         messages.error(request, "Проверьте данные новичка")
         
     return render(request, "crm/newcomers.html", page_context(
-        request, "newcomers", newcomers=Newcomer.objects.select_related("lead", "trainer", "group", "child"),
+        request, "newcomers", newcomers=Newcomer.objects.select_related("lead", "trainer", "group", "child").prefetch_related("child__payments"),
         form=form, editing=editing,
     ))
 
@@ -2940,52 +2926,14 @@ def boss_page(request):
 
             messages.error(request, "Проверьте параметры цели")
 
-    # Задачи.
-    all_tasks = list(
-        ManagerTask.objects
-        .select_related("assignee", "created_by", "completed_by")
-        .order_by("-created_at")
+    task_counts = ManagerTask.objects.aggregate(
+        total=Count("pk"), done=Count("pk", filter=Q(is_done=True)),
+        overdue=Count("pk", filter=Q(is_done=False) & (
+            Q(due_date__lt=today) |
+            Q(due_date__isnull=True, scheduled_end_at__lt=now) |
+            Q(due_date__isnull=True, scheduled_end_at__isnull=True, scheduled_at__lt=now)
+        )),
     )
-
-    for task in all_tasks:
-        task.is_overdue_now = False
-
-        if task.is_done:
-            continue
-
-        if task.due_date:
-            task.is_overdue_now = task.due_date < today
-        elif task.scheduled_end_at:
-            task.is_overdue_now = task.scheduled_end_at < now
-        elif task.scheduled_at:
-            task.is_overdue_now = task.scheduled_at < now
-
-    active_tasks = [
-        task
-        for task in all_tasks
-        if not task.is_done and not task.is_overdue_now
-    ]
-    overdue_tasks_list = [
-        task
-        for task in all_tasks
-        if task.is_overdue_now
-    ]
-    done_tasks = [
-        task
-        for task in all_tasks
-        if task.is_done
-    ]
-
-    task_filter = request.GET.get("tasks", "active")
-    if task_filter not in {"active", "overdue", "done", "all"}:
-        task_filter = "active"
-
-    displayed_tasks = {
-        "active": active_tasks,
-        "overdue": overdue_tasks_list,
-        "done": done_tasks,
-        "all": all_tasks,
-    }[task_filter]
 
     # Финансы. Текущая выручка — факт с начала месяца по сегодня.
     revenue = (
@@ -3056,10 +3004,10 @@ def boss_page(request):
         row["trainer_id"]: row["total"]
         for row in (
             trial_qs
-            .filter(paid=True)
+            .filter(child__payments__amount__gt=0)
             .exclude(trainer__isnull=True)
             .values("trainer_id")
-            .annotate(total=Count("id"))
+            .annotate(total=Count("id", distinct=True))
         )
     }
 
@@ -3071,11 +3019,10 @@ def boss_page(request):
     )
     trainer_rows = []
 
+    active_by_trainer = dict(Child.objects.filter(status=Child.Status.ACTIVE).values("group__trainer_id").annotate(total=Count("pk")).values_list("group__trainer_id", "total"))
+    lost_by_trainer = dict(Child.objects.filter(status__in=[Child.Status.LOST, Child.Status.ARCHIVED], archived_at__range=(month, month_end)).annotate(report_trainer=Coalesce("departure_trainer_id", "group__trainer_id")).values("report_trainer").annotate(total=Count("pk")).values_list("report_trainer", "total"))
+
     for trainer in _report_trainers(month, month_end):
-        children = Child.objects.filter(
-            group__trainer=trainer,
-            status=Child.Status.ACTIVE,
-        )
         trainer_groups = [
             row
             for row in group_rows
@@ -3098,28 +3045,11 @@ def boss_page(request):
             trainer.id,
             0,
         )
-        lost = (
-            Child.objects
-            .filter(
-                Q(departure_trainer=trainer)
-                | Q(
-                    departure_trainer__isnull=True,
-                    group__trainer=trainer,
-                ),
-                status__in=[
-                    Child.Status.LOST,
-                    Child.Status.ARCHIVED,
-                ],
-                archived_at__gte=month,
-                archived_at__lte=month_end,
-            )
-            .distinct()
-            .count()
-        )
+        lost = lost_by_trainer.get(trainer.pk, 0)
 
         trainer_rows.append({
             "trainer": trainer,
-            "children": children.count(),
+            "children": active_by_trainer.get(trainer.pk, 0),
             "trial": trial,
             "retained": retained,
             "retention_pct": (
@@ -3234,11 +3164,9 @@ def boss_page(request):
         .order_by("-created_at")
     )
     events_count = events_qs.count()
-    events = (
-        events_qs
-        if all_logs
-        else events_qs[:12]
-    )
+    from django.core.paginator import Paginator
+    events_page = Paginator(events_qs, 100).get_page(request.GET.get("log_page")) if all_logs else None
+    events = events_page.object_list if events_page else events_qs[:12]
 
     return render(
         request,
@@ -3264,17 +3192,13 @@ def boss_page(request):
             top_competition_groups=top_competition_groups,
             events=events,
             events_count=events_count,
+            events_page=events_page,
             all_logs=all_logs,
 
-            overdue_tasks=len(overdue_tasks_list),
-            displayed_tasks=displayed_tasks,
-            task_filter=task_filter,
-            task_active_count=len(active_tasks),
-            task_overdue_count=len(overdue_tasks_list),
-            task_done_count=len(done_tasks),
-            task_total_count=len(all_tasks),
-
-            task_form=task_form,
+            overdue_tasks=task_counts["overdue"],
+            task_active_count=task_counts["total"] - task_counts["done"],
+            task_done_count=task_counts["done"],
+            task_total_count=task_counts["total"],
             target_form=target_form,
         ),
     )
@@ -3612,7 +3536,7 @@ def child_card_view(request, child_id):
     # === HEAT-MAP: последние 365 дней ===
         # === HEAT-MAP: последние 180 дней ===
     today = timezone.localdate()
-    days_back = 180
+    days_back = 90
     year_ago = today - timedelta(days=days_back - 1)
 
     # Получаем все посещения за период
@@ -3634,7 +3558,7 @@ def child_card_view(request, child_id):
         week_start_date = current  # Понедельник этой недели
         for day_in_week in range(7):  # 0=Пн ... 6=Вс
             date = current + timedelta(days=day_in_week)
-            if date > end_date:
+            if date > end_date or date < year_ago:
                 week.append(None)
             else:
                 status = period_attendances.get(date)
@@ -3681,6 +3605,8 @@ def child_card_view(request, child_id):
         'today': today,
         'rank_form': rank_form,
         'camp_form': camp_form,
+        'child_form': getattr(request, '_child_form', None) or ChildForm(instance=child),
+        'editing_child_inline': hasattr(request, '_child_form'),
         'page': 'child_card'
     }
     return render(request, 'crm/child_card.html', context)
@@ -3784,6 +3710,10 @@ def child_edit_view(request, child_id):
             instance=child,
         )
 
+    if request.POST.get("inline") == "1":
+        request._child_form = form
+        return child_card_view(request, child_id)
+
     return render(
         request,
         "crm/child_edit.html",
@@ -3822,17 +3752,15 @@ def child_delete_view(request, child_id):
 @login_required
 def add_subscription_view(request, child_id):
     child = get_object_or_404(Child, id=child_id)
-    if request.method == 'POST':
-        form = SubscriptionForm(request.POST)
-        if form.is_valid():
-            sub = form.save(commit=False)
-            sub.child = child
-            sub.save()
-            messages.success(request, 'Абонемент добавлен')
-            return redirect('child_card', child_id=child.id)
-    else:
-        form = SubscriptionForm()
-    return render(request, 'crm/add_subscription.html', {'form': form, 'child': child, 'page': 'add_subscription'})
+    if request.method != "POST":
+        return redirect(f"{reverse('payments')}?child={child.pk}&new_subscription=1")
+    form = SubscriptionForm(request.POST, initial={"child": child})
+    form.fields["child"].disabled = True
+    if form.is_valid():
+        sub = form.save()
+        messages.success(request, "Абонемент добавлен")
+        return redirect("child_card", child_id=child.pk)
+    return render(request, "crm/add_subscription.html", {"form": form, "child": child, "page": "add_subscription"})
 
 
 from django.shortcuts import render, get_object_or_404, redirect
@@ -3845,7 +3773,10 @@ from .forms import TrainerForm, GroupForm, ScheduleSlotFormSet
 
 @login_required
 def trainer_list_view(request):
-    """Список тренеров"""
+    """Список тренеров и встроенное редактирование."""
+    if request.GET.get("edit") or request.GET.get("create"):
+        request._inline_trainer = True
+        return trainer_edit_view(request, request.GET["edit"]) if request.GET.get("edit") else trainer_create_view(request)
     trainers = Trainer.objects.all().prefetch_related('groups').order_by('full_name')
     context = {
         'trainers': trainers,
@@ -3872,6 +3803,11 @@ def trainer_create_view(request):
         'title': 'Новый тренер',
         'page': 'trainers'
     }
+    if getattr(request, "_inline_trainer", False):
+        context["form_title"] = context["title"]
+        context["title"] = "Тренеры"
+        context["trainers"] = Trainer.objects.prefetch_related("groups").order_by("full_name")
+        return render(request, "crm/trainers.html", context)
     return render(request, 'crm/trainer_edit.html', context)
 
 @login_required
@@ -3893,6 +3829,11 @@ def trainer_edit_view(request, pk):
         'title': f'Редактирование: {trainer.full_name}',
         'page': 'trainers'
     }
+    if getattr(request, "_inline_trainer", False):
+        context["form_title"] = context["title"]
+        context["title"] = "Тренеры"
+        context["trainers"] = Trainer.objects.prefetch_related("groups").order_by("full_name")
+        return render(request, "crm/trainers.html", context)
     return render(request, 'crm/trainer_edit.html', context)
 
 @login_required
@@ -3920,8 +3861,11 @@ def trainer_delete_view(request, pk):
 
 @login_required
 def group_list_view(request):
-    """Список групп"""
-    groups = Group.objects.select_related('trainer').prefetch_related('schedule', 'children').order_by('name')
+    """Список групп и встроенное редактирование."""
+    if request.GET.get("edit") or request.GET.get("create"):
+        request._inline_group = True
+        return group_edit_view(request, request.GET["edit"]) if request.GET.get("edit") else group_create_view(request)
+    groups = Group.objects.select_related('trainer').prefetch_related('schedule', 'children').order_by('trainer__full_name', 'trainer_id', 'name')
     context = {
         'groups': groups,
         'title': 'Группы',
@@ -3953,6 +3897,11 @@ def group_create_view(request):
         'title': 'Новая группа',
         'page': 'groups'
     }
+    if getattr(request, "_inline_group", False):
+        context["form_title"] = context["title"]
+        context["title"] = "Группы"
+        context["groups"] = Group.objects.select_related("trainer").prefetch_related("schedule", "children").order_by("trainer__full_name", "trainer_id", "name")
+        return render(request, "crm/groups.html", context)
     return render(request, 'crm/group_edit.html', context)
 
 @login_required
@@ -3983,6 +3932,11 @@ def group_edit_view(request, pk):
         'title': f'Редактирование: {group.name}',
         'page': 'groups'
     }
+    if getattr(request, "_inline_group", False):
+        context["form_title"] = context["title"]
+        context["title"] = "Группы"
+        context["groups"] = Group.objects.select_related("trainer").prefetch_related("schedule", "children").order_by("trainer__full_name", "trainer_id", "name")
+        return render(request, "crm/groups.html", context)
     return render(request, 'crm/group_edit.html', context)
 
 @login_required
@@ -4140,55 +4094,23 @@ def _report_trainers(month_start, month_end):
 
 
 def build_group_stats(month_start, month_end, today):
-    """Единая формула посещаемости для статистики и кабинета начальника."""
-    current_statuses = (
-        Child.Status.ACTIVE,
-        Child.Status.TRIAL,
-    )
+    """Единая формула посещаемости; суммы считаются пакетно."""
+    from django.db.models import F
+    current_statuses = (Child.Status.ACTIVE, Child.Status.TRIAL)
+    kids_by_group = dict(Child.objects.filter(status__in=current_statuses).values("group_id").annotate(total=Count("pk")).values_list("group_id", "total"))
+    totals = {(row["child__group_id"], row["status"]): row["total"] for row in Attendance.objects.filter(
+        child__status__in=current_statuses, date__range=(month_start, month_end),
+    ).filter(Q(group_snapshot_id=F("child__group_id")) | Q(group_snapshot__isnull=True)).values("child__group_id", "status").annotate(total=Count("pk"))}
     result = []
-
-    for group in (
-        Group.objects
-        .filter(is_active=True)
-        .select_related("trainer")
-    ):
-        kids = group.children.filter(
-            status__in=current_statuses,
-        ).count()
-
-        attendance = _attendance_for_group(
-            group,
-            month_start,
-            month_end,
-        )
-        present = attendance.filter(
-            status=Attendance.Status.PRESENT,
-        ).count()
-        absent = attendance.filter(
-            status=Attendance.Status.ABSENT,
-        ).count()
-        sessions = _sessions_held(
-            group,
-            month_start,
-            month_end,
-            today,
-        )
+    for group in Group.objects.filter(is_active=True).select_related("trainer").prefetch_related("schedule"):
+        kids = kids_by_group.get(group.pk, 0)
+        weekdays = {slot.weekday for slot in group.schedule.all()}
+        sessions = sum((month_start + timedelta(days=offset)).weekday() in weekdays for offset in range(max(0, (min(month_end, today) - month_start).days + 1)))
+        present = totals.get((group.pk, Attendance.Status.PRESENT), 0)
+        absent = totals.get((group.pk, Attendance.Status.ABSENT), 0)
         capacity = kids * sessions
-
-        result.append({
-            "group": group,
-            "kids": kids,
-            "present": present,
-            "absent": absent,
-            "sessions": sessions,
-            "capacity": capacity,
-            "attendance_pct": (
-                round(present * 100 / capacity)
-                if capacity
-                else 0
-            ),
-        })
-
+        result.append({"group": group, "kids": kids, "present": present, "absent": absent, "sessions": sessions,
+                       "capacity": capacity, "attendance_pct": round(present * 100 / capacity) if capacity else 0})
     return result
 
 
@@ -4416,6 +4338,9 @@ def statistics_view(request):
         'revenue_month': revenue_month,
         'potential': potential, 'expected': expected,
         'target': target, 'target_percent': target_percent,
+        'previous_month': (month_start - timedelta(days=1)).strftime('%Y-%m'),
+        'next_month': (month_end + timedelta(days=1)).strftime('%Y-%m'),
+        'bar_scale': max(Decimal(revenue_month), potential, target.amount if target else 0, Decimal(1)),
         'expenses_month': expenses_month,
         'groups_stats': groups_stats, 'trainers_stats': trainers_stats,
         'title': 'Статистика', 'page': 'statistics',
@@ -4546,26 +4471,8 @@ def salaries_export_view(request):
 
 
 def _prepaid_credit(child):
-    """Свободная предоплата после покрытия уже начисленных обязательств."""
-    subscriptions_total = (
-        child.subscriptions.aggregate(s=Sum("price"))["s"]
-        or Decimal("0")
-    )
-    attendance_charges = (
-        child.attendances.aggregate(s=Sum("charge_amount"))["s"]
-        or Decimal("0")
-    )
-    paid_total = (
-        child.payments.aggregate(s=Sum("amount"))["s"]
-        or Decimal("0")
-    )
-
-    return max(
-        Decimal("0"),
-        Decimal(paid_total)
-        - Decimal(subscriptions_total)
-        - Decimal(attendance_charges),
-    )
+    """Свободная предоплата после покрытия неотменённых начислений."""
+    return max(Decimal("0"), child.balance())
 
 
 def build_renewal_rows(month_start, month_end, today=None):
@@ -4578,25 +4485,15 @@ def build_renewal_rows(month_start, month_end, today=None):
         Child.objects
         .filter(status=Child.Status.ACTIVE)
         .select_related("group")
-        .prefetch_related("subscriptions__tariff")
+        .prefetch_related("subscriptions__tariff", "payments", "attendances", "group__schedule")
     )
 
     for child in children:
-        subscriptions = child.subscriptions.filter(is_active=True)
-
-        # Если следующий абонемент уже создан, продление считается оформленным:
-        # повторно звонить и включать его в потенциальную выручку не нужно.
-        if subscriptions.filter(start_date__gt=today).exists():
+        subscriptions = [sub for sub in child.subscriptions.all() if sub.is_active and not sub.cancelled_at]
+        if any(sub.start_date > today for sub in subscriptions):
             continue
-
         active_subscription = child.active_subscription()
-        subscription = (
-            active_subscription
-            or subscriptions
-            .filter(start_date__lte=today)
-            .order_by("-end_date", "-pk")
-            .first()
-        )
+        subscription = active_subscription or max((sub for sub in subscriptions if sub.start_date <= today), key=lambda sub: (sub.end_date, sub.pk), default=None)
 
         if not subscription:
             continue
@@ -4712,3 +4609,65 @@ def payment_history_view(request):
     return render(request, 'crm/payment_history.html', context)
 
 
+
+
+@login_required
+@require_POST
+def cancel_subscription_view(request):
+    with transaction.atomic():
+        subscription = get_object_or_404(
+            Subscription.objects.select_for_update(),
+            pk=request.POST.get("subscription_id"), child_id=request.POST.get("child_id"),
+        )
+        if request.POST.get("confirmed") != "1":
+            return JsonResponse({"status": "error", "message": "Подтвердите отмену"}, status=400)
+        if subscription.cancelled_at is None and not subscription.is_active:
+            return JsonResponse({"status": "error", "message": "Абонемент уже изменён. Обновите табель"}, status=409)
+        subscription.cancel()
+        log_action(request, "subscription.cancel", subscription, f"Отменён абонемент {subscription}")
+    return JsonResponse({"status": "ok"})
+
+
+@login_required
+def camps_page(request):
+    editing = get_object_or_404(Camp, pk=request.GET["edit"]) if request.GET.get("edit") else None
+    legacy_camp = editing is not None and (editing.start_date is None or editing.end_date is None)
+    form = CampEventForm(request.POST or None, instance=editing)
+    if request.method == "POST" and form.is_valid():
+        if legacy_camp:
+            legacy_dates = set(editing.campstay_set.values_list("start_date", "end_date"))
+            if len(legacy_dates) > 1:
+                form.add_error(None, "У этого исторического лагеря несколько заездов. Создайте отдельное мероприятие: старые поездки сохранятся в карточках.")
+        if not form.errors:
+            return _save_camp_event(request, form)
+    return render(request, "crm/camps.html", page_context(request, "camps", title="Лагеря и сборы", camps=Camp.objects.annotate(participant_count=Count("campstay__child", distinct=True)).order_by("-start_date", "name"), form=form, editing=editing))
+
+
+def _save_camp_event(request, form):
+    with transaction.atomic():
+        camp = form.save()
+        selected_ids = set(form.cleaned_data["children"].values_list("pk", flat=True))
+        # Editing the roster changes only this event's trips.
+        CampStay.objects.filter(camp=camp).exclude(child_id__in=selected_ids).delete()
+        for child_id in selected_ids:
+            stays = CampStay.objects.filter(camp=camp, child_id=child_id)
+            if stays.exists():
+                stays.update(start_date=camp.start_date, end_date=camp.end_date)
+            else:
+                CampStay.objects.create(camp=camp, child_id=child_id, start_date=camp.start_date, end_date=camp.end_date)
+        log_action(request, "camp.save", camp, f"Мероприятие {camp}: {len(selected_ids)} участников")
+    messages.success(request, "Мероприятие и состав участников сохранены")
+    return redirect("camps")
+
+
+@login_required
+def competition_document_download(request, pk):
+    from django.http import FileResponse, Http404
+    from pathlib import Path
+    document = get_object_or_404(CompetitionDocument, pk=pk)
+    try:
+        response = FileResponse(document.file.open("rb"), as_attachment=True, filename=Path(document.file.name).name)
+    except (FileNotFoundError, ValueError):
+        raise Http404("Файл не найден")
+    response["X-Content-Type-Options"] = "nosniff"
+    return response

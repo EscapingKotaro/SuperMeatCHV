@@ -46,6 +46,8 @@ urlpatterns = [
     path("payments/", views.payments_page, name="payments"),
     path("payments/history/", views.payment_history_view, name="payment_history"),
 
+    path("subscriptions/cancel/", views.cancel_subscription_view, name="cancel_subscription"),
+
     # Расходы
     path("expenses/", views.expenses_page, name="expenses"),
 
@@ -56,6 +58,9 @@ urlpatterns = [
     # Соревнования
     path("competitions/", views.competitions_page, name="competitions"),
     path("competitions/<int:pk>/export/", views.competition_export, name="competition_export"),
+
+    path("camps/", views.camps_page, name="camps"),
+    path("competition-documents/<int:pk>/", views.competition_document_download, name="competition_document_download"),
 
     # Уведомления
     path("notifications/", views.notifications_page, name="notifications"),

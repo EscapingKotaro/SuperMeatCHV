@@ -1,0 +1,10 @@
+[Unit]
+Description=Spartak CRM trial expiration
+After=network.target
+
+[Service]
+Type=oneshot
+User=__APP_USER__
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=__ENV_FILE__
+ExecStart=__APP_DIR__/.venv/bin/python manage.py expire_trials

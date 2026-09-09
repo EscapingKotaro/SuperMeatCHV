@@ -1,12 +1,12 @@
 {% extends 'crm/base.html' %}
 {% block actions %}
 <div class="flex flex-wrap gap-2">
-  <button data-modal="tariff-modal" class="btn btn-soft">
+  <a href="?new_tariff=1" class="btn btn-soft">
     <i data-lucide="settings-2">
-    </i>Новый тариф</button>
-  <button data-modal="subscription-modal" class="btn btn-soft">
+    </i>Новый тариф</a>
+  <a href="?new_subscription=1" class="btn btn-soft">
     <i data-lucide="ticket-plus">
-    </i>Назначить абонемент</button>
+    </i>Назначить абонемент</a>
   <button data-modal="payment-modal" class="btn btn-primary">
     <i data-lucide="plus">
     </i>Принять оплату</button>
@@ -73,8 +73,8 @@
   </div>
 </section>
 <div class="grid gap-5 xl:grid-cols-2">
-  <section class="card overflow-hidden">
-    <div class="border-b p-4">
+  <details class="card overflow-hidden">
+    <summary class="p-4 cursor-pointer font-bold">Настройки тарифов</summary><div class="border-b p-4">
       <h2 class="font-extrabold">Тарифы</h2>
       <p class="text-xs text-slate-500">Цена, срок и число занятий задаются здесь</p>
     </div>
@@ -112,7 +112,7 @@
         </tbody>
       </table>
     </div>
-  </section>
+  </details>
   <section class="card overflow-hidden">
     <div class="border-b p-4">
       <h2 class="font-extrabold">Все абонементы</h2>
@@ -133,8 +133,8 @@
           {% for item in subscriptions %}
           <tr>
             <td>{{ item.child }}</td>
-            <td>{{ item.tariff|default:"Индивидуальный" }}{% if not item.is_active %}
-              <small class="block text-red-500">Отменён</small>
+            <td>{{ item.tariff|default:"Индивидуальный" }}{% if item.cancelled_at %}
+              <small class="block text-red-500">Отменён</small>{% elif not item.is_active %}<small class="block text-slate-500">Завершён</small>
               {% endif %}
             </td>
             <td>{{ item.start_date|date:"d.m" }}–{{ item.end_date|date:"d.m.Y" }}</td>
@@ -185,13 +185,13 @@
     </div>
   </form>
 </section>
-<section id="tariff-modal" class="modal {% if editing_tariff %}open{% endif %}">
+<section id="tariff-modal" class="modal {% if editing_tariff or tariff_form.errors or request.GET.new_tariff %}open{% endif %}">
   <form method="post">
     {% csrf_token %}
     <input type="hidden" name="action" value="save_tariff">
     <div class="modal-head">
       <b>
-        {% if editing_tariff %}Изменить тариф{% else %}Новый тариф{% endif %}
+        {% if editing_tariff or tariff_form.errors or request.GET.new_tariff %}Изменить тариф{% else %}Новый тариф{% endif %}
       </b>
       <button type="button" data-close>
         <i data-lucide="x">
@@ -210,7 +210,7 @@
     </div>
   </form>
 </section>
-<section id="subscription-modal" class="modal {% if editing_subscription %}open{% endif %}">
+<section id="subscription-modal" class="modal {% if editing_subscription or subscription_form.errors or request.GET.new_subscription %}open{% endif %}">
   <form method="post">
     {% csrf_token %}
     <input type="hidden" name="action" value="save_subscription">
@@ -227,14 +227,21 @@
       </button>
     </div>
     <div class="modal-body grid max-h-[65vh] gap-4 overflow-y-auto sm:grid-cols-2">
-      {% for field in subscription_form %}
-      <label>
-        <span class="label">{{ field.label }}</span>{{ field }}</label>
-      {% endfor %}
+      {{ subscription_form.non_field_errors }}
+      {% for field in subscription_form %}{% if field.name != 'end_date' and field.name != 'sessions_total' and field.name != 'price' and field.name != 'manual_override' %}
+      <label><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>
+      {% endif %}{% endfor %}
+      <details class="sm:col-span-2 border rounded-xl p-3" {% if subscription_form.manual_override.value or subscription_form.errors %}open{% endif %}>
+        <summary class="cursor-pointer font-semibold">Изменить вручную</summary>
+        <label class="block my-3">{{ subscription_form.manual_override }} {{ subscription_form.manual_override.label }}</label>
+        <div class="grid gap-3">{% for field in subscription_form %}{% if field.name == 'end_date' or field.name == 'sessions_total' or field.name == 'price' %}<label><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endif %}{% endfor %}</div>
+      </details>
+      <output id="subscription-preview" class="sm:col-span-2 rounded-xl bg-emerald-50 p-3 font-semibold" aria-live="polite"></output>
+      <p class="sm:col-span-2 text-sm text-slate-500">По тарифу срок, занятия и цена рассчитываются автоматически. Сначала применяется индивидуальная скидка, затем процент акции.</p>
     </div>
     <div class="modal-foot">
       {% if editing_subscription %}
-      <button name="action" value="cancel_subscription" class="btn btn-soft text-red-600">Отменить абонемент</button>
+      <button name="action" value="cancel_subscription" formnovalidate onclick="return confirm('Отменить абонемент и его начисление? История оплат сохранится.')" class="btn btn-soft text-red-600">Отменить абонемент</button>
       {% endif %}
       <button class="btn btn-primary">Сохранить</button>
     </div>
@@ -242,7 +249,43 @@
 </section>
 {% endblock %}
 {% block scripts %}
-{% if editing_tariff or editing_subscription %}
+{{ tariff_preview|json_script:"tariff-preview-data" }}
+{{ child_discounts|json_script:"child-discount-data" }}
+<script>
+(() => {
+  const tariffs = JSON.parse(document.getElementById('tariff-preview-data').textContent) || [];
+  const discounts = JSON.parse(document.getElementById('child-discount-data').textContent) || [];
+  const field = name => document.getElementById('id_subscription-' + name);
+  const output = document.getElementById('subscription-preview');
+  const existing = {% if editing_subscription %}true{% else %}false{% endif %};
+  const snapshot = Object.fromEntries(['child','tariff','start_date','end_date','promo_percent','price','sessions_total'].map(name => [name, field(name).value]));
+  const money = new Intl.NumberFormat('ru-RU', {style:'currency', currency:'RUB'});
+  function show() {
+    output.textContent = field('price').value ? `${field('sessions_total').value} занятий · до ${field('end_date').value} · ${money.format(Number(field('price').value.replace(',', '.')))}` : 'Выберите спортсмена и тариф';
+  }
+  function calculate(event) {
+    const tariff = tariffs.find(item => String(item.id) === field('tariff').value);
+    if (tariff && !field('manual_override').checked) {
+      const discount = discounts.find(item => String(item.id) === field('child').value)?.discount_percent || 0;
+      const promo = Math.min(100, Math.max(0, Number(field('promo_percent').value) || 0));
+      const reprice = !existing || ['child','tariff','promo_percent'].some(name => field(name).value !== snapshot[name]);
+      field('sessions_total').value = reprice ? tariff.sessions_total : snapshot.sessions_total;
+      field('price').value = reprice ? (Number(tariff.price) * (100 - Math.min(100, discount)) / 100 * (100 - promo) / 100).toFixed(2) : snapshot.price;
+      const start = new Date(field('start_date').value + 'T00:00:00Z');
+      if (!Number.isNaN(start.getTime())) {
+        start.setUTCDate(start.getUTCDate() + tariff.duration_days);
+        field('end_date').value = reprice || field('start_date').value !== snapshot.start_date ? start.toISOString().slice(0,10) : snapshot.end_date;
+      }
+    }
+    show();
+  }
+  ['child','tariff','start_date','promo_percent','manual_override'].forEach(name => field(name).addEventListener('change', calculate));
+  ['price','sessions_total','end_date'].forEach(name => field(name).addEventListener('input', show));
+  show();
+})();
+</script>
+
+{% if editing_tariff or tariff_form.errors or request.GET.new_tariff or editing_subscription or subscription_form.errors or request.GET.new_subscription %}
 <script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>
 {% endif %}
 {% endblock %}

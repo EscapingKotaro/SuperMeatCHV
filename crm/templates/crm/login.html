@@ -10,7 +10,7 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-    <link rel="icon" type="image/png" href="{% static 'crm/ico.png' %}">
+    <link rel="icon" type="image/svg+xml" href="{% static 'crm/logo.svg' %}">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -207,6 +207,10 @@
 
 
 
+                    <div class="flex items-center justify-between gap-3">
+                        <label class="flex items-center gap-2"><input type="checkbox" name="remember_me"> Запомнить меня</label>
+                        <button type="button" class="btn btn-soft" id="show-password" aria-pressed="false" aria-label="Показать пароль"><i data-lucide="eye"></i></button>
+                    </div>
                     <button
                         class="btn btn-primary mt-2 w-full py-3"
                         type="submit"
@@ -232,6 +236,13 @@
 
     <script>
         lucide.createIcons();
+        document.getElementById('show-password').addEventListener('click', function () {
+            const input = document.querySelector('[name="password"]');
+            const show = input.type === 'password';
+            input.type = show ? 'text' : 'password';
+            this.setAttribute('aria-pressed', String(show));
+            this.setAttribute('aria-label', show ? 'Скрыть пароль' : 'Показать пароль');
+        });
     </script>
 
 </body>

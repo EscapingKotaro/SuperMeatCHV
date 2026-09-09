@@ -2,9 +2,9 @@
 
 {% block actions %}
 <div class="flex gap-2">
-    <a href="{% url 'child_edit' child.id %}" class="btn btn-soft">
+    <button data-modal="child-edit-modal" class="btn btn-soft">
         <i data-lucide="edit-3"></i>Редактировать
-    </a>
+    </button>
     <a href="{% url 'add_subscription' child.id %}" class="btn btn-primary">
         <i data-lucide="plus"></i>Добавить абонемент
     </a>
@@ -249,10 +249,10 @@
                         <b class="text-sm">{{ sub.price }} ₽</b>
                     </div>
                     <div class="flex items-center gap-3 text-[10px] text-slate-500">
-                        <span>{{ sub.sessions_total }} занятий</span>
+                        <span>{{ sub.sessions_total }} занятий{% if sub.cancelled_at %} · Отменён{% endif %} · Индивидуальная скидка {{ sub.discount_percent }}%</span>
                         {% if sub.promo %}
                         <span class="text-[#FF5C35] font-bold">
-                            {{ sub.promo }}
+                            {{ sub.promo }} · {{ sub.promo_percent }}%
                             {% if sub.promo_end_date %}
                                 · до {{ sub.promo_end_date|date:"d.m.Y" }}
                             {% endif %}
@@ -321,55 +321,18 @@
 <div class="card p-5">
     <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
         <i data-lucide="calendar-check" class="h-4 w-4 text-slate-400"></i>
-        Посещения за 6 месяцев
+        Посещения за 3 месяца
     </h3>
 
-    <!-- Сетка как в GitHub -->
-    <div class="overflow-x-auto pb-2">
-        <div class="flex gap-[2px] min-w-fit">
-            <!-- Подписи дней недели (выровнены по строкам) -->
-            <div class="flex flex-col gap-[2px] mr-1.5 pt-0">
-                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Пн</div>
-                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Вт</div>
-                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Ср</div>
-                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Чт</div>
-                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Пт</div>
-                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Сб</div>
-                <div class="h-2.5 leading-[10px] text-[9px] text-slate-400 font-bold">Вс</div>
-            </div>
-
-            <!-- Столбцы недель -->
-            {% for week in weeks %}
-            <div class="flex flex-col gap-[2px]">
-                {% for day in week.days %}
-                    {% if day %}
-                        <div
-                            class="h-2.5 w-2.5 rounded-[2px] cursor-pointer transition-transform hover:scale-[2] hover:z-10
-                                {% if day.is_future %}bg-slate-100
-                                {% elif day.status == 'present' %}bg-emerald-400
-                                {% elif day.status == 'absent' %}bg-red-400
-                                {% elif day.status == 'frozen' %}bg-blue-400
-                                {% elif day.status == 'vacation' %}bg-amber-400
-                                {% elif day.status == 'excused' %}bg-yellow-400
-                                {% else %}bg-slate-200{% endif %}"
-                            title="{{ day.date|date:'d.m.Y' }}{% if day.status_label %}: {{ day.status_label }}{% endif %}"
-                        ></div>
-                    {% else %}
-                        <div class="h-2.5 w-2.5"></div>
-                    {% endif %}
-                {% endfor %}
-
-                <!-- Подпись даты под каждым 5-м столбцом -->
-                {% if week.show_label %}
-                <div class="text-[8px] text-slate-400 font-medium mt-0.5 text-center whitespace-nowrap">
-                    {{ week.week_start|date:"d.m" }}
-                </div>
-                {% else %}
-                <div class="h-3"></div>
-                {% endif %}
-            </div>
-            {% endfor %}
-        </div>
+    <div class="overflow-x-auto">
+        <table class="w-full text-center text-sm" aria-label="Посещения по неделям">
+            <thead><tr><th>Неделя</th><th>Пн</th><th>Вт</th><th>Ср</th><th>Чт</th><th>Пт</th><th>Сб</th><th>Вс</th></tr></thead>
+            <tbody>{% for week in weeks %}<tr><th class="py-1 font-normal">{{ week.week_start|date:"d.m" }}</th>
+                {% for day in week.days %}<td class="p-1">{% if day %}<span class="flex h-7 w-7 items-center justify-center rounded
+                {% if day.status == 'present' %}bg-emerald-100 text-emerald-800{% elif day.status == 'absent' %}bg-red-100 text-red-800{% elif day.status == 'frozen' %}bg-blue-100 text-blue-800{% elif day.status == 'vacation' %}bg-amber-100 text-amber-800{% elif day.status == 'excused' %}bg-yellow-100 text-yellow-800{% else %}bg-slate-100{% endif %}"
+                title="{{ day.date|date:'d.m.Y' }}: {{ day.status_label|default:'Нет отметки' }}">{% if day.status == 'present' %}+{% elif day.status == 'absent' %}×{% elif day.status == 'frozen' %}❄{% elif day.status == 'vacation' %}О{% elif day.status == 'excused' %}У{% else %}·{% endif %}</span>{% endif %}</td>{% endfor %}
+            </tr>{% endfor %}</tbody>
+        </table>
     </div>
 
     <!-- Статистика за период -->
@@ -576,3 +539,14 @@
     </div>
 </div>
 {% endblock %}
+
+{% block modals %}
+<section id="child-edit-modal" class="modal {% if editing_child_inline %}open{% endif %}">
+<form method="post" enctype="multipart/form-data" action="{% url 'child_edit' child.pk %}">
+{% csrf_token %}<input type="hidden" name="inline" value="1">
+<div class="modal-head"><b>Данные спортсмена</b><button type="button" data-close aria-label="Закрыть">×</button></div>
+<div class="modal-body grid gap-4 sm:grid-cols-2 max-h-[70vh] overflow-y-auto">{{ child_form.non_field_errors }}{% for field in child_form %}<label><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}</div>
+<div class="modal-foot"><button type="button" data-close class="btn btn-soft">Отмена</button><button class="btn btn-primary">Сохранить</button></div>
+</form></section>
+{% endblock %}
+{% block scripts %}{% if editing_child_inline %}<script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>{% endif %}{% endblock %}

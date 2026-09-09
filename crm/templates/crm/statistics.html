@@ -2,15 +2,7 @@
 
 
 {% block actions %}
-<form method="get" class="flex items-center gap-2">
-    <input
-        type="month"
-        name="month"
-        value="{{ month_start|date:'Y-m' }}"
-        class="field text-sm"
-        onchange="this.form.submit()"
-    >
-</form>
+<nav class="flex flex-wrap items-center gap-2" aria-label="Период статистики"><a class="btn btn-soft" href="?month={{ previous_month }}">← Предыдущий</a><a class="btn btn-soft" href="{% url 'statistics' %}">Текущий</a><b>{{ month_start|date:"F Y" }}</b><a class="btn btn-soft" href="?month={{ next_month }}">Следующий →</a></nav>
 {% endblock %}
 
 
@@ -108,71 +100,14 @@
 <!-- =========================
      ЦЕЛЬ И ПРОГНОЗ
 ========================== -->
-<div class="mb-6 grid grid-cols-1 gap-3 lg:grid-cols-2">
-
-    <!-- Цель -->
-    <div class="card p-5">
-
-        <div class="mb-2 flex items-center justify-between">
-
-            <div class="text-[10px] font-bold uppercase text-slate-400">
-                Цель по выручке
-            </div>
-
-            {% if target %}
-                <b class="text-lg">
-                    {{ target.amount|floatformat:0 }} ₽
-                </b>
-            {% else %}
-                <span class="text-xs text-slate-400">
-                    не установлена
-                </span>
-            {% endif %}
-
-        </div>
-
-
-        {% if target %}
-
-            <div class="h-3 overflow-hidden rounded-full bg-slate-100">
-                <div
-                    class="h-full rounded-full bg-[#F62E2E]"
-                    style="width: {{ target_percent }}%"
-                ></div>
-            </div>
-
-            <div class="mt-2 text-xs text-slate-500">
-                Выполнено
-                {{ revenue_month|floatformat:0 }} ₽
-                из
-                {{ target.amount|floatformat:0 }} ₽
-            </div>
-
-        {% endif %}
-
-    </div>
-
-
-    <!-- Прогноз -->
-    <div class="card p-5">
-
-        <div class="mb-2 text-[10px] font-bold uppercase text-slate-400">
-            Прогноз выручки за месяц
-        </div>
-
-        <b class="text-2xl font-extrabold text-emerald-600">
-            {{ potential|floatformat:0 }} ₽
-        </b>
-
-        <div class="mt-1 text-xs text-slate-500">
-            Факт {{ revenue_month|floatformat:0 }} ₽
-            + ожидаемые продления {{ expected|floatformat:0 }} ₽
-        </div>
-
-    </div>
-
-</div>
-
+<section class="card p-5 mb-6">
+    <div class="flex flex-wrap justify-between gap-3 mb-4"><b>Факт {{ revenue_month|floatformat:0 }} ₽</b><span>Прогноз {{ potential|floatformat:0 }} ₽</span><span>Цель {% if target %}{{ target.amount|floatformat:0 }} ₽{% else %}не установлена{% endif %}</span></div>
+    <div class="relative h-5 bg-slate-100 rounded" aria-label="Факт, прогноз и цель выручки">
+        <div class="absolute h-full bg-emerald-200 rounded" style="width:{% widthratio potential bar_scale 100 %}%"></div>
+        <div class="absolute h-full bg-emerald-600 rounded" style="width:{% widthratio revenue_month bar_scale 100 %}%"></div>
+        {% if target %}<span class="absolute h-7 -top-1 border-l-2 border-red-600" style="left:calc({% widthratio target.amount bar_scale 100 %}% - 2px)" title="Цель"></span>{% endif %}
+    </div><p class="mt-3 text-sm">Тёмный — факт · Светлый — прогноз с продлениями · Красная линия — цель</p>
+</section>
 <div class="mb-6 grid gap-3 md:grid-cols-3">
 
     {% if is_senior %}

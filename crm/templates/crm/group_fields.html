@@ -1,0 +1,19 @@
+<form method="post" id="group-form">
+{% csrf_token %}{{ group_form.non_field_errors }}
+<div class="grid gap-4 sm:grid-cols-2">{% for field in group_form %}<label><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}</div>
+<h3 class="font-bold my-4">Расписание</h3>
+{{ slot_formset.management_form }}{{ slot_formset.non_form_errors }}
+<div id="slots-container" class="space-y-3">{% for slot in slot_formset %}<div class="slot-form grid grid-cols-2 gap-2 border rounded p-3">{{ slot.id }}{{ slot.non_field_errors }}{% for field in slot.visible_fields %}<label><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}</div>{% endfor %}</div>
+<template id="empty-slot-template"><div class="slot-form grid grid-cols-2 gap-2 border rounded p-3">{% for field in slot_formset.empty_form.visible_fields %}<label><span class="label">{{ field.label }}</span>{{ field }}</label>{% endfor %}</div></template>
+<div class="flex flex-wrap gap-3 mt-4"><button type="button" class="btn btn-soft" id="add-slot">Добавить занятие</button><a class="btn btn-soft" href="{% url 'group_list' %}">Отмена</a><button class="btn btn-primary">Сохранить</button></div>
+</form>
+<script>
+(() => {
+const total = document.querySelector('#group-form [name="{{ slot_formset.prefix }}-TOTAL_FORMS"]');
+document.getElementById('add-slot').addEventListener('click', () => {
+  const template = document.getElementById('empty-slot-template').innerHTML.replaceAll('__prefix__', total.value);
+  document.getElementById('slots-container').insertAdjacentHTML('beforeend', template);
+  total.value = Number(total.value) + 1;
+});
+})();
+</script>

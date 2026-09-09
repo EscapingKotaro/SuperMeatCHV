@@ -12,13 +12,13 @@
     <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
 
     <!-- Favicon -->
-    <link rel="icon" type="image/png" href="{% static 'crm/ico.png' %}">
+    <link rel="icon" type="image/svg+xml" href="{% static 'crm/logo.svg' %}">
 
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
-    <link rel="stylesheet" href="{% static 'crm/app.css' %}?v=2">
+    <link rel="stylesheet" href="{% static 'crm/app.css' %}?v=3">
 </head>
 
 <body class="bg-[#F6F7F9] text-[#17202A] antialiased">
@@ -31,7 +31,7 @@
 
             <!-- Логотип -->
             <a href="{% url 'attendance' %}" class="mr-2 flex shrink-0 items-center gap-2.5">
-                <img src="{% static 'crm/ico.png' %}" alt="Спартак" class="h-9 w-9" aria-hidden="true">
+                <img src="{% static 'crm/logo.svg' %}" alt="Спартак" class="h-9 w-9" aria-hidden="true">
                 <span class="hidden text-sm font-extrabold leading-tight tracking-tight sm:block">
                     Гимнастический клуб<br>
                     <span class="text-[#F62E2E]">"Спартак"</span>
@@ -77,6 +77,8 @@
             <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
         </button>
     </div>
+
+    <a class="nav-pill {% if page == 'camps' %}active{% endif %}" href="{% url 'camps' %}"><i data-lucide="tent"></i> Лагеря и сборы</a>
 
     <a class="nav-pill {% if page == 'competitions' %}active{% endif %}" href="{% url 'competitions' %}">
         <i data-lucide="trophy"></i> Соревнования
@@ -195,7 +197,7 @@
         <i data-lucide="trending-up" class="h-4 w-4"></i> Прогноз выручки
     </a>
     <a href="{% url 'payments' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'payments' %}bg-slate-100 font-semibold{% endif %}">
-        <i data-lucide="wallet-cards" class="h-4 w-4"></i> Продления
+        <i data-lucide="wallet-cards" class="h-4 w-4"></i> Абонементы и оплаты
     </a>
     <a href="{% url 'expenses' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'expenses' %}bg-slate-100 font-semibold{% endif %}">
         <i data-lucide="receipt-text" class="h-4 w-4"></i> Расходы
@@ -236,7 +238,7 @@
     
     {% block modals %}{% endblock %}
 
-    <script src="{% static 'crm/app.js' %}?v=2"></script>
+    <script src="{% static 'crm/app.js' %}?v=3"></script>
 
     <!-- УНИВЕРСАЛЬНЫЙ СКРИПТ ДЛЯ ВСЕХ ВЫПАДАЮЩИХ МЕНЮ -->
     <script>

@@ -26,6 +26,10 @@
 
 
 {% block content %}
+{% if selected %}<section id="documents" class="card mb-5 p-5"><details {% if document_form.errors %}open{% endif %}><summary class="cursor-pointer font-bold">Грамоты и документы ({{ documents|length }})</summary>
+<ul class="my-4 space-y-2">{% for document in documents %}<li><a class="text-blue-700 underline" href="{% url 'competition_document_download' document.pk %}">{{ document.title }}</a> · {{ document.child|default:"Общий документ" }}</li>{% empty %}<li>Документов пока нет</li>{% endfor %}</ul>
+<form method="post" enctype="multipart/form-data" class="grid gap-3 sm:grid-cols-2">{% csrf_token %}<input type="hidden" name="action" value="upload_document"><input type="hidden" name="competition_id" value="{{ selected.pk }}">{{ document_form.non_field_errors }}{% for field in document_form %}<label><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}<button class="btn btn-primary">Прикрепить</button></form></details></section>{% endif %}
+
 
 <section class="card mb-4 p-4">
 

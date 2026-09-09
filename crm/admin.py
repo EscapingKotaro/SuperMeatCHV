@@ -63,9 +63,10 @@ admin.site.register(LogEntry, LogEntryAdmin)
 
 # ---------- Дети ----------
 class SubscriptionInline(admin.TabularInline):
+    readonly_fields = ("cancelled_at",)
     model = Subscription
     extra = 0
-    fields = ("start_date", "end_date", "sessions_total", "price", "promo", "promo_end_date", "is_active")
+    fields = ("start_date", "end_date", "sessions_total", "price", "promo", "promo_percent", "promo_end_date", "is_active", "cancelled_at")
 
 class PaymentInline(admin.TabularInline):
     model = Payment
@@ -301,6 +302,7 @@ class AttendanceAdmin(admin.ModelAdmin):
 
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
+    readonly_fields = ("cancelled_at",)
     list_display = ("child", "tariff", "start_date", "end_date", "sessions_total", "price", "is_active")
     list_filter = ("is_active", "tariff", "start_date", "end_date")
     search_fields = ("child__last_name", "child__first_name")
@@ -550,3 +552,9 @@ class NotificationAdmin(admin.ModelAdmin):
     search_fields = ("recipient__username", "message", "task__title")
     readonly_fields = ("created_at",)
     ordering = ("-created_at",)
+
+@admin.register(CompetitionDocument)
+class CompetitionDocumentAdmin(admin.ModelAdmin):
+    list_display = ("title", "competition", "child", "created_at")
+    list_filter = ("competition",)
+    search_fields = ("title",)

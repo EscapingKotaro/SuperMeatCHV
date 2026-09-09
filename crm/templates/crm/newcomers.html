@@ -11,7 +11,7 @@
             <thead>
                 <tr>
                     <th>Новичок</th>
-                    <th>Пробное</th>
+                    <th>Дата заявки</th><th>Возраст</th><th>Тренер / группа</th><th>Пробное</th>
                     <th class="text-center">Был</th>
                     <th class="text-center">Оплатил</th>
                     <th class="text-center">Отмена</th>
@@ -26,12 +26,13 @@
                         <b>{{ item.full_name }}</b>
                         <small class="block text-slate-500">{{ item.phone }} · {{ item.source }}</small>
                     </td>
+                    <td>{{ item.application_date|date:"d.m.Y" }}</td><td>{{ item.age_display }}</td><td>{{ item.trainer|default:"—" }}<small class="block">{{ item.group|default:"—" }}</small></td>
                     <td>{{ item.trial_at|date:"d.m.Y H:i"|default:"Не назначено" }}</td>
                     <td class="text-center">
                         {% if item.attended %}✓{% else %}—{% endif %}
                     </td>
                     <td class="text-center">
-                        {% if item.paid %}✓{% else %}—{% endif %}
+                        {% if item.has_paid %}✓{% else %}—{% endif %}
                     </td>
                     <td class="text-center">
                         {% if item.lesson_cancelled %}✓{% else %}—{% endif %}
@@ -55,7 +56,7 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="7" class="py-12 text-center text-slate-500">Новичков пока нет</td>
+                    <td colspan="10" class="py-12 text-center text-slate-500">Новичков пока нет</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -64,7 +65,7 @@
 </section>
 {% endblock %}
 {% block modals %}
-<section id="newcomer-modal" class="modal {% if editing or request.GET.create == "1" %}open{% endif %}">
+<section id="newcomer-modal" class="modal {% if editing or form.errors or request.GET.create == "1" %}open{% endif %}">
     <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="save">
@@ -82,7 +83,7 @@
         <div class="modal-body grid max-h-[70vh] gap-4 overflow-y-auto sm:grid-cols-2">
             {% for field in form %}
             <label class="{% if field.name == 'comment' %}sm:col-span-2{% endif %}">
-                <span class="label">{{ field.label }}</span>{{ field }}</label>
+                <span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>
             {% endfor %}
         </div>
         <div class="modal-foot">
@@ -93,7 +94,7 @@
 </section>
 {% endblock %}
 {% block scripts %}
-{% if editing or request.GET.create == "1" %}
+{% if editing or form.errors or request.GET.create == "1" %}
 <script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>
 {% endif %}
 {% endblock %}

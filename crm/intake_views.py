@@ -1,3 +1,4 @@
+from django.contrib.auth.decorators import login_required
 from django.contrib import messages
 from django.shortcuts import get_object_or_404, redirect
 
@@ -43,6 +44,7 @@ def _start_clean_create(request):
     request.GET = query
 
 
+@login_required
 def applications_page(request):
     if (
         request.method == "POST"
@@ -55,6 +57,7 @@ def applications_page(request):
     return views.applications_page(request)
 
 
+@login_required
 def newcomers_page(request):
     action = request.POST.get("action", "save")
 

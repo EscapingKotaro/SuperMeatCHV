@@ -1,7 +1,9 @@
 from datetime import timedelta
+from decimal import Decimal
 
 from django.forms import inlineformset_factory
 from django import forms
+from django.db import models
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordChangeForm, UserCreationForm
 
@@ -330,11 +332,13 @@ class TariffForm(StyledFormMixin, forms.ModelForm):
 
 
 class SubscriptionForm(StyledFormMixin, forms.ModelForm):
+    manual_override = forms.BooleanField(label="Изменить вручную (итоговая цена после скидок)", required=False)
+
     class Meta:
         model = Subscription
         fields = (
             "child", "tariff", "start_date", "end_date", "sessions_total",
-            "price", "promo", "promo_end_date", "is_active",
+            "price", "promo", "promo_percent", "promo_end_date", "is_active",
         )
         widgets = {
             "start_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
@@ -347,7 +351,14 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
         self.fields["start_date"].input_formats = ["%Y-%m-%d"]
         self.fields["end_date"].input_formats = ["%Y-%m-%d"]
         self.fields["promo_end_date"].input_formats = ["%Y-%m-%d"]
-        self.fields["tariff"].queryset = Tariff.objects.filter(is_active=True)
+        self.fields["tariff"].queryset = Tariff.objects.filter(
+            models.Q(is_active=True) | models.Q(pk=self.instance.tariff_id)
+        )
+        self.fields["promo_percent"].required = False
+        self.fields["manual_override"].initial = False
+        if self.instance.pk:
+            self.fields["child"].disabled = True
+
         self.fields["end_date"].required = False
         self.fields["sessions_total"].required = False
         self.fields["price"].required = False
@@ -356,11 +367,27 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
     def clean(self):
         cleaned = super().clean()
         tariff = cleaned.get("tariff")
-        if tariff:
-            cleaned["sessions_total"] = tariff.sessions_total
-            cleaned["price"] = tariff.price
-            if cleaned.get("start_date") and not cleaned.get("end_date"):
-                cleaned["end_date"] = cleaned["start_date"] + timedelta(days=tariff.duration_days)
+        percent = cleaned.get("promo_percent") or 0
+        cleaned["promo_percent"] = percent
+        child = cleaned.get("child")
+        if not cleaned.get("manual_override") and tariff:
+            # Existing snapshot stays unchanged unless its pricing inputs change.
+            reprice = not self.instance.pk or any(key in self.changed_data for key in ("tariff", "child", "promo_percent"))
+            cleaned["sessions_total"] = tariff.sessions_total if reprice else self.instance.sessions_total
+            individual = min(100, child.discount_percent) if child else 0
+            self.instance.discount_percent = individual if reprice else self.instance.discount_percent
+            cleaned["price"] = (tariff.price * (100 - individual) / 100 * (100 - percent) / 100).quantize(Decimal("0.01")) if reprice else self.instance.price
+            if cleaned.get("start_date"):
+                cleaned["end_date"] = cleaned["start_date"] + timedelta(days=tariff.duration_days) if reprice or "start_date" in self.changed_data else self.instance.end_date
+        for key in ("sessions_total", "price", "end_date"):
+            if cleaned.get(key) is None:
+                self.add_error(key, "Выберите тариф или укажите значение вручную")
+        if cleaned.get("sessions_total") is not None and cleaned["sessions_total"] < 1:
+            self.add_error("sessions_total", "Нужно хотя бы одно занятие")
+        if cleaned.get("price") is not None and cleaned["price"] < 0:
+            self.add_error("price", "Стоимость не может быть отрицательной")
+        if self.instance.cancelled_at and cleaned.get("is_active"):
+            self.add_error("is_active", "Отменённый абонемент нельзя восстановить: создайте новый")
         if cleaned.get("start_date") and cleaned.get("end_date") and cleaned["end_date"] < cleaned["start_date"]:
             self.add_error("end_date", "Дата окончания не может быть раньше начала")
 
@@ -412,9 +439,12 @@ class LeadForm(StyledFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["birth_date"].input_formats = ["%Y-%m-%d"]
         self.fields["trial_at"].input_formats = ["%Y-%m-%dT%H:%M"]
+        if self.instance.pk and self.instance.newcomers.exists():
+            for name in ("trial_at", "trainer", "group", "comment"):
+                self.initial[name] = getattr(self.instance.current_trial, name)
+                self.fields[name].disabled = True
+                self.fields[name].help_text = "Пробное изменяется в разделе «Новички»"
         self.apply_styles()
-
-
 
 
 class NewcomerForm(StyledFormMixin, forms.ModelForm):
@@ -435,6 +465,16 @@ class NewcomerForm(StyledFormMixin, forms.ModelForm):
         self.fields["birth_date"].input_formats = ["%Y-%m-%d"]
         self.fields["trial_at"].input_formats = ["%Y-%m-%dT%H:%M"]
         self.apply_styles()
+
+    def clean(self):
+        cleaned = super().clean()
+        if self.instance.pk and self.instance.trial_at and "trial_at" in self.changed_data and not (cleaned.get("comment") or "").strip():
+            self.add_error("comment", "Укажите причину переноса пробного")
+        if cleaned.get("group"):
+            cleaned["trainer"] = cleaned["group"].trainer
+        if cleaned.get("attended") and cleaned.get("lesson_cancelled"):
+            self.add_error("lesson_cancelled", "Нельзя одновременно отметить приход и отмену")
+        return cleaned
 
 class TrainerForm(StyledFormMixin, forms.ModelForm):
     class Meta:
@@ -496,3 +536,49 @@ ScheduleSlotFormSet = inlineformset_factory(
         ),
     },
 )
+
+
+class CampEventForm(StyledFormMixin, forms.ModelForm):
+    children = forms.ModelMultipleChoiceField(
+        label="Участники", queryset=Child.objects.all(), required=False,
+        widget=forms.CheckboxSelectMultiple,
+    )
+
+    class Meta:
+        from .models import Camp
+        model = Camp
+        fields = ("name", "kind", "start_date", "end_date")
+        widgets = {key: forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}) for key in ("start_date", "end_date")}
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["start_date"].required = self.fields["end_date"].required = True
+        if self.instance.pk:
+            self.fields["children"].initial = self.instance.campstay_set.values_list("child_id", flat=True)
+        self.apply_styles()
+
+    def clean(self):
+        data = super().clean()
+        if data.get("start_date") and data.get("end_date") and data["end_date"] < data["start_date"]:
+            self.add_error("end_date", "Окончание не может быть раньше начала")
+        return data
+
+
+class CompetitionDocumentForm(StyledFormMixin, forms.ModelForm):
+    class Meta:
+        from .models import CompetitionDocument
+        model = CompetitionDocument
+        fields = ("title", "child", "file")
+
+    def __init__(self, *args, competition=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["child"].queryset = Child.objects.filter(competition_entries__competition=competition).distinct()
+        self.apply_styles()
+
+    def clean_file(self):
+        from django.core.validators import FileExtensionValidator
+        file = self.cleaned_data["file"]
+        FileExtensionValidator(["pdf", "png", "jpg", "jpeg", "docx", "xlsx"])(file)
+        if file.size > 20 * 1024 * 1024:
+            raise forms.ValidationError("Максимальный размер — 20 МБ")
+        return file

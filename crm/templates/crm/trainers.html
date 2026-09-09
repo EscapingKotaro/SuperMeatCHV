@@ -1,7 +1,7 @@
 {% extends "crm/base.html" %}
 
 {% block actions %}
-<a href="{% url 'trainer_create' %}" class="btn btn-primary">
+<a href="?create=1" class="btn btn-primary">
     <i data-lucide="user-plus"></i>Добавить тренера
 </a>
 {% endblock %}
@@ -38,7 +38,7 @@
             <span class="text-[10px] font-bold uppercase text-slate-400">Группы</span>
             <div class="flex flex-wrap gap-1 mt-1">
                 {% for group in trainer.groups.all %}
-                <a href="{% url 'group_edit' group.id %}" class="px-2 py-1 text-xs font-semibold bg-violet-50 text-violet-700 rounded-lg hover:bg-violet-100">
+                <a href="{% url 'group_list' %}#trainer-{{ trainer.pk }}" class="px-2 py-1 text-xs font-semibold bg-violet-50 text-violet-700 rounded-lg hover:bg-violet-100">
                     {{ group.name }}
                 </a>
                 {% empty %}
@@ -48,7 +48,7 @@
         </div>
 
         <div class="flex gap-2 pt-3 border-t border-slate-100">
-            <a href="{% url 'trainer_edit' trainer.id %}" class="flex-1 text-center py-2 text-xs font-bold text-slate-600 bg-slate-50 rounded-lg hover:bg-slate-100">
+            <a href="?edit={{ trainer.pk }}" class="flex-1 text-center py-2 text-xs font-bold text-slate-600 bg-slate-50 rounded-lg hover:bg-slate-100">
                 <i data-lucide="edit-3" class="inline h-3 w-3 mr-1"></i>Изменить
             </a>
             <a href="{% url 'trainer_delete' trainer.id %}" class="flex-1 text-center py-2 text-xs font-bold text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
@@ -64,3 +64,6 @@
     {% endfor %}
 </div>
 {% endblock %}
+
+{% block modals %}{% if form %}<section id="trainer-modal" class="modal open"><form method="post">{% csrf_token %}<div class="modal-head"><b>{{ form_title }}</b><a href="{% url 'trainer_list' %}" aria-label="Закрыть">×</a></div><div class="modal-body space-y-4">{{ form.non_field_errors }}{% for field in form %}<label class="block"><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}</div><div class="modal-foot"><a class="btn btn-soft" href="{% url 'trainer_list' %}">Отмена</a><button class="btn btn-primary">Сохранить</button></div></form></section>{% endif %}{% endblock %}
+{% block scripts %}{% if form %}<script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>{% endif %}{% endblock %}

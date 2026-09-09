@@ -329,7 +329,7 @@ class CrmWorkflowTests(TestCase):
         )
 
         
-    def test_opening_notifications_marks_them_read(self):
+    def test_notifications_are_read_only_after_explicit_action(self):
         notification = Notification.objects.create(
             recipient=self.admin,
             actor=self.boss,
@@ -340,6 +340,9 @@ class CrmWorkflowTests(TestCase):
         self.client.login(username="admin", password="TestPass123!")
         self.client.get(reverse("notifications"))
 
+        notification.refresh_from_db()
+        self.assertIsNone(notification.read_at)
+        self.client.post(reverse("notifications"), {"action": "mark_read"})
         notification.refresh_from_db()
         self.assertIsNotNone(notification.read_at)
 
@@ -1662,6 +1665,7 @@ class CrmWorkflowTests(TestCase):
         )
 
     def test_attendance_sessions_sort_uses_completed_sessions(self):
+        ScheduleSlot.objects.create(group=self.group, weekday=0, start_time=time(16))
         today = timezone.localdate()
         other = Child.objects.create(
             last_name="Петрова",
@@ -2802,6 +2806,7 @@ class CrmWorkflowTests(TestCase):
 
         Newcomer.objects.create(
             full_name="Пробник KPI",
+            child=self.child,
             trial_at=timezone.now(),
             trainer=self.trainer,
             group=self.group,

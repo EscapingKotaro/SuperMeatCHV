@@ -43,6 +43,12 @@ class AuditActionMiddleware:
         self.get_response = get_response
 
     def __call__(self, request):
+        if getattr(request, "user", None) and request.user.is_authenticated:
+            from .models import expire_trials
+            expire_trials()
+            from .context_processors import sync_subscription_notifications, sync_today_trials
+            sync_subscription_notifications(request.user)
+            sync_today_trials(request.user)
         response = self.get_response(request)
 
         if request.method not in self.mutating_methods:
