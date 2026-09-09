@@ -41,9 +41,11 @@
     </button>
 
     <!-- Добавить ребёнка -->
-    <a href="{% url 'child_create' %}" class="btn btn-primary text-xs">
+    {% if selected_group %}
+    <button type="button" data-modal="child-create-modal" class="btn btn-primary text-xs">
         <i data-lucide="user-plus"></i> Добавить
-    </a>
+    </button>
+    {% endif %}
 </div>
 {% endblock %}
 {% block content %}
@@ -522,3 +524,44 @@
 })();
 </script>
 {% endblock content %}
+{% block modals %}
+{% if selected_group %}
+<section id="child-create-modal" class="modal {% if creating_child %}open{% endif %}">
+    <form method="post" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="create_child">
+        <div class="modal-head">
+            <b>Новый спортсмен</b>
+            <button type="button" data-close aria-label="Закрыть">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="modal-body grid max-h-[70vh] gap-4 overflow-y-auto sm:grid-cols-2">
+            {{ child_form.non_field_errors }}
+            {% for field in child_form %}
+            <label class="{% if field.name == 'address' or field.name == 'note' or field.name == 'certificate_note' %}sm:col-span-2{% endif %}">
+                <span class="label">
+                    {{ field.label }}
+                    {% if field.field.required %}<span class="text-red-500">*</span>{% endif %}
+                </span>
+                {{ field }}
+                {{ field.errors }}
+            </label>
+            {% endfor %}
+        </div>
+        <div class="modal-foot">
+            <button type="button" data-close class="btn btn-soft">Отмена</button>
+            <button class="btn btn-primary">Добавить спортсмена</button>
+        </div>
+    </form>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if creating_child %}
+<script>
+document.querySelector('[data-modal-backdrop]')?.classList.remove('hidden');
+</script>
+{% endif %}
+{% endblock %}

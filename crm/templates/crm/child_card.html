@@ -5,7 +5,7 @@
     <button data-modal="child-edit-modal" class="btn btn-soft">
         <i data-lucide="edit-3"></i>Редактировать
     </button>
-    <a href="{% url 'add_subscription' child.id %}" class="btn btn-primary">
+    <a href="{% url 'payments' %}?child={{ child.id }}&new_subscription=1" class="btn btn-primary">
         <i data-lucide="plus"></i>Добавить абонемент
     </a>
 </div>
@@ -230,7 +230,7 @@
                 <h3 class="font-extrabold text-sm flex items-center gap-2">
                     <i data-lucide="ticket" class="h-4 w-4 text-slate-400"></i>Абонементы
                 </h3>
-                <a href="{% url 'add_subscription' child.id %}" class="text-xs font-bold text-[#FF5C35] hover:underline">
+                <a href="{% url 'payments' %}?child={{ child.id }}&new_subscription=1" class="text-xs font-bold text-[#FF5C35] hover:underline">
                     + Добавить
                 </a>
             </div>

@@ -201,6 +201,35 @@ def logout_page(request):
     logout(request)
     return redirect("login")
 
+def _child_create_form(data=None, files=None, *, group=None):
+    form = ChildForm(
+        data,
+        files,
+        initial={"group": group} if group else None,
+    )
+    form.fields["group"].queryset = Group.objects.filter(
+        is_active=True,
+    ).order_by("name")
+    form.fields.pop("status", None)
+    form.fields.pop("trial_from", None)
+    return form
+
+
+def _save_active_child(request, form):
+    child = form.save(commit=False)
+    child.status = Child.Status.ACTIVE
+    child.trial_from = None
+    child.save()
+    form.save_m2m()
+    log_action(
+        request,
+        "child.create",
+        child,
+        f"Добавлен спортсмен {child}",
+    )
+    return child
+
+
 def attendance_view(request):
     group_id = request.GET.get('group_id')
     ref_date_str = request.GET.get('ref_date')
@@ -226,6 +255,33 @@ def attendance_view(request):
 
     trainer = group.trainer if group else None
     today = timezone.localdate()
+
+    create_child_post = (
+        request.method == "POST"
+        and request.POST.get("action") == "create_child"
+    )
+    creating_child = (
+        create_child_post
+        or request.GET.get("create_child") == "1"
+    )
+    child_form = _child_create_form(
+        request.POST if create_child_post else None,
+        request.FILES if create_child_post else None,
+        group=group,
+    )
+
+    if create_child_post and child_form.is_valid():
+        child = _save_active_child(
+            request,
+            child_form,
+        )
+        messages.success(
+            request,
+            f"{child.last_name} {child.first_name} добавлен",
+        )
+        return redirect(
+            f"{reverse('attendance')}?group_id={child.group_id}"
+        )
 
     # 2. Опорная дата
     if ref_date_str:
@@ -256,6 +312,8 @@ def attendance_view(request):
                 week_data=[],
                 children_data=[],
                 ref_date=ref_date,
+                child_form=child_form,
+                creating_child=creating_child,
                 error="Нет расписания",
             ),
         )
@@ -427,6 +485,8 @@ def attendance_view(request):
         sort_by=sort_by,
         show_archived=show_archived,
         base_params=base_params,
+        child_form=child_form,
+        creating_child=creating_child,
     )
 
     return render(request, "crm/attendance.html", context)
@@ -3744,15 +3804,39 @@ def child_edit_view(request, child_id):
 
 @login_required
 def child_create_view(request):
-    if request.method == 'POST':
-        form = ChildForm(request.POST, request.FILES)
-        if form.is_valid():
-            child = form.save()
-            messages.success(request, f'Ребенок {child.last_name} {child.first_name} добавлен')
-            return redirect('child_card', child_id=child.id)
-    else:
-        form = ChildForm()
-    return render(request, 'crm/child_edit.html', {'form': form, 'page': 'child_create'})
+    if request.method != "POST":
+        group_id = request.GET.get("group_id")
+        target = f"{reverse('attendance')}?create_child=1"
+        if group_id:
+            target += f"&group_id={group_id}"
+        return redirect(target)
+
+    form = _child_create_form(
+        request.POST,
+        request.FILES,
+    )
+    if form.is_valid():
+        child = _save_active_child(
+            request,
+            form,
+        )
+        messages.success(
+            request,
+            f"Ребенок {child.last_name} {child.first_name} добавлен",
+        )
+        return redirect(
+            "child_card",
+            child_id=child.id,
+        )
+
+    return render(
+        request,
+        "crm/child_edit.html",
+        {
+            "form": form,
+            "page": "child_create",
+        },
+    )
 
 @login_required
 def child_delete_view(request, child_id):

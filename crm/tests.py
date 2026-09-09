@@ -47,6 +47,125 @@ class CrmWorkflowTests(TestCase):
         self.group = Group.objects.create(name="Тестовая группа", trainer=self.trainer)
         self.child = Child.objects.create(last_name="Иванова", first_name="Анна", birth_year=2015, group=self.group)
 
+    def test_attendance_creates_active_child_inline(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            f"{reverse('attendance')}?group_id={self.group.pk}",
+            {
+                "action": "create_child",
+                "last_name": "Петрова",
+                "first_name": "Ева",
+                "patronymic": "",
+                "birth_date": "",
+                "birth_year": "2016",
+                "address": "",
+                "parent_name": "",
+                "parent_phone": "",
+                "certificate_note": "",
+                "group": str(self.group.pk),
+                "discount_percent": "0",
+                "note": "",
+            },
+        )
+
+        child = Child.objects.get(
+            last_name="Петрова",
+            first_name="Ева",
+        )
+
+        self.assertEqual(child.group, self.group)
+        self.assertEqual(child.status, Child.Status.ACTIVE)
+        self.assertIsNone(child.trial_from)
+        self.assertRedirects(
+            response,
+            f"{reverse('attendance')}?group_id={self.group.pk}",
+        )
+
+    def test_attendance_uses_inline_child_create_modal(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "create_child": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'data-modal="child-create-modal"',
+        )
+        self.assertContains(
+            response,
+            'id="child-create-modal" class="modal open"',
+        )
+        self.assertNotContains(
+            response,
+            f'href="{reverse("child_create")}"',
+        )
+        self.assertNotContains(response, 'name="status"')
+        self.assertNotContains(response, 'name="trial_from"')
+
+    def test_legacy_child_create_get_redirects_to_attendance_modal(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("child_create"),
+            {
+                "group_id": self.group.pk,
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            (
+                f"{reverse('attendance')}"
+                f"?create_child=1&group_id={self.group.pk}"
+            ),
+        )
+
+    def test_child_card_subscription_links_open_payments_modal(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse(
+                "child_card",
+                args=[self.child.pk],
+            ),
+        )
+
+        expected = (
+            f"{reverse('payments')}?child={self.child.pk}"
+            "&new_subscription=1"
+        )
+        self.assertContains(
+            response,
+            expected,
+            count=2,
+        )
+        self.assertNotContains(
+            response,
+            reverse(
+                "add_subscription",
+                args=[self.child.pk],
+            ),
+        )
+
     def test_private_pages_require_login(self):
         response = self.client.get(reverse("expenses"))
         self.assertRedirects(response, f"{reverse('login')}?next={reverse('expenses')}")
