@@ -9,6 +9,9 @@ from django.db.models import Sum
 from django.utils import timezone
 
 
+TRIAL_EXPIRY_DAYS = 30
+
+
 def age_label(birth_date=None, birth_year=None, age_text="", today=None):
     """Общий возраст с русскими склонениями; свободный текст сохраняется."""
     today = today or timezone.localdate()
@@ -39,11 +42,20 @@ def expire_trials(today=None):
     """Идемпотентный обход всех групп. Платёж и уход блокируют одного ребёнка."""
     today = today or timezone.localdate()
     count = 0
-    candidates = Child.objects.filter(status=Child.Status.TRIAL, trial_from__lte=today - timedelta(days=14)).values_list("pk", flat=True)
+    candidates = Child.objects.filter(
+        status=Child.Status.TRIAL,
+        trial_from__lte=today - timedelta(days=TRIAL_EXPIRY_DAYS),
+    ).values_list("pk", flat=True)
     for pk in candidates.iterator():
         with transaction.atomic():
             child = Child.objects.select_for_update(of=("self",)).select_related("group__trainer").filter(pk=pk).first()
-            if not child or child.status != Child.Status.TRIAL or not child.trial_from or child.trial_from > today - timedelta(days=14) or child.payments.filter(amount__gt=0).exists():
+            if (
+                not child
+                or child.status != Child.Status.TRIAL
+                or not child.trial_from
+                or child.trial_from > today - timedelta(days=TRIAL_EXPIRY_DAYS)
+                or child.payments.filter(amount__gt=0).exists()
+            ):
                 continue
             child.mark_as_lost(on_date=today)
             AuditEvent.objects.create(action="trial.expired", object_type="Child", object_id=str(child.pk), description=f"Пробный период истёк без оплаты: {child}")
@@ -200,7 +212,7 @@ class SalaryAdjustment(models.Model):
 class Child(models.Model):
     class Status(models.TextChoices):
         ACTIVE   = "active",   "Активный"
-        TRIAL    = "trial",    "Пробное (2 недели)"
+        TRIAL    = "trial",    "Пробное (1 месяц)"
         ARCHIVED = "archived", "Архив"
         LOST     = "lost",     "Потерянный"
 
@@ -403,11 +415,11 @@ class Child(models.Model):
         return self.total_paid() - self.total_spent() - self.related_total("attendances", "charge_amount")
 
     def is_trial_expired(self):
-        """Проверяем, истёк ли пробный период (14 дней)"""
+        """Проверяем, истёк ли месяц после пробного без оплаты."""
         if self.status != self.Status.TRIAL or not self.trial_from:
             return False
         today = timezone.localdate()
-        return (today - self.trial_from).days >= 14
+        return (today - self.trial_from).days >= TRIAL_EXPIRY_DAYS
 
     def has_subscription_ending_soon(self):
         """Абонемент заканчивается в течение 7 дней"""
