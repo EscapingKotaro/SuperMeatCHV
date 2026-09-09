@@ -31,6 +31,7 @@ from .models import (
     Tariff,
     ScheduleSlot,
     Trainer,
+    expire_trials,
 )
 
 
@@ -3830,6 +3831,98 @@ class CrmWorkflowTests(TestCase):
             response,
             "Подтвердите приход спортсменов",
         )
+
+    def test_attendance_trial_modal_creates_child_and_newcomer_with_schedule(self):
+        self.client.login(username="admin", password="TestPass123!")
+        trial_date = timezone.localdate() + timedelta(days=2)
+
+        page = self.client.get(
+            reverse("attendance"),
+            {"group_id": self.group.pk},
+        )
+        self.assertContains(page, 'name="birth_date"')
+        self.assertContains(page, 'name="age"')
+        self.assertContains(page, 'name="trial_date"')
+        self.assertContains(page, 'name="trial_time"')
+        self.assertContains(page, 'name="comment"')
+        self.assertContains(page, "Без оплаты через 1 месяц")
+        self.assertContains(page, self.trainer.full_name)
+        self.assertContains(page, self.group.name)
+
+        response = self.client.post(
+            reverse("add_trial_child", args=[self.group.pk]),
+            {
+                "last_name": "Петрова",
+                "first_name": "Алиса",
+                "patronymic": "Игоревна",
+                "birth_date": "2017-04-12",
+                "age": "",
+                "parent_phone": "+79990000000",
+                "trial_date": trial_date.isoformat(),
+                "trial_time": "18:30",
+                "comment": "Первое пробное",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(
+            response.url,
+            f"{reverse('attendance')}?group_id={self.group.pk}",
+        )
+
+        child = Child.objects.get(
+            last_name="Петрова",
+            first_name="Алиса",
+        )
+        newcomer = Newcomer.objects.get(child=child)
+
+        self.assertEqual(child.status, Child.Status.TRIAL)
+        self.assertEqual(child.group, self.group)
+        self.assertEqual(child.birth_date, datetime(2017, 4, 12).date())
+        self.assertEqual(child.birth_year, 2017)
+        self.assertEqual(child.trial_from, trial_date)
+        self.assertEqual(child.parent_phone, "+79990000000")
+        self.assertEqual(child.note, "Первое пробное")
+
+        self.assertEqual(newcomer.group, self.group)
+        self.assertEqual(newcomer.trainer, self.trainer)
+        self.assertEqual(newcomer.phone, "+79990000000")
+        self.assertEqual(newcomer.comment, "Первое пробное")
+
+        local_trial = timezone.localtime(newcomer.trial_at)
+        self.assertEqual(local_trial.date(), trial_date)
+        self.assertEqual(
+            (local_trial.hour, local_trial.minute),
+            (18, 30),
+        )
+
+    def test_trial_expires_only_after_one_month_without_payment(self):
+        today = timezone.localdate()
+        trial = Child.objects.create(
+            last_name="Месячная",
+            first_name="Проба",
+            birth_year=2016,
+            group=self.group,
+            status=Child.Status.TRIAL,
+            trial_from=today - timedelta(days=29),
+        )
+
+        self.assertFalse(trial.is_trial_expired())
+        self.assertEqual(expire_trials(today=today), 0)
+
+        trial.refresh_from_db()
+        self.assertEqual(trial.status, Child.Status.TRIAL)
+
+        trial.trial_from = today - timedelta(days=30)
+        trial.save(update_fields=["trial_from"])
+
+        self.assertTrue(trial.is_trial_expired())
+        self.assertEqual(expire_trials(today=today), 1)
+
+        trial.refresh_from_db()
+        self.assertEqual(trial.status, Child.Status.LOST)
+        self.assertEqual(trial.departure_group, self.group)
+        self.assertEqual(trial.departure_trainer, self.trainer)
 
     def test_attendance_period_presets_use_real_class_dates(self):
         reference = timezone.localdate().replace(day=15)
