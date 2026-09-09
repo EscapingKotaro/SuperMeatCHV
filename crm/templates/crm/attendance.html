@@ -7,19 +7,19 @@
         <span class="text-[10px] text-slate-500 px-2 font-bold">Сорт:</span>
         
         <!-- Сортировка по имени (А-Я) -->
-        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=name{% if show_archived %}&show_archived=1{% endif %}" 
+        <a href="?group_id={{ selected_group.id }}&{{ filter_query }}&sort=name{% if show_archived %}&show_archived=1{% endif %}"
            class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'name' or not sort_by %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">
             А-Я
         </a>
         
         <!-- Сортировка по занятиям -->
-        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=sessions{% if show_archived %}&show_archived=1{% endif %}" 
+        <a href="?group_id={{ selected_group.id }}&{{ filter_query }}&sort=sessions{% if show_archived %}&show_archived=1{% endif %}"
            class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'sessions' %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">
             Пройдено
         </a>
         
         <!-- Сортировка по долгу -->
-        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort=debt{% if show_archived %}&show_archived=1{% endif %}" 
+        <a href="?group_id={{ selected_group.id }}&{{ filter_query }}&sort=debt{% if show_archived %}&show_archived=1{% endif %}"
            class="px-2 py-1 text-[10px] font-bold rounded {% if sort_by == 'debt' %}bg-white shadow-sm text-slate-900{% else %}text-slate-500 hover:text-slate-700{% endif %}">
             Долг
         </a>
@@ -27,11 +27,11 @@
 
     <!-- Переключатель Архива -->
     {% if show_archived %}
-        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort={{ sort_by }}" class="btn btn-soft text-xs bg-amber-100 text-amber-800 border-amber-200">
+        <a href="?group_id={{ selected_group.id }}&{{ filter_query }}&sort={{ sort_by }}" class="btn btn-soft text-xs bg-amber-100 text-amber-800 border-amber-200">
             <i data-lucide="eye"></i> Показывать активных
         </a>
     {% else %}
-        <a href="?group_id={{ selected_group.id }}&ref_date={{ ref_date|date:'Y-m-d' }}&sort={{ sort_by }}&show_archived=1" class="btn btn-soft text-xs">
+        <a href="?group_id={{ selected_group.id }}&{{ filter_query }}&sort={{ sort_by }}&show_archived=1" class="btn btn-soft text-xs">
             <i data-lucide="archive"></i> Архив
         </a>
     {% endif %}
@@ -53,34 +53,62 @@
 <section class="card mb-3 p-3">
     <div class="flex flex-wrap items-center gap-2">
         {% if selected_group %}
-            <select id="group-select" class="field max-w-64 font-bold text-sm" onchange="location.href='?group_id='+this.value+'&ref_date={{ ref_date|date:'Y-m-d' }}'+'&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}'">
+            <select id="group-select" class="field max-w-64 font-bold text-sm" onchange="location.href='?group_id='+this.value+'&{{ filter_query }}'+'&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}'">
                 {% for g in groups %}
                     <option value="{{ g.id }}" {% if g.id == selected_group.id %}selected{% endif %}>{{ g.name }}</option>
                 {% endfor %}
             </select>
 
-            <div class="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5">
-                <a data-attendance-prev aria-label="Предыдущее занятие" title="Alt + ←" href="?group_id={{ selected_group.id }}&ref_date={{ prev_ref }}&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}" class="grid h-9 w-9 place-items-center rounded-md hover:bg-white hover:shadow-sm transition">
+            <form method="get" class="flex flex-wrap items-center gap-1 rounded-lg bg-slate-100 p-0.5">
+                <input type="hidden" name="group_id" value="{{ selected_group.id }}">
+                <input type="hidden" name="sort" value="{{ sort_by }}">
+                {% if show_archived %}<input type="hidden" name="show_archived" value="1">{% endif %}
+
+                {% if period == 'window' %}
+                <a data-attendance-prev aria-label="Предыдущее занятие" title="Alt + ←" href="?group_id={{ selected_group.id }}&period=window&ref_date={{ prev_ref }}&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}" class="grid h-9 w-9 place-items-center rounded-md hover:bg-white hover:shadow-sm transition">
                     <i data-lucide="chevron-left" class="h-4 w-4"></i>
                 </a>
+                {% endif %}
 
-                <form method="get" class="flex items-center gap-1">
-                    <input type="hidden" name="group_id" value="{{ selected_group.id }}">
-                    <input type="hidden" name="sort" value="{{ sort_by }}">
-                    {% if show_archived %}<input type="hidden" name="show_archived" value="1">{% endif %}
-                    <input type="date" name="ref_date" value="{{ ref_date|date:'Y-m-d' }}"
+                <select name="period" aria-label="Период табеля"
+                        class="bg-transparent px-2 py-1 text-sm font-bold text-slate-700 outline-none"
+                        onchange="this.form.submit()">
+                    <option value="window" {% if period == 'window' %}selected{% endif %}>Окно</option>
+                    <option value="day" {% if period == 'day' %}selected{% endif %}>День</option>
+                    <option value="month" {% if period == 'month' %}selected{% endif %}>Месяц</option>
+                    <option value="quarter" {% if period == 'quarter' %}selected{% endif %}>3 месяца</option>
+                    <option value="year" {% if period == 'year' %}selected{% endif %}>Год</option>
+                    <option value="custom" {% if period == 'custom' %}selected{% endif %}>Период</option>
+                </select>
+
+                {% if period == 'custom' %}
+                    <input type="hidden" name="ref_date" value="{{ ref_date|date:'Y-m-d' }}">
+                    <input type="date" name="date_from" value="{{ date_from|date:'Y-m-d' }}" aria-label="Начало периода"
+                           class="bg-transparent text-sm font-semibold text-slate-700 outline-none px-1">
+                    <span class="text-slate-400">—</span>
+                    <input type="date" name="date_to" value="{{ date_to|date:'Y-m-d' }}" aria-label="Конец периода"
+                           class="bg-transparent text-sm font-semibold text-slate-700 outline-none px-1">
+                    <button class="btn btn-soft h-8 px-2 text-xs">Показать</button>
+                {% else %}
+                    <input type="date" name="ref_date" value="{{ ref_date|date:'Y-m-d' }}" aria-label="Опорная дата"
                            class="bg-transparent text-sm font-semibold text-slate-700 outline-none cursor-pointer hover:text-[#FF5C35] px-1"
                            onchange="this.form.submit()">
-                </form>
+                {% endif %}
 
-                <a data-attendance-next aria-label="Следующее занятие" title="Alt + →" href="?group_id={{ selected_group.id }}&ref_date={{ next_ref }}&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}" class="grid h-9 w-9 place-items-center rounded-md hover:bg-white hover:shadow-sm transition">
+                {% if period == 'window' %}
+                <a data-attendance-next aria-label="Следующее занятие" title="Alt + →" href="?group_id={{ selected_group.id }}&period=window&ref_date={{ next_ref }}&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}" class="grid h-9 w-9 place-items-center rounded-md hover:bg-white hover:shadow-sm transition">
                     <i data-lucide="chevron-right" class="h-4 w-4"></i>
                 </a>
-            </div>
+                {% endif %}
+            </form>
 
-            <a class="btn btn-soft" href="?group_id={{ selected_group.id }}&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}">Сегодня</a>
+            <a class="btn btn-soft" href="?group_id={{ selected_group.id }}&period=window&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}">Сегодня</a>
             <span class="text-xs text-slate-400">
-                {{ week_data|length }} занятий
+                {% if period == 'window' %}
+                    {{ week_data|length }} занятий
+                {% else %}
+                    {{ period_start|date:"d.m.Y" }}{% if period_start != period_end %} — {{ period_end|date:"d.m.Y" }}{% endif %} · {{ week_data|length }} занятий
+                {% endif %}
             </span>
 
         {% else %}
@@ -95,6 +123,11 @@
             <span class="badge bg-yellow-100 text-yellow-700 px-1.5 py-0.5" title="Пропуск по уважительной причине — сдвигает окончание абонемента">У Уважительная</span>
         </div>
     </div>
+    {% if error %}
+        <div class="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">{{ error }}</div>
+    {% elif selected_group and period != 'window' and not week_data %}
+        <div class="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">В выбранном периоде занятий нет.</div>
+    {% endif %}
 </section>
 <section class="card overflow-hidden">
     <div class="table-wrap">

@@ -190,6 +190,47 @@ def generate_class_dates(group, start_date, limit=60):
     return dates
 
 
+def class_dates_in_range(weekdays, start_date, end_date):
+    """Реальные дни занятий внутри выбранного периода."""
+    dates = []
+    current = start_date
+    while current <= end_date:
+        if current.weekday() in weekdays:
+            dates.append(current)
+        current += timedelta(days=1)
+    return dates
+
+
+def _parse_attendance_date(value, fallback):
+    try:
+        return datetime.strptime(value, "%Y-%m-%d").date() if value else fallback
+    except ValueError:
+        return fallback
+
+
+def _attendance_period_bounds(period, ref_date, date_from=None, date_to=None):
+    if period == "day":
+        return ref_date, ref_date
+    if period == "month":
+        return (
+            ref_date.replace(day=1),
+            ref_date.replace(day=calendar.monthrange(ref_date.year, ref_date.month)[1]),
+        )
+    if period == "quarter":
+        month_index = ref_date.year * 12 + ref_date.month - 3
+        return (
+            date(month_index // 12, month_index % 12 + 1, 1),
+            ref_date.replace(day=calendar.monthrange(ref_date.year, ref_date.month)[1]),
+        )
+    if period == "year":
+        return date(ref_date.year, 1, 1), date(ref_date.year, 12, 31)
+    if period == "custom":
+        start = _parse_attendance_date(date_from, ref_date)
+        end = _parse_attendance_date(date_to, ref_date)
+        return (end, start) if start > end else (start, end)
+    return None, None
+
+
 @login_required
 def logout_page(request):
     log_action(
@@ -237,6 +278,9 @@ def attendance_view(request):
     ref_date_str = request.GET.get('ref_date')
     sort_by = request.GET.get('sort', 'name')
     show_archived = request.GET.get('show_archived') == '1'
+    period = request.GET.get("period", "window")
+    if period not in {"window", "day", "month", "quarter", "year", "custom"}:
+        period = "window"
 
     # 1. Группа
     if group_id:
@@ -286,53 +330,20 @@ def attendance_view(request):
             f"{reverse('attendance')}?group_id={child.group_id}"
         )
 
-    # 2. Опорная дата
-    if ref_date_str:
-        try:
-            ref_date = datetime.strptime(ref_date_str, '%Y-%m-%d').date()
-        except ValueError:
-            ref_date = today
-    else:
-        ref_date = today
-
-    # 3. Табель показывает только реальные дни занятий группы.
-    start_of_week = ref_date - timedelta(days=35)
-    all_class_dates = generate_class_dates(
-        group,
-        start_of_week,
-        limit=60,
+    # 2. Опорная дата и фильтр периода.
+    ref_date = _parse_attendance_date(ref_date_str, today)
+    period_start, period_end = _attendance_period_bounds(
+        period,
+        ref_date,
+        request.GET.get("date_from"),
+        request.GET.get("date_to"),
     )
-
-    if not all_class_dates:
-        return render(
-            request,
-            "crm/attendance.html",
-            page_context(
-                request,
-                "attendance",
-                groups=Group.objects.filter(is_active=True),
-                selected_group=group,
-                week_data=[],
-                children_data=[],
-                ref_date=ref_date,
-                child_form=child_form,
-                creating_child=creating_child,
-                error="Нет расписания",
-            ),
+    filter_query = f"period={period}&ref_date={ref_date.isoformat()}"
+    if period == "custom":
+        filter_query += (
+            f"&date_from={period_start.isoformat()}"
+            f"&date_to={period_end.isoformat()}"
         )
-
-    current_index = 0
-    for i, class_date in enumerate(all_class_dates):
-        if class_date >= ref_date:
-            current_index = i
-            break
-
-    if all_class_dates[-1] < ref_date:
-        current_index = len(all_class_dates) - 1
-
-    start_idx = max(0, current_index - 4)
-    end_idx = min(len(all_class_dates), current_index + 4)
-    window_dates = all_class_dates[start_idx:end_idx]
 
     schedule_by_weekday = {}
     for slot in (
@@ -341,6 +352,58 @@ def attendance_view(request):
         .order_by("weekday", "start_time")
     ):
         schedule_by_weekday.setdefault(slot.weekday, slot)
+
+    if not schedule_by_weekday:
+        return render(
+            request,
+            "crm/attendance.html",
+            page_context(
+                request,
+                "attendance",
+                groups=Group.objects.filter(is_active=True),
+                selected_group=group,
+                trainer=trainer,
+                week_data=[],
+                children_data=[],
+                ref_date=ref_date,
+                period=period,
+                period_start=period_start or ref_date,
+                period_end=period_end or ref_date,
+                date_from=period_start if period == "custom" else None,
+                date_to=period_end if period == "custom" else None,
+                filter_query=filter_query,
+                sort_by=sort_by,
+                show_archived=show_archived,
+                child_form=child_form,
+                creating_child=creating_child,
+                error="Нет расписания",
+            ),
+        )
+
+    # 3. Старое окно оставляем по умолчанию; пресеты показывают весь период.
+    if period == "window":
+        start_of_week = ref_date - timedelta(days=35)
+        all_class_dates = generate_class_dates(group, start_of_week, limit=60)
+        current_index = next(
+            (i for i, class_date in enumerate(all_class_dates) if class_date >= ref_date),
+            len(all_class_dates) - 1,
+        )
+        start_idx = max(0, current_index - 4)
+        end_idx = min(len(all_class_dates), current_index + 4)
+        window_dates = all_class_dates[start_idx:end_idx]
+        prev_ref = all_class_dates[max(0, current_index - 1)].isoformat()
+        next_ref = all_class_dates[
+            min(len(all_class_dates) - 1, current_index + 1)
+        ].isoformat()
+        period_start = window_dates[0]
+        period_end = window_dates[-1]
+    else:
+        window_dates = class_dates_in_range(
+            set(schedule_by_weekday),
+            period_start,
+            period_end,
+        )
+        prev_ref = next_ref = ref_date.isoformat()
 
     week_data = []
     for class_date in window_dates:
@@ -390,6 +453,7 @@ def attendance_view(request):
     else:
         children_list.sort(key=lambda c: (c.last_name.lower(), c.first_name.lower()))
 
+    visible_dates = set(window_dates)
     children_data = []
     for child in children_list:
         active_sub = child.active_subscription()
@@ -411,9 +475,11 @@ def attendance_view(request):
                 end_candidates.append(projected_end)
             subscription_end = min(end_candidates)
 
-        att_map = {}
-        for att in child.attendances.filter(date__in=window_dates):
-            att_map[att.date] = att.status
+        att_map = {
+            att.date: att.status
+            for att in child.attendances.all()
+            if att.date in visible_dates
+        }
 
         entries = []
         sub_end_index = None
@@ -464,12 +530,8 @@ def attendance_view(request):
             'attendance_entries': entries,
         })
 
-    # Плавный сдвиг на одно занятие без пропусков между окнами.
-    prev_ref = all_class_dates[current_index - 1].isoformat()
-    next_ref = all_class_dates[current_index + 1].isoformat()
-
-    # Базовые параметры для ссылок, чтобы сортировка не слетала
-    base_params = f"group_id={group.id}&ref_date={{}}&sort={sort_by}"
+    # Базовые параметры для ссылок, чтобы фильтр и сортировка не слетали.
+    base_params = f"group_id={group.id}&{filter_query}&sort={sort_by}"
     if show_archived:
         base_params += "&show_archived=1"
 
@@ -488,6 +550,12 @@ def attendance_view(request):
         sort_by=sort_by,
         show_archived=show_archived,
         base_params=base_params,
+        filter_query=filter_query,
+        period=period,
+        period_start=period_start,
+        period_end=period_end,
+        date_from=period_start if period == "custom" else None,
+        date_to=period_end if period == "custom" else None,
         child_form=child_form,
         creating_child=creating_child,
     )

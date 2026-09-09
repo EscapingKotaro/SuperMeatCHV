@@ -3831,6 +3831,106 @@ class CrmWorkflowTests(TestCase):
             "Подтвердите приход спортсменов",
         )
 
+    def test_attendance_period_presets_use_real_class_dates(self):
+        reference = timezone.localdate().replace(day=15)
+        month_start = reference.replace(day=1)
+        month_end = (
+            month_start.replace(day=28)
+            + timedelta(days=4)
+        ).replace(day=1) - timedelta(days=1)
+        previous_month = (
+            month_start - timedelta(days=1)
+        ).replace(day=1)
+        quarter_start = (
+            previous_month - timedelta(days=1)
+        ).replace(day=1)
+
+        for weekday in (0, 2):
+            ScheduleSlot.objects.create(
+                group=self.group,
+                weekday=weekday,
+                start_time=time(18, 0),
+            )
+
+        self.client.login(username="admin", password="TestPass123!")
+        cases = {
+            "day": (reference, reference),
+            "month": (month_start, month_end),
+            "quarter": (quarter_start, month_end),
+            "year": (
+                reference.replace(month=1, day=1),
+                reference.replace(month=12, day=31),
+            ),
+        }
+
+        for period, (start, end) in cases.items():
+            with self.subTest(period=period):
+                response = self.client.get(
+                    reverse("attendance"),
+                    {
+                        "group_id": self.group.pk,
+                        "period": period,
+                        "ref_date": reference.isoformat(),
+                    },
+                )
+                expected = [
+                    start + timedelta(days=offset)
+                    for offset in range((end - start).days + 1)
+                    if (start + timedelta(days=offset)).weekday() in {0, 2}
+                ]
+                self.assertEqual(
+                    [item["date"] for item in response.context["week_data"]],
+                    expected,
+                )
+                self.assertEqual(response.context["period_start"], start)
+                self.assertEqual(response.context["period_end"], end)
+                self.assertIn(f"period={period}", response.context["filter_query"])
+
+    def test_attendance_custom_period_normalizes_and_empty_day_is_valid(self):
+        today = timezone.localdate()
+        early = today - timedelta(days=8)
+        late = today + timedelta(days=3)
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=early.weekday(),
+            start_time=time(18, 0),
+        )
+        self.client.login(username="admin", password="TestPass123!")
+
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "period": "custom",
+                "ref_date": today.isoformat(),
+                "date_from": late.isoformat(),
+                "date_to": early.isoformat(),
+            },
+        )
+        self.assertEqual(response.context["period_start"], early)
+        self.assertEqual(response.context["period_end"], late)
+        self.assertEqual(response.context["date_from"], early)
+        self.assertEqual(response.context["date_to"], late)
+        self.assertIn(f"date_from={early.isoformat()}", response.context["filter_query"])
+        self.assertIn(f"date_to={late.isoformat()}", response.context["filter_query"])
+
+        no_class_day = next(
+            today + timedelta(days=offset)
+            for offset in range(7)
+            if (today + timedelta(days=offset)).weekday() != early.weekday()
+        )
+        empty = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "period": "day",
+                "ref_date": no_class_day.isoformat(),
+            },
+        )
+        self.assertEqual(empty.context["week_data"], [])
+        self.assertIsNone(empty.context.get("error"))
+        self.assertContains(empty, "В выбранном периоде занятий нет.")
+
     def _create_daily_schedule(self):
         for weekday in range(7):
             ScheduleSlot.objects.create(
