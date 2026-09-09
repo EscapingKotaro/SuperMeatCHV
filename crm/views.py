@@ -3769,17 +3769,19 @@ def calendar_page(request):
                 and task.scheduled_at < now
             )
 
-    filtered = tasks
+    scoped_tasks = tasks
 
     if scope == "mine":
-        filtered = [
+        scoped_tasks = [
             task
-            for task in filtered
+            for task in scoped_tasks
             if task.assignee_id in (
                 None,
                 request.user.id,
             )
         ]
+
+    filtered = scoped_tasks
 
     if state == "open":
         filtered = [
@@ -3820,6 +3822,11 @@ def calendar_page(request):
             + timedelta(days=offset)
         )
 
+        scoped_day_tasks = [
+            task
+            for task in scoped_tasks
+            if task.calendar_date == day
+        ]
         items = sort_tasks([
             task
             for task in filtered
@@ -3837,6 +3844,16 @@ def calendar_page(request):
             ),
             "items": items[:2],
             "task_count": len(items),
+            "active_count": sum(
+                1
+                for task in scoped_day_tasks
+                if not task.is_done
+            ),
+            "overdue_count": sum(
+                1
+                for task in scoped_day_tasks
+                if task.is_overdue_now
+            ),
             "more_count": max(
                 0,
                 len(items) - 2,
@@ -3866,6 +3883,28 @@ def calendar_page(request):
             <= month_end
         )
     )
+    month_active_count = sum(
+        1
+        for task in scoped_tasks
+        if (
+            not task.is_done
+            and task.calendar_date
+            and month_start
+            <= task.calendar_date
+            <= month_end
+        )
+    )
+    month_overdue_count = sum(
+        1
+        for task in scoped_tasks
+        if (
+            task.is_overdue_now
+            and task.calendar_date
+            and month_start
+            <= task.calendar_date
+            <= month_end
+        )
+    )
 
     return render(
         request,
@@ -3882,6 +3921,8 @@ def calendar_page(request):
             selected_tasks=selected_tasks,
             undated_tasks=undated_tasks,
             month_task_count=month_task_count,
+            month_active_count=month_active_count,
+            month_overdue_count=month_overdue_count,
             prev_start=prev_start,
             next_start=next_start,
             today_start=today.replace(

@@ -8,14 +8,14 @@
 {% endblock %}
 
 {% block content %}
-<div class="grid gap-4 xl:grid-cols-[minmax(0,1fr)_18rem] xl:items-start">
-<aside data-calendar-sidebar class="space-y-3 xl:sticky xl:top-24 xl:col-start-2 xl:row-start-1">
+<div class="grid gap-3 xl:grid-cols-[minmax(0,1fr)_16rem] xl:items-start">
+<aside data-calendar-sidebar class="space-y-2 xl:sticky xl:top-24 xl:col-start-2 xl:row-start-1">
 
 <!-- =========================================
      ВЕРХНЯЯ ПАНЕЛЬ
 ========================================= -->
 <section class="card overflow-hidden">
-    <div class="p-3">
+    <div class="p-2.5">
 
         <div class="flex items-center justify-between gap-2">
 
@@ -29,7 +29,7 @@
                             {{ month_start|date:"F Y" }}
                         </div>
                         <div class="mt-0.5 text-[9px] text-slate-400">
-                            {{ month_task_count }} задач в этом месяце
+                            {{ month_active_count }} активных{% if month_overdue_count %} · <span class="font-semibold text-red-600">{{ month_overdue_count }} просрочено</span>{% endif %}
                         </div>
                     </div>
 
@@ -116,13 +116,11 @@
 
     </div>
     {% endif %}
-</section>
 
 
 <!-- =========================================
      МЕСЯЦ
 ========================================= -->
-<section class="card overflow-hidden">
 
     <!-- Дни недели -->
     <div class="grid grid-cols-7 border-b bg-[#FAFBFC]">
@@ -142,8 +140,8 @@
         {% for day in days %}
         <a
             href="?start={{ day.month_start|date:'Y-m-d' }}&day={{ day.date|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}"
-            title="{% if day.task_count %}{{ day.task_count }} задач{% else %}Нет задач{% endif %}"
-            class="relative flex h-9 min-w-0 items-center justify-center bg-white transition
+            title="{{ day.active_count }} активных{% if day.overdue_count %}, просрочено: {{ day.overdue_count }}{% endif %}"
+            class="relative h-11 min-w-0 bg-white transition
             {% if not day.in_month %}bg-slate-50/80{% else %}hover:bg-slate-50{% endif %}
             {% if day.date == selected_day %}
                 z-10 bg-blue-50 ring-2 ring-inset ring-[#315EBC]
@@ -152,31 +150,41 @@
             {% endif %}"
         >
 
-            <!-- Число и компактный индикатор задач -->
-            <div class="flex items-center gap-1">
+            <!-- Число, активные задачи и просрочки. -->
+            <span class="absolute left-1 top-1 text-[10px] font-extrabold leading-none
+                {% if not day.in_month %}
+                    text-slate-300
+                {% elif day.date == today %}
+                    text-[#FF5C35]
+                {% elif day.date == selected_day %}
+                    text-[#315EBC]
+                {% else %}
+                    text-slate-900
+                {% endif %}"
+            >
+                {{ day.date|date:"d" }}
+            </span>
 
-                <span class="text-[11px] font-extrabold leading-none
-                    {% if not day.in_month %}
-                        text-slate-300
-                    {% elif day.date == today %}
-                        text-[#FF5C35]
-                    {% elif day.date == selected_day %}
-                        text-[#315EBC]
-                    {% else %}
-                        text-slate-900
-                    {% endif %}"
+            <div class="absolute inset-x-1 bottom-1 flex items-center justify-between text-[8px] font-bold leading-none">
+                <span
+                    data-day-active-count="{{ day.active_count }}"
+                    class="{% if day.active_count %}text-[#315EBC]{% else %}text-slate-300{% endif %}"
+                    title="Активных задач: {{ day.active_count }}"
                 >
-                    {{ day.date|date:"d" }}
+                    {{ day.active_count }}
                 </span>
 
-
-                {% if day.task_count %}
+                {% if day.overdue_count %}
                 <span
-                    class="h-1.5 w-1.5 rounded-full {% if day.date == selected_day %}bg-[#315EBC]{% else %}bg-blue-500{% endif %}"
-                    title="{{ day.task_count }} задач"
-                ></span>
+                    data-day-overdue-count="{{ day.overdue_count }}"
+                    class="text-red-600"
+                    title="Просрочено: {{ day.overdue_count }}"
+                >
+                    !{{ day.overdue_count }}
+                </span>
+                {% else %}
+                <span class="sr-only" data-day-overdue-count="0">0 просрочено</span>
                 {% endif %}
-
             </div>
 
 
@@ -199,13 +207,13 @@
 ========================================= -->
 <section class="card overflow-hidden">
 
-    <div class="flex flex-col gap-3 border-b px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
+    <div class="flex items-center gap-3 border-b px-4 py-3 sm:px-5">
 
         <div class="flex min-w-0 items-center gap-3">
 
-            <div class="grid h-11 w-11 shrink-0 place-items-center rounded-xl sm:h-12 sm:w-12
+            <div class="grid h-9 w-9 shrink-0 place-items-center rounded-lg
                 {% if selected_day == today %}bg-orange-100 text-[#FF5C35]{% else %}bg-blue-50 text-[#315EBC]{% endif %}">
-                <b class="text-base sm:text-lg">
+                <b class="text-sm">
                     {{ selected_day|date:"d" }}
                 </b>
             </div>
@@ -230,22 +238,18 @@
             </div>
         </div>
 
-        <button data-modal="task-modal" class="btn btn-primary w-full sm:w-auto">
-            <i data-lucide="plus"></i>
-            {% if can_manage_team_tasks %}Добавить задачу{% else %}Добавить напоминание{% endif %}
-        </button>
     </div>
 
 
     <div class="divide-y">
         {% for item in selected_tasks %}
-        <article class="p-4 transition hover:bg-slate-50/60 sm:p-5">
+        <article class="p-3 transition hover:bg-slate-50/60 sm:p-4">
 
             <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
 
-                <div class="flex min-w-0 flex-1 gap-3">
+                <div class="flex min-w-0 flex-1 gap-2.5">
 
-                    <span class="mt-0.5 grid h-9 w-9 shrink-0 place-items-center rounded-xl
+                    <span class="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-lg
                         {% if item.is_done %}bg-emerald-50 text-emerald-600
                         {% elif item.is_overdue_now %}bg-red-50 text-red-600
                         {% else %}bg-blue-50 text-[#315EBC]{% endif %}">
@@ -273,7 +277,7 @@
                             {% endif %}
                         </div>
 
-                        <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500 sm:text-[11px]">
+                        <div class="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-500 sm:text-[11px]">
                             {% if item.scheduled_at %}
                             <span class="flex items-center gap-1">
                                 <i data-lucide="clock-3" class="h-3.5 w-3.5"></i>
@@ -307,13 +311,13 @@
                         </div>
 
                         {% if item.description %}
-                        <p class="mt-3 break-words text-sm leading-6 text-slate-600">
+                        <p class="mt-2 break-words text-sm leading-5 text-slate-600">
                             {{ item.description }}
                         </p>
                         {% endif %}
 
                         {% if item.is_done %}
-                        <div class="mt-3 rounded-xl bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">
+                        <div class="mt-2 rounded-lg bg-emerald-50 px-3 py-2 text-[11px] text-emerald-700">
                             <b>
                                 Выполнил:
                                 {{ item.completed_by.get_full_name|default:item.completed_by.username|default:"—" }}
@@ -404,7 +408,6 @@
                 <i data-lucide="calendar-check" class="h-5 w-5"></i>
             </span>
             <b class="mt-3 text-sm">На этот день задач нет</b>
-            <p class="mt-1 text-xs text-slate-400">День пока свободен</p>
         </div>
         {% endfor %}
     </div>

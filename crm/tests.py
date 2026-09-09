@@ -2620,10 +2620,77 @@ class CrmWorkflowTests(TestCase):
         self.assertContains(response, "data-calendar-sidebar")
         self.assertContains(
             response,
-            "xl:grid-cols-[minmax(0,1fr)_18rem]",
+            "xl:grid-cols-[minmax(0,1fr)_16rem]",
+        )
+        self.assertContains(
+            response,
+            'data-modal="task-modal"',
+            count=1,
         )
         self.assertNotContains(response, "На смене:")
         self.assertNotContains(response, "Готовые")
+
+
+    def test_calendar_day_cells_show_active_and_overdue_counts(self):
+        today = timezone.localdate()
+        scheduled_at = timezone.now().replace(
+            second=0,
+            microsecond=0,
+        )
+
+        ManagerTask.objects.create(
+            title="Активная задача",
+            assignee=self.admin,
+            created_by=self.boss,
+            scheduled_at=scheduled_at,
+            due_date=today + timedelta(days=1),
+        )
+        ManagerTask.objects.create(
+            title="Просроченная задача",
+            assignee=self.admin,
+            created_by=self.boss,
+            scheduled_at=scheduled_at,
+            due_date=today - timedelta(days=1),
+        )
+        ManagerTask.objects.create(
+            title="Готовая задача",
+            assignee=self.admin,
+            created_by=self.boss,
+            scheduled_at=scheduled_at,
+            due_date=today - timedelta(days=1),
+            is_done=True,
+            done_at=timezone.now(),
+            completed_by=self.admin,
+        )
+
+        self.client.login(
+            username="boss",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("calendar"),
+            {
+                "start": today.replace(day=1).isoformat(),
+                "day": today.isoformat(),
+                "scope": "all",
+                "state": "done",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        day = next(
+            item
+            for item in response.context["days"]
+            if item["date"] == today
+        )
+        self.assertEqual(day["task_count"], 1)
+        self.assertEqual(day["active_count"], 2)
+        self.assertEqual(day["overdue_count"], 1)
+        self.assertEqual(response.context["month_active_count"], 2)
+        self.assertEqual(response.context["month_overdue_count"], 1)
+        self.assertContains(response, 'data-day-active-count="2"')
+        self.assertContains(response, 'data-day-overdue-count="1"')
 
 
     def test_boss_calendar_can_view_completed_team_tasks(self):
