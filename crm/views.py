@@ -55,6 +55,7 @@ from .models import (
     Camp,
     CampStay,
     Child,
+    ChildGroupMembership,
     ChildRank,
     Competition,
     CompetitionEntry,
@@ -4560,7 +4561,44 @@ def child_card_view(request, child_id):
     missed_pct = child.missed_percent()
     nearest_exp = child.nearest_expiry()
     promos = child.active_promos()
-    groups_list = Group.objects.filter(is_active=True)
+
+    if child.group_id:
+        has_other_primary = child.group_memberships.filter(
+            is_primary=True,
+            archived_at__isnull=True,
+        ).exclude(group_id=child.group_id).exists()
+        primary_membership, _ = ChildGroupMembership.objects.get_or_create(
+            child=child,
+            group=child.group,
+            defaults={"is_primary": not has_other_primary},
+        )
+        changed_fields = []
+        if primary_membership.archived_at is not None:
+            primary_membership.archived_at = None
+            changed_fields.append("archived_at")
+        if not has_other_primary and not primary_membership.is_primary:
+            primary_membership.is_primary = True
+            changed_fields.append("is_primary")
+        if changed_fields:
+            primary_membership.save(update_fields=changed_fields)
+
+    memberships = list(
+        child.group_memberships
+        .select_related("group__trainer")
+        .order_by("-is_primary", "archived_at", "joined_at", "pk")
+    )
+    active_membership_group_ids = {
+        membership.group_id
+        for membership in memberships
+        if membership.archived_at is None
+    }
+    groups_list = (
+        Group.objects
+        .filter(is_active=True)
+        .exclude(pk__in=active_membership_group_ids)
+        .select_related("trainer")
+        .order_by("trainer__full_name", "name")
+    )
 
     rank_form = ChildRankForm(
         prefix="rank",
@@ -4617,15 +4655,162 @@ def child_card_view(request, child_id):
             messages.success(request, "Поездка удалена")
             return redirect("child_card", child_id=child.pk)
 
+        elif action == "add_group_membership":
+            new_group = get_object_or_404(
+                Group,
+                pk=request.POST.get("group_id"),
+                is_active=True,
+            )
+            membership, created = ChildGroupMembership.objects.get_or_create(
+                child=child,
+                group=new_group,
+                defaults={
+                    "is_primary": False,
+                    "requires_subscription": (
+                        request.POST.get("requires_subscription") == "on"
+                    ),
+                },
+            )
+            if not created:
+                membership.archived_at = None
+                membership.requires_subscription = (
+                    request.POST.get("requires_subscription") == "on"
+                )
+                membership.save(update_fields=[
+                    "archived_at",
+                    "requires_subscription",
+                ])
+            log_action(
+                request,
+                "child.group_membership.add",
+                child,
+                f"{child}: добавлена группа {new_group}",
+            )
+            messages.success(
+                request,
+                f'Группа "{new_group.name}" добавлена спортсмену',
+            )
+            return redirect("child_card", child_id=child.pk)
+
+        elif action == "set_primary_group":
+            membership = get_object_or_404(
+                child.group_memberships.select_related("group"),
+                pk=request.POST.get("membership_id"),
+                archived_at__isnull=True,
+            )
+            if membership.group_id != child.group_id:
+                child.freeze_current_history()
+                child.group_memberships.filter(
+                    is_primary=True,
+                    archived_at__isnull=True,
+                ).update(is_primary=False)
+                membership.is_primary = True
+                membership.save(update_fields=["is_primary"])
+                child.group = membership.group
+                child.save(update_fields=["group"])
+                child.schedule.clear()
+                log_action(
+                    request,
+                    "child.group_membership.primary",
+                    child,
+                    f"{child}: основная группа {membership.group}",
+                )
+            messages.success(request, "Основная группа обновлена")
+            return redirect("child_card", child_id=child.pk)
+
+        elif action == "archive_group_membership":
+            membership = get_object_or_404(
+                child.group_memberships.select_related("group"),
+                pk=request.POST.get("membership_id"),
+                archived_at__isnull=True,
+            )
+            if membership.is_primary:
+                replacement = (
+                    child.group_memberships
+                    .filter(archived_at__isnull=True)
+                    .exclude(pk=membership.pk)
+                    .select_related("group")
+                    .order_by("joined_at", "pk")
+                    .first()
+                )
+                if replacement is None:
+                    messages.error(
+                        request,
+                        "Нельзя архивировать единственную основную группу. "
+                        "Сначала добавьте другую группу или архивируйте спортсмена.",
+                    )
+                    return redirect("child_card", child_id=child.pk)
+
+                child.freeze_current_history()
+                membership.is_primary = False
+                membership.save(update_fields=["is_primary"])
+                replacement.is_primary = True
+                replacement.save(update_fields=["is_primary"])
+                child.group = replacement.group
+                child.save(update_fields=["group"])
+                child.schedule.clear()
+
+            membership.archived_at = timezone.localdate()
+            membership.save(update_fields=["archived_at"])
+            log_action(
+                request,
+                "child.group_membership.archive",
+                child,
+                f"{child}: группа {membership.group} перенесена в архив",
+            )
+            messages.success(
+                request,
+                f'Группа "{membership.group.name}" перенесена в архив',
+            )
+            return redirect("child_card", child_id=child.pk)
+
         elif action == "change_group" or "change_group" in request.POST:
             new_group_id = request.POST.get("new_group")
             if new_group_id:
-                child.freeze_current_history()
-                new_group = get_object_or_404(Group, id=new_group_id)
-                child.group = new_group
-                child.save(update_fields=["group"])
-                # Личный график от старой группы не должен оставаться после перевода.
-                child.schedule.clear()
+                new_group = get_object_or_404(
+                    Group,
+                    id=new_group_id,
+                    is_active=True,
+                )
+                if child.group_id != new_group.pk:
+                    child.freeze_current_history()
+                    old_membership = (
+                        child.group_memberships
+                        .filter(
+                            group_id=child.group_id,
+                            archived_at__isnull=True,
+                        )
+                        .first()
+                    )
+                    if old_membership:
+                        old_membership.is_primary = False
+                        old_membership.archived_at = timezone.localdate()
+                        old_membership.save(update_fields=[
+                            "is_primary",
+                            "archived_at",
+                        ])
+
+                    child.group_memberships.filter(
+                        is_primary=True,
+                        archived_at__isnull=True,
+                    ).update(is_primary=False)
+                    ChildGroupMembership.objects.update_or_create(
+                        child=child,
+                        group=new_group,
+                        defaults={
+                            "is_primary": True,
+                            "archived_at": None,
+                        },
+                    )
+                    child.group = new_group
+                    child.save(update_fields=["group"])
+                    child.schedule.clear()
+                    log_action(
+                        request,
+                        "child.group.change",
+                        child,
+                        f"{child}: перевод в группу {new_group}",
+                    )
                 messages.success(
                     request,
                     f'Ребенок переведен в группу "{new_group.name}"',
@@ -4698,6 +4883,7 @@ def child_card_view(request, child_id):
         'missed_percent': missed_pct,
         'nearest_expiry': nearest_exp,
         'promos': promos,
+        'memberships': memberships,
         'groups_list': groups_list,
         'weeks': weeks,
         'period_stats': period_stats,

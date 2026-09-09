@@ -17,6 +17,7 @@ from .models import (
     AttendanceReason,
     AuditEvent,
     Child,
+    ChildGroupMembership,
     Competition,
     CompetitionEntry,
     Expense,
@@ -170,6 +171,152 @@ class CrmWorkflowTests(TestCase):
                 "add_subscription",
                 args=[self.child.pk],
             ),
+        )
+
+    def test_child_card_creates_primary_group_membership_for_legacy_child(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        membership = ChildGroupMembership.objects.get(
+            child=self.child,
+            group=self.group,
+        )
+        self.assertTrue(membership.is_primary)
+        self.assertIsNone(membership.archived_at)
+        self.assertContains(response, "data-group-memberships")
+        self.assertContains(
+            response,
+            f'data-group-membership="{membership.pk}"',
+        )
+        self.assertContains(response, "Основная")
+
+    def test_child_can_have_multiple_groups_and_change_primary(self):
+        substitute_trainer = Trainer.objects.create(
+            full_name="Тренер хореографии",
+        )
+        second_group = Group.objects.create(
+            name="Хореография",
+            trainer=substitute_trainer,
+        )
+        mark = Attendance.objects.create(
+            child=self.child,
+            date=timezone.localdate(),
+            status=Attendance.Status.ABSENT,
+        )
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("child_card", args=[self.child.pk]),
+            {
+                "action": "add_group_membership",
+                "group_id": second_group.pk,
+            },
+        )
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+
+        primary = ChildGroupMembership.objects.get(
+            child=self.child,
+            group=self.group,
+        )
+        additional = ChildGroupMembership.objects.get(
+            child=self.child,
+            group=second_group,
+        )
+        self.assertTrue(primary.is_primary)
+        self.assertFalse(additional.is_primary)
+        self.assertFalse(additional.requires_subscription)
+
+        response = self.client.post(
+            reverse("child_card", args=[self.child.pk]),
+            {
+                "action": "set_primary_group",
+                "membership_id": additional.pk,
+            },
+        )
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+
+        self.child.refresh_from_db()
+        primary.refresh_from_db()
+        additional.refresh_from_db()
+        mark.refresh_from_db()
+        self.assertEqual(self.child.group, second_group)
+        self.assertFalse(primary.is_primary)
+        self.assertIsNone(primary.archived_at)
+        self.assertTrue(additional.is_primary)
+        self.assertEqual(mark.group_snapshot, self.group)
+        self.assertEqual(mark.trainer_snapshot, self.trainer)
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                actor=self.admin,
+                action="child.group_membership.primary",
+                object_id=str(self.child.pk),
+            ).exists()
+        )
+
+    def test_archiving_primary_membership_promotes_other_group(self):
+        second_trainer = Trainer.objects.create(
+            full_name="Дополнительный тренер",
+        )
+        second_group = Group.objects.create(
+            name="Дополнительная группа",
+            trainer=second_trainer,
+        )
+        primary = ChildGroupMembership.objects.create(
+            child=self.child,
+            group=self.group,
+            is_primary=True,
+        )
+        additional = ChildGroupMembership.objects.create(
+            child=self.child,
+            group=second_group,
+            is_primary=False,
+        )
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("child_card", args=[self.child.pk]),
+            {
+                "action": "archive_group_membership",
+                "membership_id": primary.pk,
+            },
+        )
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+
+        self.child.refresh_from_db()
+        primary.refresh_from_db()
+        additional.refresh_from_db()
+        self.assertIsNotNone(primary.archived_at)
+        self.assertFalse(primary.is_primary)
+        self.assertTrue(additional.is_primary)
+        self.assertEqual(self.child.group, second_group)
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                actor=self.admin,
+                action="child.group_membership.archive",
+                object_id=str(self.child.pk),
+            ).exists()
         )
 
     def test_legacy_child_create_invalid_post_stays_in_attendance_modal(self):

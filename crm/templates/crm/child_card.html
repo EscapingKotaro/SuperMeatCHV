@@ -239,42 +239,109 @@
 
     <!-- ЦЕНТРАЛЬНАЯ КОЛОНКА -->
     <div class="space-y-5">
-        <!-- Группа и тренер (с возможностью смены) -->
-        <div class="card p-5">
-            <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
-                <i data-lucide="users" class="h-4 w-4 text-slate-400"></i>Группа и тренер
-            </h3>
-
-            <div class="mb-4 p-3 bg-violet-50 rounded-xl">
-                <div class="text-[10px] font-bold uppercase text-violet-600 mb-1">Текущая группа</div>
-                {% if child.group %}
-                    <div class="font-extrabold text-violet-900">{{ child.group.name }}</div>
-                    {% if child.trainer %}
-                    <div class="text-xs text-violet-700 mt-1">
-                        <i data-lucide="user-check" class="inline h-3 w-3 mr-1"></i>{{ child.trainer.full_name }}
-                    </div>
-                    {% endif %}
-                {% else %}
-                    <div class="text-sm text-slate-500 italic">Группа не назначена</div>
-                {% endif %}
+        <!-- Группы и тренеры -->
+        <div class="card p-5" data-group-memberships>
+            <div class="mb-4 flex items-center justify-between gap-2">
+                <h3 class="font-extrabold text-sm flex items-center gap-2">
+                    <i data-lucide="users" class="h-4 w-4 text-slate-400"></i>Группы и тренеры
+                </h3>
+                <span class="text-[10px] font-bold uppercase text-slate-400">
+                    {{ memberships|length }} всего
+                </span>
             </div>
 
-            <!-- Форма смены группы -->
-            <form method="post" class="flex gap-2">
+            <div class="space-y-2">
+                {% for membership in memberships %}
+                <div class="rounded-xl border p-3 {% if membership.archived_at %}border-slate-200 bg-slate-50 opacity-70{% elif membership.is_primary %}border-violet-200 bg-violet-50{% else %}border-slate-200 bg-white{% endif %}"
+                     data-group-membership="{{ membership.id }}">
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <div class="flex flex-wrap items-center gap-1.5">
+                                <b class="{% if membership.is_primary and not membership.archived_at %}text-violet-900{% else %}text-slate-900{% endif %}">
+                                    {{ membership.group.name }}
+                                </b>
+                                {% if membership.is_primary and not membership.archived_at %}
+                                <span class="badge bg-violet-100 text-violet-700">Основная</span>
+                                {% endif %}
+                                {% if membership.archived_at %}
+                                <span class="badge bg-slate-200 text-slate-600">
+                                    Архив с {{ membership.archived_at|date:"d.m.Y" }}
+                                </span>
+                                {% endif %}
+                            </div>
+                            <div class="mt-1 text-xs text-slate-500">
+                                <i data-lucide="user-check" class="mr-1 inline h-3 w-3"></i>{{ membership.group.trainer.full_name }}
+                            </div>
+                            <div class="mt-1 text-[10px] text-slate-400">
+                                В группе с {{ membership.joined_at|date:"d.m.Y" }}
+                                {% if not membership.requires_subscription %}
+                                · персональные / разовые
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        {% if not membership.archived_at %}
+                        <div class="flex shrink-0 gap-1">
+                            {% if not membership.is_primary %}
+                            <form method="post">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="set_primary_group">
+                                <input type="hidden" name="membership_id" value="{{ membership.id }}">
+                                <button type="submit"
+                                        class="btn btn-soft px-2 py-1 text-[10px]"
+                                        title="Сделать основной группой">
+                                    Основная
+                                </button>
+                            </form>
+                            {% endif %}
+                            <form method="post"
+                                  onsubmit="return confirm('Убрать группу «{{ membership.group.name }}» в архив? История посещений сохранится.')">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="archive_group_membership">
+                                <input type="hidden" name="membership_id" value="{{ membership.id }}">
+                                <button type="submit"
+                                        class="btn bg-slate-100 px-2 py-1 text-[10px] text-slate-600 hover:bg-slate-200"
+                                        title="Убрать членство в архив">
+                                    В архив
+                                </button>
+                            </form>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <p class="text-xs text-slate-400 italic">Нет членств в группах</p>
+                {% endfor %}
+            </div>
+
+            {% if groups_list %}
+            {% regroup groups_list by trainer as trainer_groups %}
+            <form method="post" class="mt-4 rounded-xl border border-dashed border-slate-300 p-3">
                 {% csrf_token %}
-                <input type="hidden" name="change_group" value="1">
-                <select name="new_group" class="field flex-1 text-sm">
-                    <option value="">— Выбрать группу —</option>
-                    {% for g in groups_list %}
-                        <option value="{{ g.id }}" {% if child.group and child.group.id == g.id %}selected{% endif %}>
-                            {{ g.name }} ({{ g.trainer.full_name }})
-                        </option>
-                    {% endfor %}
-                </select>
-                <button type="submit" class="btn btn-soft text-xs px-3">
-                    <i data-lucide="arrow-right"></i>
-                </button>
+                <input type="hidden" name="action" value="add_group_membership">
+                <label class="label" for="membership-group">Добавить ещё группу</label>
+                <div class="flex gap-2">
+                    <select id="membership-group" name="group_id" required class="field flex-1 text-sm">
+                        <option value="">— Выберите группу —</option>
+                        {% for trainer_group in trainer_groups %}
+                        <optgroup label="{{ trainer_group.grouper.full_name }}">
+                            {% for group_option in trainer_group.list %}
+                            <option value="{{ group_option.id }}">{{ group_option.name }}</option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endfor %}
+                    </select>
+                    <button type="submit" class="btn btn-soft text-xs">Добавить</button>
+                </div>
+                <label class="mt-2 flex items-center gap-2 text-xs text-slate-500">
+                    <input type="checkbox" name="requires_subscription" checked class="h-4 w-4">
+                    Показывать состояние абонемента
+                </label>
+                <p class="mt-1 text-[10px] text-slate-400">
+                    Для персональных и разовых занятий снимите эту галочку.
+                </p>
             </form>
+            {% endif %}
         </div>
 
         <!-- Абонементы -->

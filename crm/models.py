@@ -178,6 +178,74 @@ class Group(models.Model):
         return self.name
 
 
+class ChildGroupMembership(models.Model):
+    """Членство ребёнка в группе с сохранением истории и основной группы."""
+
+    child = models.ForeignKey(
+        "Child",
+        on_delete=models.CASCADE,
+        related_name="group_memberships",
+        verbose_name="ребёнок",
+    )
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.PROTECT,
+        related_name="child_memberships",
+        verbose_name="группа",
+    )
+    joined_at = models.DateField(
+        "В группе с",
+        default=timezone.localdate,
+    )
+    archived_at = models.DateField(
+        "В архиве с",
+        blank=True,
+        null=True,
+    )
+    is_primary = models.BooleanField(
+        "Основная группа",
+        default=False,
+    )
+    requires_subscription = models.BooleanField(
+        "Показывать состояние абонемента",
+        default=True,
+        help_text=(
+            "Отключайте для персональных и разовых занятий, "
+            "где абонемент не используется."
+        ),
+    )
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Членство ребёнка в группе"
+        verbose_name_plural = "Членства детей в группах"
+        ordering = ("-is_primary", "archived_at", "joined_at", "pk")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("child", "group"),
+                name="unique_child_group_membership",
+            ),
+            models.UniqueConstraint(
+                fields=("child",),
+                condition=models.Q(
+                    is_primary=True,
+                    archived_at__isnull=True,
+                ),
+                name="unique_active_primary_group_membership",
+            ),
+        ]
+
+    @property
+    def is_active(self):
+        return self.archived_at is None
+
+    def __str__(self):
+        state = "основная" if self.is_primary else "дополнительная"
+        if self.archived_at:
+            state += ", архив"
+        return f"{self.child} · {self.group} · {state}"
+
+
 class ScheduleSlot(models.Model):
     """График: слот занятия группы (день недели + время)."""
     WEEKDAYS = [(i, d) for i, d in enumerate(["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"])]
