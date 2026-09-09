@@ -174,6 +174,60 @@ class CrmWorkflowTests(TestCase):
             ),
         )
 
+    def test_child_card_compacts_header_and_shows_history_context(self):
+        today = timezone.localdate()
+        slot = ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 30),
+        )
+        self.child.discount_percent = 15
+        self.child.note = "Позвонить родителю после занятия"
+        self.child.save(update_fields=["discount_percent", "note"])
+        Attendance.objects.create(
+            child=self.child,
+            date=today,
+            slot=slot,
+            status=Attendance.Status.ABSENT,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-child-status-indicators")
+        self.assertContains(response, 'data-child-indicator="debt"')
+        self.assertContains(response, 'data-child-indicator="discount"')
+        self.assertContains(response, 'data-child-indicator="documents"')
+        self.assertContains(response, "Скидка")
+        self.assertContains(response, "15%")
+        self.assertNotContains(response, ">Осталось<")
+        self.assertNotContains(response, ">Пропуски<")
+        self.assertNotContains(response, ">Баланс<")
+        self.assertNotContains(response, "Ближайшее окончание")
+        self.assertNotIn("sessions_left", response.context)
+        self.assertNotIn("balance", response.context)
+        self.assertNotIn("missed_percent", response.context)
+        self.assertNotIn("nearest_expiry", response.context)
+
+        self.assertContains(response, "data-attendance-history-meta")
+        self.assertContains(response, self.group.name)
+        self.assertContains(response, self.trainer.full_name)
+        self.assertContains(response, "18:30")
+
+        html = response.content.decode()
+        self.assertLess(
+            html.index("Позвонить родителю после занятия"),
+            html.index("Посещения за 3 месяца"),
+        )
+
     def test_child_card_creates_primary_group_membership_for_legacy_child(self):
         self.client.login(
             username="admin",

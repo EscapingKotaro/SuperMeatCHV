@@ -4630,7 +4630,7 @@ def child_card_view(request, child_id):
     subscriptions = child.subscriptions.all().order_by('-start_date')
     attendances = (
         child.attendances
-        .select_related("slot")
+        .select_related("slot__group", "group_snapshot", "trainer_snapshot")
         .all()
         .order_by("-date", "-id")
     )
@@ -4639,11 +4639,7 @@ def child_card_view(request, child_id):
     camps = child.camp_stays.all().select_related('camp').order_by('-start_date')
 
     active_sub = child.active_subscription()
-    sessions_left = child.sessions_left()
     debt = child.debt()
-    balance = child.balance()
-    missed_pct = child.missed_percent()
-    nearest_exp = child.nearest_expiry()
     promos = child.active_promos()
 
     if child.group_id:
@@ -4961,11 +4957,7 @@ def child_card_view(request, child_id):
         'competitions': competitions,
         'camps': camps,
         'active_sub': active_sub,
-        'sessions_left': sessions_left,
         'debt': debt,
-        'balance': balance,
-        'missed_percent': missed_pct,
-        'nearest_expiry': nearest_exp,
         'promos': promos,
         'memberships': memberships,
         'groups_list': groups_list,
