@@ -98,6 +98,18 @@ class StaffProfile(models.Model):
     branch = models.ForeignKey("Branch", on_delete=models.SET_NULL, blank=True, null=True,
                                related_name="staff", verbose_name="филиал")
     shift_anchor = models.DateField("Первый рабочий день смены 2/2", blank=True, null=True)
+    show_attendance_legend = models.BooleanField(
+        "Показывать легенду табеля",
+        default=True,
+    )
+    show_attendance_today_highlight = models.BooleanField(
+        "Подсвечивать сегодняшний день в табеле",
+        default=True,
+    )
+    show_attendance_subscription_boundary = models.BooleanField(
+        "Показывать границу окончания абонемента",
+        default=True,
+    )
 
 def calculate_projected_end_date(group, start_date, sessions_count):
     """

@@ -2398,6 +2398,134 @@ class CrmWorkflowTests(TestCase):
             with self.subTest(name=name):
                 self.assertEqual(self.client.get(reverse(name)).status_code, 200)
 
+    def test_profile_saves_attendance_visual_settings_per_user(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("profile"),
+            {
+                "action": "attendance_visual",
+                "show_attendance_legend": "on",
+            },
+        )
+
+        self.assertRedirects(response, reverse("profile"))
+        profile = StaffProfile.objects.get(user=self.admin)
+        self.assertTrue(profile.show_attendance_legend)
+        self.assertFalse(profile.show_attendance_today_highlight)
+        self.assertFalse(
+            profile.show_attendance_subscription_boundary
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                actor=self.admin,
+                action="profile.visual",
+                object_id=str(profile.pk),
+            ).exists()
+        )
+
+        self.client.logout()
+        self.client.login(
+            username="boss",
+            password="TestPass123!",
+        )
+        boss_profile = StaffProfile.objects.get(user=self.boss)
+        self.assertTrue(boss_profile.show_attendance_legend)
+        self.assertTrue(boss_profile.show_attendance_today_highlight)
+        self.assertTrue(
+            boss_profile.show_attendance_subscription_boundary
+        )
+
+    def test_attendance_respects_visual_profile_settings(self):
+        today = timezone.localdate()
+        for weekday in range(7):
+            ScheduleSlot.objects.create(
+                group=self.group,
+                weekday=weekday,
+                start_time=time(18, 0),
+            )
+        Subscription.objects.create(
+            child=self.child,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            sessions_total=1,
+            price=Decimal("5000"),
+        )
+
+        profile = StaffProfile.objects.get(user=self.admin)
+        profile.show_attendance_legend = False
+        profile.show_attendance_today_highlight = False
+        profile.show_attendance_subscription_boundary = False
+        profile.save(update_fields=[
+            "show_attendance_legend",
+            "show_attendance_today_highlight",
+            "show_attendance_subscription_boundary",
+        ])
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "period": "day",
+                "ref_date": today.isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.context["attendance_visual"],
+            {
+                "show_legend": False,
+                "highlight_today": False,
+                "show_subscription_boundary": False,
+            },
+        )
+        self.assertNotContains(
+            response,
+            "data-attendance-legend",
+        )
+        self.assertNotContains(
+            response,
+            "border-r-2 border-red-500",
+        )
+        self.assertNotContains(
+            response,
+            "bg-orange-50 text-[#FF5C35]",
+        )
+
+        profile.show_attendance_legend = True
+        profile.show_attendance_today_highlight = True
+        profile.show_attendance_subscription_boundary = True
+        profile.save(update_fields=[
+            "show_attendance_legend",
+            "show_attendance_today_highlight",
+            "show_attendance_subscription_boundary",
+        ])
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "period": "day",
+                "ref_date": today.isoformat(),
+            },
+        )
+        self.assertContains(response, "data-attendance-legend")
+        self.assertContains(
+            response,
+            "border-r-2 border-red-500",
+        )
+        self.assertContains(
+            response,
+            "bg-orange-50 text-[#FF5C35]",
+        )
+
     def test_attendance_skips_days_without_classes(self):
         today = timezone.localdate()
         ref_date = today + timedelta(

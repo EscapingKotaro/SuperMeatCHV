@@ -130,6 +130,31 @@ def page_context(request, page, **extra):
     return context
 
 
+def _attendance_visual_settings(user):
+    profile = (
+        StaffProfile.objects
+        .filter(user_id=user.pk)
+        .first()
+    )
+    return {
+        "show_legend": (
+            profile.show_attendance_legend
+            if profile
+            else True
+        ),
+        "highlight_today": (
+            profile.show_attendance_today_highlight
+            if profile
+            else True
+        ),
+        "show_subscription_boundary": (
+            profile.show_attendance_subscription_boundary
+            if profile
+            else True
+        ),
+    }
+
+
 def log_action(request, action, obj, description):
     event = AuditEvent.objects.create(
         actor=request.user,
@@ -679,6 +704,7 @@ def attendance_view(request):
         date_to=period_end if period == "custom" else None,
         child_form=child_form,
         creating_child=creating_child,
+        attendance_visual=_attendance_visual_settings(request.user),
     )
 
     return render(request, "crm/attendance.html", context)
@@ -4157,6 +4183,37 @@ def profile_page(request):
     profile_form = ProfileForm(instance=request.user, prefix="profile")
     password_form = StyledPasswordChangeForm(request.user, prefix="password")
     if request.method == "POST":
+        if request.POST.get("action") == "attendance_visual":
+            staff_profile, _ = StaffProfile.objects.get_or_create(
+                user=request.user,
+                defaults={"role": Role.MANAGER},
+            )
+            staff_profile.show_attendance_legend = (
+                request.POST.get("show_attendance_legend") == "on"
+            )
+            staff_profile.show_attendance_today_highlight = (
+                request.POST.get("show_attendance_today_highlight") == "on"
+            )
+            staff_profile.show_attendance_subscription_boundary = (
+                request.POST.get("show_attendance_subscription_boundary")
+                == "on"
+            )
+            staff_profile.save(update_fields=[
+                "show_attendance_legend",
+                "show_attendance_today_highlight",
+                "show_attendance_subscription_boundary",
+            ])
+            log_action(
+                request,
+                "profile.visual",
+                staff_profile,
+                "Обновлены визуальные настройки табеля",
+            )
+            messages.success(
+                request,
+                "Вид табеля обновлён",
+            )
+            return redirect("profile")
         if request.POST.get("action") == "profile":
             profile_form = ProfileForm(request.POST, instance=request.user, prefix="profile")
             if profile_form.is_valid():
@@ -4173,7 +4230,11 @@ def profile_page(request):
                 return redirect("profile")
         messages.error(request, "Проверьте введённые данные")
     return render(request, "crm/profile.html", page_context(
-        request, "profile", profile_form=profile_form, password_form=password_form,
+        request,
+        "profile",
+        profile_form=profile_form,
+        password_form=password_form,
+        attendance_visual=_attendance_visual_settings(request.user),
     ))
 
 

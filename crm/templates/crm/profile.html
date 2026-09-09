@@ -27,6 +27,54 @@
         </form>
         <form method="post" class="card p-5">
             {% csrf_token %}
+            <input type="hidden" name="action" value="attendance_visual">
+            <h2 class="font-extrabold">Вид табеля</h2>
+            <p class="mt-1 text-xs text-slate-500">
+                Эти настройки меняют только отображение и не затрагивают данные посещений.
+            </p>
+
+            <div class="mt-4 space-y-3">
+                <label class="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
+                    <input type="checkbox"
+                           name="show_attendance_subscription_boundary"
+                           class="mt-1 h-4 w-4"
+                           {% if attendance_visual.show_subscription_boundary %}checked{% endif %}>
+                    <span>
+                        <b class="block text-sm">Граница окончания абонемента</b>
+                        <span class="text-xs text-slate-500">Красная вертикальная линия на последнем занятии абонемента.</span>
+                    </span>
+                </label>
+
+                <label class="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
+                    <input type="checkbox"
+                           name="show_attendance_today_highlight"
+                           class="mt-1 h-4 w-4"
+                           {% if attendance_visual.highlight_today %}checked{% endif %}>
+                    <span>
+                        <b class="block text-sm">Подсветка сегодняшнего дня</b>
+                        <span class="text-xs text-slate-500">Оранжевая подсветка текущей даты и её столбца.</span>
+                    </span>
+                </label>
+
+                <label class="flex items-start gap-3 rounded-xl border border-slate-200 p-3">
+                    <input type="checkbox"
+                           name="show_attendance_legend"
+                           class="mt-1 h-4 w-4"
+                           {% if attendance_visual.show_legend %}checked{% endif %}>
+                    <span>
+                        <b class="block text-sm">Легенда отметок</b>
+                        <span class="text-xs text-slate-500">Подсказка «Пришёл / Пропуск / Заморозка / Больничный» над таблицей.</span>
+                    </span>
+                </label>
+            </div>
+
+            <div class="mt-4 flex justify-end">
+                <button class="btn btn-primary">Сохранить вид</button>
+            </div>
+        </form>
+
+        <form method="post" class="card p-5">
+            {% csrf_token %}
             <input type="hidden" name="action" value="password">
             <h2 class="font-extrabold">Смена пароля</h2>
             <div class="mt-4 grid gap-4">
