@@ -101,30 +101,20 @@ class StaffProfile(models.Model):
 
 def calculate_projected_end_date(group, start_date, sessions_count):
     """
-    Рассчитывает дату последнего занятия.
-    start_date — дата, с которой начинаем считать (включительно).
+    Рассчитывает дату последнего занятия по фактическому календарю группы,
+    включая разовые переносы занятий.
     """
     if sessions_count <= 0 or not group:
         return None
-        
-    slots = list(group.schedule.all())
-    if not slots:
+
+    class_dates = effective_class_dates(
+        group,
+        start_date,
+        start_date + timedelta(days=364),
+    )
+    if len(class_dates) < sessions_count:
         return None
-        
-    current_date = start_date
-    count = 0
-    max_days = 365
-    
-    while max_days > 0:
-        for slot in slots:
-            if current_date.weekday() == slot.weekday:
-                count += 1
-                if count >= sessions_count:
-                    return current_date
-        current_date += timedelta(days=1)
-        max_days -= 1
-        
-    return None
+    return class_dates[sessions_count - 1]
 
 
 
@@ -192,6 +182,99 @@ class ScheduleSlot(models.Model):
     def __str__(self):
         d = dict(self.WEEKDAYS)[self.weekday]
         return f"{self.group} · {d} {self.start_time:%H:%M}"
+
+class ScheduleOverride(models.Model):
+    """Разовый перенос одного занятия группы с даты на дату."""
+
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.CASCADE,
+        related_name="schedule_overrides",
+        verbose_name="группа",
+    )
+    original_date = models.DateField("Исходная дата")
+    replacement_date = models.DateField("Новая дата")
+    replacement_start_time = models.TimeField(
+        "Новое время",
+        blank=True,
+        null=True,
+    )
+    extend_subscriptions = models.BooleanField(
+        "Продлить абонементы",
+        default=False,
+    )
+    extension_days = models.PositiveSmallIntegerField(
+        "Продлено на дней",
+        default=0,
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="schedule_overrides_created",
+        verbose_name="создал",
+    )
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Перенос занятия"
+        verbose_name_plural = "Переносы занятий"
+        ordering = ("created_at", "pk")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("group", "original_date"),
+                name="unique_group_schedule_override_source",
+            ),
+            models.UniqueConstraint(
+                fields=("group", "replacement_date"),
+                name="unique_group_schedule_override_target",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.group} · {self.original_date:%d.%m.%Y}"
+            f" → {self.replacement_date:%d.%m.%Y}"
+        )
+
+
+def effective_class_dates(group, start_date, end_date):
+    """Фактические даты занятий группы с учётом разовых переносов."""
+    if not group or start_date > end_date:
+        return []
+
+    weekdays = set(
+        ScheduleSlot.objects
+        .filter(group=group)
+        .values_list("weekday", flat=True)
+    )
+
+    dates = set()
+    current = start_date
+    while current <= end_date:
+        if current.weekday() in weekdays:
+            dates.add(current)
+        current += timedelta(days=1)
+
+    # Переносы применяются последовательно. Поэтому можно повторно перенести
+    # уже перенесённое занятие: A→B, затем B→C даст только C.
+    overrides = (
+        ScheduleOverride.objects
+        .filter(group=group)
+        .order_by("created_at", "pk")
+        .values_list("original_date", "replacement_date")
+    )
+    for original_date, replacement_date in overrides:
+        dates.discard(original_date)
+        dates.add(replacement_date)
+
+    return sorted(
+        class_date
+        for class_date in dates
+        if start_date <= class_date <= end_date
+    )
+
 
 class SalaryAdjustment(models.Model):
     """Ручные строки ЗП: перс, замены, соревнования."""
@@ -292,7 +375,13 @@ class Child(models.Model):
         today = timezone.localdate()
         if not self.group:
             return False
-        return ScheduleSlot.objects.filter(group=self.group, weekday=today.weekday()).exists()
+        return bool(
+            effective_class_dates(
+                self.group,
+                today,
+                today,
+            )
+        )
 
     def has_mark_today(self):
         today = timezone.localdate()
@@ -318,19 +407,15 @@ class Child(models.Model):
         if target_date <= today:
             return left
 
-        slots = ScheduleSlot.objects.filter(group=self.group)
-        count = 0
-        current = today
-        today_is_already_marked = self.has_mark_today()
+        class_dates = effective_class_dates(
+            self.group,
+            today,
+            target_date - timedelta(days=1),
+        )
+        if self.has_mark_today() and today in class_dates:
+            class_dates.remove(today)
 
-        while current < target_date:
-            if not (current == today and today_is_already_marked):
-                for slot in slots:
-                    if current.weekday() == slot.weekday:
-                        count += 1
-            current += timedelta(days=1)
-
-        return max(0, left - count)
+        return max(0, left - len(class_dates))
 
     def debt_sessions(self):
         paid_sessions = sum(sub.sessions_total for sub in self.subscriptions.filter(cancelled_at__isnull=True))
@@ -546,6 +631,41 @@ class Subscription(models.Model):
             self.cancelled_at = timezone.now()
             self.save(update_fields=["is_active", "cancelled_at"])
 
+
+def extend_subscriptions_for_schedule_move(
+    group,
+    original_date,
+    replacement_date,
+):
+    """Сдвигает сроки абонементов группы на величину переноса вперёд."""
+    extension_days = max(
+        0,
+        (replacement_date - original_date).days,
+    )
+    if extension_days == 0:
+        return 0, 0
+
+    subscriptions = list(
+        Subscription.objects
+        .select_for_update()
+        .filter(
+            child__group=group,
+            is_active=True,
+            cancelled_at__isnull=True,
+            start_date__lte=original_date,
+            end_date__gte=original_date,
+        )
+    )
+    for subscription in subscriptions:
+        subscription.end_date += timedelta(days=extension_days)
+
+    if subscriptions:
+        Subscription.objects.bulk_update(
+            subscriptions,
+            ("end_date",),
+        )
+
+    return len(subscriptions), extension_days
 
 
 class Payment(models.Model):
