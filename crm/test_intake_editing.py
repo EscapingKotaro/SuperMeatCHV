@@ -203,3 +203,55 @@ class IntakeEditRegressionTests(TestCase):
             newcomers,
             "Создать карточку спортсмена",
         )
+
+    def test_applications_show_workflow_state_without_ad_row_highlight(self):
+        lead = Lead.objects.create(
+            full_name="Рекламная заявка",
+            source="VK Реклама",
+            status=Lead.Status.QUALIFIED,
+            imported_from_ad=True,
+        )
+        newcomer = Newcomer.objects.create(
+            lead=lead,
+            full_name=lead.full_name,
+            attended=True,
+        )
+
+        response = self.client.get(reverse("applications"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "из рекламы")
+        self.assertContains(response, "Пробное посещено")
+        self.assertContains(
+            response,
+            f'{reverse("newcomers")}?edit={newcomer.pk}',
+        )
+        self.assertNotContains(response, "bg-blue-50/70")
+        self.assertNotContains(response, "Они выделены синим")
+        self.assertNotContains(response, "В новички")
+        self.assertNotContains(response, "Назначить пробное")
+
+    def test_applications_have_open_closed_all_workflow_filter(self):
+        Lead.objects.create(
+            full_name="Открытая заявка",
+            status=Lead.Status.NEW,
+        )
+        Lead.objects.create(
+            full_name="Закрытая заявка",
+            status=Lead.Status.LOST,
+        )
+
+        response = self.client.get(reverse("applications"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-lead-filter="open"')
+        self.assertContains(response, 'data-lead-filter="closed"')
+        self.assertContains(response, 'data-lead-filter="all"')
+        self.assertContains(response, 'data-lead-state="open"')
+        self.assertContains(response, 'data-lead-state="closed"')
+        self.assertContains(response, "const defaultLeadState = 'open';")
+        self.assertContains(
+            response,
+            "state === 'all' || row.dataset.leadState === state",
+        )
+        self.assertContains(response, "Назначить пробное")

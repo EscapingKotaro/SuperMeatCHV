@@ -10,10 +10,19 @@
 </div>
 {% endblock %}
 {% block content %}
-{% if imported_count %}
-<div class="mb-4 rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm font-semibold text-blue-800">Новых заявок из рекламы: {{ imported_count }}. Они выделены синим.</div>
-{% endif %}
 <section class="card overflow-hidden">
+    <div class="flex flex-wrap items-center gap-2 border-b px-4 py-3" data-lead-filters>
+        <span class="mr-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Показывать</span>
+        <button type="button" class="btn btn-soft" data-lead-filter="open">
+            Открытые <span class="badge ml-1" data-lead-filter-count="open">0</span>
+        </button>
+        <button type="button" class="btn btn-soft" data-lead-filter="closed">
+            Закрытые <span class="badge ml-1" data-lead-filter-count="closed">0</span>
+        </button>
+        <button type="button" class="btn btn-soft" data-lead-filter="all">
+            Все <span class="badge ml-1" data-lead-filter-count="all">0</span>
+        </button>
+    </div>
     <div class="table-wrap">
         <table class="data-table">
             <thead>
@@ -26,32 +35,51 @@
                     <th>Действия</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody data-lead-rows>
                 {% for lead in leads %}
-                <tr class="{% if lead.imported_from_ad %}bg-blue-50/70{% endif %}">
+                <tr data-lead-row data-lead-state="{% if lead.status == 'qualified' or lead.status == 'lost' %}closed{% else %}open{% endif %}">
                     <td>
                         <b>{{ lead.full_name }}</b>
                         <small class="block text-slate-500">{{ lead.age_display }} · {{ lead.created_at|date:"d.m.Y" }}</small>
                     </td>
                     <td>{{ lead.phone|default:"—" }}</td>
                     <td>{{ lead.source|default:"Не указан" }}{% if lead.imported_from_ad %}
-                        <span class="badge ml-1 bg-blue-100 text-blue-700">из рекламы</span>
+                        <span class="badge ml-1 bg-slate-100 text-slate-600">из рекламы</span>
                         {% endif %}
                     </td>
                     <td>{{ lead.current_trial.trainer|default:"—" }}<small class="block">{{ lead.current_trial.group|default:"—" }}</small></td>
                     <td>{{ lead.current_trial.trial_at|date:"d.m.Y H:i"|default:"Не назначено" }}</td>
                     <td>{% if lead.current_newcomer %}{% if lead.current_newcomer.lesson_cancelled %}Отменено{% elif lead.current_newcomer.attended %}Пришёл{% else %}Не подтверждён{% endif %}<small class="block">{% if lead.current_newcomer.has_paid %}Оплачено{% else %}Нет оплаты{% endif %}</small>{% else %}—{% endif %}</td>
                     <td class="max-w-xs whitespace-pre-line">{{ lead.current_trial.comment|default:"—" }}</td>
-                    <td>{{ lead.get_status_display }}</td>
+                    <td>
+                        <span class="font-semibold">{{ lead.get_status_display }}</span>
+                        {% if lead.child %}
+                        <small class="block text-emerald-700">Спортсмен создан</small>
+                        {% elif lead.current_newcomer %}
+                            {% if lead.current_newcomer.lesson_cancelled %}
+                            <small class="block text-slate-500">Пробное отменено</small>
+                            {% elif lead.current_newcomer.attended %}
+                            <small class="block text-emerald-700">Пробное посещено</small>
+                            {% elif lead.current_newcomer.trial_at %}
+                            <small class="block text-blue-700">Пробное назначено</small>
+                            {% else %}
+                            <small class="block text-slate-500">Новичок создан</small>
+                            {% endif %}
+                        {% else %}
+                        <small class="block text-slate-500">Пробное не создано</small>
+                        {% endif %}
+                    </td>
                     <td>
                         <div class="flex flex-wrap gap-2">
                             <a href="?edit={{ lead.pk }}" class="btn btn-soft">Изменить</a>
-                            {% if not lead.newcomers.exists %}
+                            {% if lead.current_newcomer %}
+                            <a href="{% url 'newcomers' %}?edit={{ lead.current_newcomer.pk }}" class="btn btn-soft">Открыть новичка</a>
+                            {% elif lead.status != 'qualified' and lead.status != 'lost' %}
                             <form method="post">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="create_newcomer">
                                 <input type="hidden" name="lead_id" value="{{ lead.pk }}">
-                                <button class="btn btn-soft">В новички</button>
+                                <button class="btn btn-soft">Назначить пробное</button>
                             </form>
                             {% endif %}
                         </div>
@@ -62,6 +90,11 @@
                     <td colspan="9" class="py-12 text-center text-slate-500">Заявок пока нет</td>
                 </tr>
                 {% endfor %}
+                {% if leads %}
+                <tr data-lead-filter-empty hidden>
+                    <td colspan="9" class="py-12 text-center text-slate-500">В этом разделе заявок нет</td>
+                </tr>
+                {% endif %}
             </tbody>
         </table>
     </div>
@@ -121,6 +154,63 @@
 </section>
 {% endblock %}
 {% block scripts %}
+<script>
+(() => {
+    const rows = [...document.querySelectorAll('[data-lead-row]')];
+    const buttons = [...document.querySelectorAll('[data-lead-filter]')];
+    const emptyRow = document.querySelector('[data-lead-filter-empty]');
+    if (!buttons.length) return;
+
+    const counts = {
+        open: rows.filter(row => row.dataset.leadState === 'open').length,
+        closed: rows.filter(row => row.dataset.leadState === 'closed').length,
+        all: rows.length,
+    };
+    Object.entries(counts).forEach(([state, count]) => {
+        const target = document.querySelector(`[data-lead-filter-count="${state}"]`);
+        if (target) target.textContent = count;
+    });
+
+    const requestedState = new URLSearchParams(window.location.search).get('state');
+    const defaultLeadState = 'open';
+    let state = ['open', 'closed', 'all'].includes(requestedState)
+        ? requestedState
+        : defaultLeadState;
+
+    function applyLeadFilter(nextState, updateUrl = false) {
+        state = nextState;
+        let visible = 0;
+        rows.forEach(row => {
+            const show = state === 'all' || row.dataset.leadState === state;
+            row.hidden = !show;
+            if (show) visible += 1;
+        });
+        if (emptyRow) emptyRow.hidden = visible !== 0;
+
+        buttons.forEach(button => {
+            const active = button.dataset.leadFilter === state;
+            button.classList.toggle('btn-primary', active);
+            button.classList.toggle('btn-soft', !active);
+            button.setAttribute('aria-pressed', active ? 'true' : 'false');
+        });
+
+        if (updateUrl) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('state', state);
+            url.searchParams.delete('edit');
+            url.searchParams.delete('create');
+            window.history.replaceState({}, '', url);
+        }
+    }
+
+    buttons.forEach(button => {
+        button.addEventListener('click', () => {
+            applyLeadFilter(button.dataset.leadFilter, true);
+        });
+    });
+    applyLeadFilter(state);
+})();
+</script>
 {% if editing or form.errors or request.GET.create == "1" %}
 <script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>
 {% endif %}
