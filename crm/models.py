@@ -244,11 +244,20 @@ def effective_class_dates(group, start_date, end_date):
     if not group or start_date > end_date:
         return []
 
-    weekdays = set(
-        ScheduleSlot.objects
-        .filter(group=group)
-        .values_list("weekday", flat=True)
+    prefetched = getattr(
+        group,
+        "_prefetched_objects_cache",
+        {},
     )
+    cached_schedule = prefetched.get("schedule")
+    if cached_schedule is None:
+        weekdays = set(
+            ScheduleSlot.objects
+            .filter(group=group)
+            .values_list("weekday", flat=True)
+        )
+    else:
+        weekdays = {slot.weekday for slot in cached_schedule}
 
     dates = set()
     current = start_date
@@ -259,15 +268,25 @@ def effective_class_dates(group, start_date, end_date):
 
     # Переносы применяются последовательно. Поэтому можно повторно перенести
     # уже перенесённое занятие: A→B, затем B→C даст только C.
-    overrides = (
-        ScheduleOverride.objects
-        .filter(group=group)
-        .order_by("created_at", "pk")
-        .values_list("original_date", "replacement_date")
-    )
-    for original_date, replacement_date in overrides:
-        dates.discard(original_date)
-        dates.add(replacement_date)
+    cached_overrides = prefetched.get("schedule_overrides")
+    if cached_overrides is None:
+        overrides = (
+            ScheduleOverride.objects
+            .filter(group=group)
+            .order_by("created_at", "pk")
+        )
+    else:
+        overrides = sorted(
+            cached_overrides,
+            key=lambda override: (
+                override.created_at,
+                override.pk,
+            ),
+        )
+
+    for override in overrides:
+        dates.discard(override.original_date)
+        dates.add(override.replacement_date)
 
     return sorted(
         class_date

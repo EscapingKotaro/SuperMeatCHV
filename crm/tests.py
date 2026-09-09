@@ -2205,6 +2205,19 @@ class CrmWorkflowTests(TestCase):
             [self.child.pk, other.pk],
         )
 
+        first_row = response.context["children_data"][0]
+        self.assertEqual(first_row["sessions_used"], 3)
+        self.assertEqual(first_row["sessions_left"], 5)
+        self.assertEqual(first_row["sessions_total"], 8)
+        self.assertContains(
+            response,
+            "3/8",
+        )
+        self.assertNotContains(
+            response,
+            "5/8",
+        )
+
     def test_login_remember_me_sets_two_week_session(self):
         self.client.logout()
         response = self.client.post(reverse("login"), {

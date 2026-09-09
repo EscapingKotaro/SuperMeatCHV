@@ -526,6 +526,11 @@ def attendance_view(request):
     for child in children_list:
         active_sub = child.active_subscription()
         sessions_left = child.sessions_left()
+        sessions_used = (
+            max(0, active_sub.sessions_total - sessions_left)
+            if active_sub
+            else 0
+        )
         projected_end = (
             child.projected_end_date()
             if active_sub and sessions_left > 0
@@ -584,6 +589,7 @@ def attendance_view(request):
             'initials': f"{child.last_name[0]}{child.first_name[0]}".upper(),
             'age': child.age_display(),
             'sessions_left': sessions_left,
+            'sessions_used': sessions_used,
             'sessions_total': active_sub.sessions_total if active_sub else 0,
             'subscription_id': active_sub.pk if active_sub else None,
             'debt': child.debt(),
@@ -5018,7 +5024,13 @@ def build_renewal_rows(month_start, month_end, today=None):
         Child.objects
         .filter(status=Child.Status.ACTIVE)
         .select_related("group")
-        .prefetch_related("subscriptions__tariff", "payments", "attendances", "group__schedule")
+        .prefetch_related(
+            "subscriptions__tariff",
+            "payments",
+            "attendances",
+            "group__schedule",
+            "group__schedule_overrides",
+        )
     )
 
     for child in children:
