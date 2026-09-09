@@ -164,6 +164,19 @@
             {% block actions %}{% endblock %}
         </div>
 
+        {% if messages %}
+        <div class="mb-4 space-y-2" aria-live="polite">
+            {% for message in messages %}
+            <div data-toast class="flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-800{% elif message.tags == 'success' %}border-emerald-200 bg-emerald-50 text-emerald-800{% elif message.tags == 'warning' %}border-amber-200 bg-amber-50 text-amber-800{% else %}border-blue-200 bg-blue-50 text-blue-800{% endif %}">
+                <span class="min-w-0 flex-1">{{ message }}</span>
+                <button type="button" data-toast-close class="shrink-0 opacity-60 transition hover:opacity-100" aria-label="Закрыть сообщение">
+                    <i data-lucide="x" class="h-4 w-4"></i>
+                </button>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
         {% block content %}{% endblock %}
     </main>
 
