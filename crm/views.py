@@ -415,6 +415,47 @@ def attendance_view(request):
             'is_future': class_date > today,
         })
 
+    # Счётчики в заголовке каждой даты: уникальные пришедшие дети
+    # в выбранной группе и по всему клубу за этот день.
+    present_counts = {
+        row["date"]: row
+        for row in (
+            Attendance.objects
+            .filter(
+                date__in=window_dates,
+                status=Attendance.Status.PRESENT,
+            )
+            .values("date")
+            .annotate(
+                group_present_count=Count(
+                    "child_id",
+                    filter=(
+                        Q(group_snapshot=group)
+                        | Q(
+                            group_snapshot__isnull=True,
+                            child__group=group,
+                        )
+                    ),
+                    distinct=True,
+                ),
+                total_present_count=Count(
+                    "child_id",
+                    distinct=True,
+                ),
+            )
+        )
+    }
+    for entry in week_data:
+        counts = present_counts.get(entry["date"], {})
+        entry["group_present_count"] = counts.get(
+            "group_present_count",
+            0,
+        )
+        entry["total_present_count"] = counts.get(
+            "total_present_count",
+            0,
+        )
+
     # 5. ПОЛУЧАЕМ ДЕТЕЙ (с учетом архива)
     if show_archived:
         children_qs = Child.objects.filter(
