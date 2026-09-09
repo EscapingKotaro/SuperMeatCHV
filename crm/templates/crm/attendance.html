@@ -132,8 +132,8 @@
         {% endif %}
 
         <div class="ml-auto flex flex-wrap gap-2 text-xs font-bold text-slate-600">
-            <span class="badge bg-emerald-100 text-emerald-700 px-1.5 py-0.5">+ Пришёл</span>
-            <span class="badge bg-red-100 text-red-700 px-1.5 py-0.5">× Пропуск</span>
+            <span class="badge border border-slate-200 bg-white px-1.5 py-0.5 text-slate-700">+ Пришёл</span>
+            <span class="badge border border-slate-200 bg-white px-1.5 py-0.5 text-slate-500">× Пропуск</span>
             <span class="badge bg-blue-100 text-blue-700 px-1.5 py-0.5">❄ Заморозка</span>
             <span class="badge bg-amber-100 text-amber-700 px-1.5 py-0.5">О Отпуск</span>
             <span class="badge bg-yellow-100 text-yellow-700 px-1.5 py-0.5" title="Пропуск по уважительной причине — сдвигает окончание абонемента">У Уважительная</span>
@@ -200,31 +200,54 @@
                                 <span class="absolute -top-1 -right-1 px-1.5 py-0.5 text-[9px] font-bold bg-slate-200 text-slate-600 rounded-full">АРХИВ</span>
                                 {% endif %}
 
-                                <div class="flex items-baseline justify-between gap-1">
-                                    <b class="text-sm truncate {% if item.is_archived %}text-slate-500 line-through{% endif %}">{{ item.child.last_name }} {{ item.child.first_name }}</b>
-                                    <span class="text-xs text-slate-400 whitespace-nowrap font-medium">{{ item.age }}</span>
+                                <div class="flex items-center justify-between gap-2"
+                                     data-athlete-primary-row>
+                                    <b class="min-w-0 truncate text-sm {% if item.is_archived %}text-slate-500 line-through{% endif %}">
+                                        {{ item.child.last_name }} {{ item.child.first_name }}
+                                    </b>
+                                    <span class="shrink-0 text-sm font-extrabold text-slate-800"
+                                          title="Использовано занятий из абонемента"
+                                          data-athlete-sessions>
+                                        {{ item.sessions_used }}/{{ item.sessions_total }}
+                                    </span>
                                 </div>
 
-                                <div class="flex items-center justify-between gap-2 mt-1">
-                                    <div class="flex items-center gap-1.5">
-                                        <span class="text-xs font-bold text-slate-700"
-                                              title="Использовано занятий из абонемента">
-                                            {{ item.sessions_used }}/{{ item.sessions_total }}
+                                <div class="mt-1 flex items-center justify-between gap-2"
+                                     data-athlete-meta-row>
+                                    <div class="flex min-w-0 items-center gap-2">
+                                        <span class="shrink-0 whitespace-nowrap text-xs font-medium text-slate-400">
+                                            {{ item.age }}
                                         </span>
-                                        {% if item.debt > 0 %}
-                                        <span class="inline-flex items-center text-red-600" title="Долг {{ item.debt|floatformat:0 }} ₽">
-                                            <i data-lucide="coins" class="h-4 w-4"></i>
-                                        </span>
-                                        {% endif %}
-                                        {% if item.has_certificate %}
-                                        <span class="inline-flex items-center text-blue-600" title="Справка есть"><i data-lucide="file-text" class="h-4 w-4"></i></span>
-                                        {% endif %}
-                                        {% if item.discount_percent > 0 %}
-                                        <span class="inline-flex items-center text-emerald-600" title="Скидка {{ item.discount_percent }}%"><i data-lucide="percent" class="h-4 w-4"></i></span>
-                                        {% endif %}
+
+                                        <div class="flex items-center gap-1"
+                                             data-athlete-indicators>
+                                            {% if item.debt > 0 %}
+                                            <span class="grid h-7 w-7 place-items-center rounded-lg bg-red-50 text-red-600"
+                                                  title="Долг {{ item.debt|floatformat:0 }} ₽"
+                                                  data-athlete-indicator="debt">
+                                                <i data-lucide="coins" class="h-5 w-5"></i>
+                                            </span>
+                                            {% endif %}
+                                            {% if item.has_certificate %}
+                                            <span class="grid h-7 w-7 place-items-center rounded-lg bg-blue-50 text-blue-600"
+                                                  title="Справка есть"
+                                                  data-athlete-indicator="certificate">
+                                                <i data-lucide="file-text" class="h-5 w-5"></i>
+                                            </span>
+                                            {% endif %}
+                                            {% if item.discount_percent > 0 %}
+                                            <span class="grid h-7 w-7 place-items-center rounded-lg bg-emerald-50 text-emerald-600"
+                                                  title="Скидка {{ item.discount_percent }}%"
+                                                  data-athlete-indicator="discount">
+                                                <i data-lucide="percent" class="h-5 w-5"></i>
+                                            </span>
+                                            {% endif %}
+                                        </div>
                                     </div>
+
                                     {% if item.subscription_end %}
-                                    <span class="text-xs {% if item.subscription_ending_soon %}text-red-600 font-bold{% else %}text-slate-400{% endif %} whitespace-nowrap">
+                                    <span class="shrink-0 whitespace-nowrap text-xs {% if item.subscription_ending_soon %}font-bold text-red-600{% else %}text-slate-400{% endif %}"
+                                          data-athlete-subscription-end>
                                         до {{ item.subscription_end|date:"d.m" }}
                                     </span>
                                     {% endif %}
@@ -275,19 +298,34 @@
 </section>
 
 <div id="attendance-menu"
-     class="hidden fixed z-[70] w-44 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl">
+     class="hidden fixed z-[70] w-56 rounded-xl border border-slate-200 bg-white p-1.5 shadow-2xl">
 
     <button type="button"
             data-attendance-choice="present"
-            class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-emerald-50">
-        <span class="grid h-6 w-6 place-items-center rounded-md bg-emerald-100 font-bold text-emerald-700">+</span>
+            class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50">
+        <span class="grid h-6 w-6 place-items-center rounded-md border border-slate-200 bg-white font-bold text-slate-800">+</span>
         <span>Пришёл</span>
     </button>
 
     <button type="button"
+            data-attendance-choice="debt_present"
+            hidden
+            class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-amber-50">
+        <span class="grid h-6 w-6 place-items-center rounded-md bg-amber-100 text-amber-700">
+            <i data-lucide="coins" class="h-4 w-4"></i>
+        </span>
+        <span>
+            Оформить + в долг
+            {% if selected_group %}
+            · {{ selected_group.single_session_price|floatformat:0 }} ₽
+            {% endif %}
+        </span>
+    </button>
+
+    <button type="button"
             data-attendance-choice="absent"
-            class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-red-50">
-        <span class="grid h-6 w-6 place-items-center rounded-md bg-red-100 font-bold text-red-700">×</span>
+            class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-slate-50">
+        <span class="grid h-6 w-6 place-items-center rounded-md border border-slate-200 bg-white font-bold text-slate-500">×</span>
         <span>Пропуск</span>
     </button>
 
@@ -576,8 +614,26 @@
     // =========================================================
     // УПРАВЛЕНИЕ МЕНЮ
     // =========================================================
+    function requiresDebt(button) {
+        return ["expired", "none"].includes(
+            button.dataset.subscriptionState
+        );
+    }
+
     function openMenu(button) {
         activeButton = button;
+        const needsDebt = requiresDebt(button);
+        const presentOption = menu.querySelector(
+            '[data-attendance-choice="present"]'
+        );
+        const debtOption = menu.querySelector(
+            '[data-attendance-choice="debt_present"]'
+        );
+        presentOption.hidden = needsDebt;
+        debtOption.hidden = (
+            !needsDebt
+            || button.dataset.state === STATES.present.state
+        );
         menu.querySelector("[data-cancel-subscription]").hidden = !button.dataset.subscriptionId;
         const rect = button.getBoundingClientRect();
         menu.classList.remove("hidden");
@@ -602,7 +658,7 @@
     // =========================================================
     // API: СОХРАНИТЬ / УДАЛИТЬ
     // =========================================================
-    async function saveAttendance(button, status) {
+    async function saveAttendance(button, status, { allowDebt = false } = {}) {
         const childId = button.dataset.childId;
         const date = button.dataset.date;
         if (!childId || !date) return;
@@ -620,7 +676,12 @@
                     "X-CSRFToken": getCsrfToken(),
                     "X-Requested-With": "XMLHttpRequest"
                 },
-                body: new URLSearchParams({ child_id: childId, date: date, status: status }).toString()
+                body: new URLSearchParams({
+                    child_id: childId,
+                    date: date,
+                    status: status,
+                    allow_debt: allowDebt ? "1" : ""
+                }).toString()
             });
             const data = await response.json();
             if (!response.ok || data.status !== "ok") throw new Error(data.message || `HTTP ${response.status}`);
@@ -687,7 +748,11 @@
 
         const currentState = button.dataset.state;
         if (currentState === "0") {
-            saveAttendance(button, "present"); // Нет отметки -> ставим "+"
+            if (requiresDebt(button)) {
+                openMenu(button);
+            } else {
+                saveAttendance(button, "present");
+            }
         } else {
             clearAttendance(button); // Есть отметка -> стираем
         }
@@ -718,6 +783,12 @@
 
         if (status === "clear") {
             await clearAttendance(button);
+        } else if (status === "debt_present") {
+            await saveAttendance(
+                button,
+                "present",
+                { allowDebt: true }
+            );
         } else {
             await saveAttendance(button, status);
         }

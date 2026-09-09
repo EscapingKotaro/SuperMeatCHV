@@ -1045,12 +1045,17 @@ def cancel_attendance_view(request):
 
 @login_required
 @require_POST
+@transaction.atomic
 def mark_attendance_view(request):
     """Поставить или изменить отметку посещения."""
 
     child_id = request.POST.get("child_id")
     date_str = request.POST.get("date")
     status = request.POST.get("status")
+    allow_debt = (
+        request.POST.get("allow_debt")
+        in {"1", "true", "on", "yes"}
+    )
 
     if not child_id or not date_str or not status:
         return JsonResponse(
@@ -1100,20 +1105,77 @@ def mark_attendance_view(request):
             status=400,
         )
 
-    charge = Decimal("0")
-
-    if (
-        status == Attendance.Status.PRESENT
-        and not child.active_subscription()
-        and child.group
-    ):
-        charge = child.group.single_session_price
-
     attendance = Attendance.objects.filter(
         child=child,
         date=mark_date,
         slot=None,
     ).first()
+
+    subscription_on_date = (
+        child.subscriptions
+        .filter(
+            is_active=True,
+            cancelled_at__isnull=True,
+            start_date__lte=mark_date,
+            end_date__gte=mark_date,
+        )
+        .order_by("end_date", "pk")
+        .first()
+    )
+    debt_already_formalized = (
+        attendance is not None
+        and attendance.status == Attendance.Status.PRESENT
+        and subscription_on_date is None
+    )
+
+    charge = Decimal("0")
+    if (
+        status == Attendance.Status.PRESENT
+        and subscription_on_date is None
+    ):
+        if not child.group:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "code": "debt_unavailable",
+                    "message": (
+                        "Нельзя оформить посещение в долг без группы"
+                    ),
+                },
+                status=409,
+            )
+
+        if not allow_debt and not debt_already_formalized:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "code": "debt_required",
+                    "message": (
+                        "Абонемент не действует на эту дату. "
+                        "Сначала оформите занятие в долг."
+                    ),
+                },
+                status=409,
+            )
+
+        if allow_debt and child.group.single_session_price <= 0:
+            return JsonResponse(
+                {
+                    "status": "error",
+                    "code": "debt_price_required",
+                    "message": (
+                        "Сначала задайте стоимость занятия в долг "
+                        "в настройках группы."
+                    ),
+                },
+                status=409,
+            )
+
+        charge = (
+            attendance.charge_amount
+            if debt_already_formalized and not allow_debt
+            else child.group.single_session_price
+        )
 
     if attendance is None:
         created = True
@@ -1149,11 +1211,28 @@ def mark_attendance_view(request):
 
         attendance.save(update_fields=update_fields)
 
+    debt_formalized = (
+        status == Attendance.Status.PRESENT
+        and subscription_on_date is None
+    )
+    if debt_formalized and allow_debt:
+        log_action(
+            request,
+            "attendance.debt",
+            attendance,
+            (
+                f"Занятие {child} за {mark_date:%d.%m.%Y} "
+                f"оформлено в долг: {charge} ₽"
+            ),
+        )
+
     return JsonResponse(
         {
             "status": "ok",
             "created": created,
             "attendance_id": attendance.pk,
+            "debt_formalized": debt_formalized,
+            "charge_amount": str(attendance.charge_amount),
         }
     )
 
