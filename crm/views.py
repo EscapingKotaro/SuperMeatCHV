@@ -553,6 +553,18 @@ def attendance_view(request):
             for att in child.attendances.all()
             if att.date in visible_dates
         }
+        subscriptions = sorted(
+            (
+                subscription
+                for subscription in child.subscriptions.all()
+                if subscription.cancelled_at is None
+            ),
+            key=lambda subscription: (
+                subscription.start_date,
+                subscription.end_date,
+                subscription.pk,
+            ),
+        )
 
         entries = []
         sub_end_index = None
@@ -563,11 +575,45 @@ def attendance_view(request):
         )
 
         for idx, wd in enumerate(week_data):
-            status = att_map.get(wd['date'], '')
+            class_date = wd['date']
+            status = att_map.get(class_date, '')
+            covering_subscription = next(
+                (
+                    subscription
+                    for subscription in subscriptions
+                    if (
+                        subscription.start_date
+                        <= class_date
+                        <= subscription.end_date
+                    )
+                ),
+                None,
+            )
+            if covering_subscription:
+                was_renewed = any(
+                    subscription.pk != covering_subscription.pk
+                    and subscription.start_date
+                    < covering_subscription.start_date
+                    for subscription in subscriptions
+                )
+                subscription_state = (
+                    "renewed"
+                    if was_renewed
+                    else "active"
+                )
+            elif any(
+                subscription.end_date < class_date
+                for subscription in subscriptions
+            ):
+                subscription_state = "expired"
+            else:
+                subscription_state = "none"
+
             entries.append({
-                'date': wd['date'],
+                'date': class_date,
                 'status': status,
                 'is_future': wd['is_future'],
+                'subscription_state': subscription_state,
             })
 
         # Календарная дата окончания может приходиться на день без занятия.

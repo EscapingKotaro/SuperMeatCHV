@@ -2217,6 +2217,11 @@ class CrmWorkflowTests(TestCase):
             response,
             "5/8",
         )
+        self.assertContains(response, "data-athlete-primary-row")
+        self.assertContains(response, "data-athlete-sessions")
+        self.assertContains(response, "data-athlete-meta-row")
+        self.assertContains(response, "data-athlete-indicators")
+        self.assertContains(response, "data-athlete-subscription-end")
 
     def test_login_remember_me_sets_two_week_session(self):
         self.client.logout()
