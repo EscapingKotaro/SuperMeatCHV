@@ -585,28 +585,118 @@ def restore_child_view(request, child_id):
 
 @login_required
 @require_POST
+@transaction.atomic
 def add_trial_child_view(request, group_id):
-    """Добавление ребенка на пробное занятие"""
-    group = get_object_or_404(Group, id=group_id)
-    
-    if request.method == 'POST':
-        last_name = request.POST.get('last_name')
-        first_name = request.POST.get('first_name')
-        parent_phone = request.POST.get('parent_phone')
-        
-        if last_name and first_name:
-            child = Child.objects.create(
-                last_name=last_name,
-                first_name=first_name,
-                parent_phone=parent_phone,
-                group=group,
-                status=Child.Status.TRIAL,
-                trial_from=timezone.localdate()
-            )
-            messages.success(request, f'{child.last_name} {child.first_name} добавлен на пробное (14 дней)')
-            return redirect('attendance')
-    
-    return redirect('attendance')
+    """Добавление пробника из табеля с датой и временем занятия."""
+    group = get_object_or_404(
+        Group.objects.select_related("trainer"),
+        id=group_id,
+        is_active=True,
+    )
+
+    last_name = request.POST.get("last_name", "").strip()
+    first_name = request.POST.get("first_name", "").strip()
+    patronymic = request.POST.get("patronymic", "").strip()
+    parent_phone = request.POST.get("parent_phone", "").strip()
+    birth_date_raw = request.POST.get("birth_date", "").strip()
+    age_raw = request.POST.get("age", "").strip()
+    trial_date_raw = request.POST.get("trial_date", "").strip()
+    trial_time_raw = request.POST.get("trial_time", "").strip()
+    comment = request.POST.get("comment", "").strip()
+
+    if not last_name or not first_name:
+        messages.error(request, "Укажите фамилию и имя пробника")
+        return redirect(f"{reverse('attendance')}?group_id={group.pk}")
+
+    try:
+        trial_date = date.fromisoformat(trial_date_raw)
+        trial_time = datetime.strptime(trial_time_raw, "%H:%M").time()
+    except (TypeError, ValueError):
+        messages.error(request, "Укажите корректные дату и время пробного")
+        return redirect(f"{reverse('attendance')}?group_id={group.pk}")
+
+    birth_date = None
+    if birth_date_raw:
+        try:
+            birth_date = date.fromisoformat(birth_date_raw)
+        except ValueError:
+            messages.error(request, "Укажите корректную дату рождения")
+            return redirect(f"{reverse('attendance')}?group_id={group.pk}")
+        if birth_date > timezone.localdate():
+            messages.error(request, "Дата рождения не может быть в будущем")
+            return redirect(f"{reverse('attendance')}?group_id={group.pk}")
+
+    age = None
+    if age_raw:
+        try:
+            age = int(age_raw)
+        except ValueError:
+            age = None
+        if age is None or not 0 <= age <= 100:
+            messages.error(request, "Возраст должен быть числом от 0 до 100")
+            return redirect(f"{reverse('attendance')}?group_id={group.pk}")
+
+    if birth_date is None and age is None:
+        messages.error(request, "Укажите дату рождения или возраст")
+        return redirect(f"{reverse('attendance')}?group_id={group.pk}")
+
+    birth_year = birth_date.year if birth_date else timezone.localdate().year - age
+    age_text = f"{age} лет" if birth_date is None and age is not None else ""
+    full_name = " ".join(part for part in (last_name, first_name, patronymic) if part)
+    trial_at = timezone.make_aware(
+        datetime.combine(trial_date, trial_time),
+        timezone.get_current_timezone(),
+    )
+
+    child = Child.objects.create(
+        last_name=last_name,
+        first_name=first_name,
+        patronymic=patronymic,
+        birth_date=birth_date,
+        birth_year=birth_year,
+        parent_phone=parent_phone,
+        group=group,
+        status=Child.Status.TRIAL,
+        trial_from=trial_date,
+        note=comment,
+    )
+    newcomer = Newcomer.objects.create(
+        full_name=full_name,
+        birth_date=birth_date,
+        age_text=age_text,
+        phone=parent_phone,
+        source="Табель",
+        trial_at=trial_at,
+        trainer=group.trainer,
+        group=group,
+        comment=comment,
+        child=child,
+    )
+
+    local_trial_at = timezone.localtime(newcomer.trial_at)
+    notify_admins(
+        request.user,
+        Notification.Kind.TRIAL_SCHEDULED,
+        f"Пробное: {newcomer.full_name} · {local_trial_at:%d.%m.%Y %H:%M}",
+        f"{reverse('newcomers')}?edit={newcomer.pk}",
+    )
+    log_action(
+        request,
+        "newcomer.create",
+        newcomer,
+        (
+            f"Пробник {newcomer.full_name} добавлен из табеля "
+            f"на {local_trial_at:%d.%m.%Y %H:%M}"
+        ),
+    )
+    messages.success(
+        request,
+        (
+            f"{child.last_name} {child.first_name} добавлен на пробное "
+            f"{local_trial_at:%d.%m.%Y %H:%M}"
+        ),
+    )
+    return redirect(f"{reverse('attendance')}?group_id={group.pk}")
 
 
 @login_required
