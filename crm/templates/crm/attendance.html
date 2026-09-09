@@ -151,7 +151,7 @@
                         {% endif %}
                     </th>
                     {% for entry in week_data %}
-                        <th class="min-w-[72px] w-[72px] text-center {% if entry.is_today %}bg-orange-50 text-[#FF5C35]{% endif %}">
+                        <th class="min-w-[92px] w-[92px] text-center {% if entry.is_today %}bg-orange-50 text-[#FF5C35]{% endif %}">
                             <div class="text-xs font-medium">{{ entry.date|date:"D" }}</div>
                             <b class="text-sm {% if entry.is_today %}text-[#FF5C35]{% else %}text-slate-900{% endif %}">
                                 {{ entry.date|date:"d.m" }}
@@ -159,6 +159,17 @@
                             {% if entry.start_time %}
                                 <div class="text-[10px] font-normal text-slate-400">{{ entry.start_time|date:"H:i" }}</div>
                             {% endif %}
+                            <div class="mt-1 flex items-center justify-center gap-1 text-[9px] font-bold"
+                                 data-attendance-counter-date="{{ entry.date|date:'Y-m-d' }}">
+                                <span class="rounded bg-emerald-50 px-1 py-0.5 text-emerald-700"
+                                      title="Пришли в выбранной группе">
+                                    Гр <span data-group-present-count>{{ entry.group_present_count }}</span>
+                                </span>
+                                <span class="rounded bg-slate-100 px-1 py-0.5 text-slate-600"
+                                      title="Всего пришли за день">
+                                    Все <span data-total-present-count>{{ entry.total_present_count }}</span>
+                                </span>
+                            </div>
                         </th>
                     {% endfor %}
                 </tr>
