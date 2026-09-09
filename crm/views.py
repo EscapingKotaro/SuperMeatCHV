@@ -67,11 +67,15 @@ from .models import (
     RevenueTarget,
     Role,
     SalaryAdjustment,
+    ScheduleOverride,
+    ScheduleSlot,
     SalaryPayout,
     StaffProfile,
     Subscription,
     Tariff,
     Trainer,
+    effective_class_dates,
+    extend_subscriptions_for_schedule_move,
     has_min_role,
     user_rank,
     user_role,
@@ -177,28 +181,26 @@ from .models import *
 from .forms import ChildForm
 
 def generate_class_dates(group, start_date, limit=60):
-    """Генерирует только даты, в которые у группы есть занятия."""
-    weekdays = set(ScheduleSlot.objects.filter(group=group).values_list("weekday", flat=True))
-    if not weekdays:
+    """Генерирует фактические даты занятий с учётом переносов."""
+    if not ScheduleSlot.objects.filter(group=group).exists():
         return []
-    dates = []
-    current = start_date
-    while len(dates) < limit:
-        if current.weekday() in weekdays:
-            dates.append(current)
-        current += timedelta(days=1)
-    return dates
+
+    horizon_days = max(420, limit * 14)
+    dates = effective_class_dates(
+        group,
+        start_date,
+        start_date + timedelta(days=horizon_days),
+    )
+    return dates[:limit]
 
 
-def class_dates_in_range(weekdays, start_date, end_date):
-    """Реальные дни занятий внутри выбранного периода."""
-    dates = []
-    current = start_date
-    while current <= end_date:
-        if current.weekday() in weekdays:
-            dates.append(current)
-        current += timedelta(days=1)
-    return dates
+def class_dates_in_range(group, start_date, end_date):
+    """Фактические дни занятий внутри выбранного периода."""
+    return effective_class_dates(
+        group,
+        start_date,
+        end_date,
+    )
 
 
 def _parse_attendance_date(value, fallback):
@@ -399,20 +401,45 @@ def attendance_view(request):
         period_end = window_dates[-1]
     else:
         window_dates = class_dates_in_range(
-            set(schedule_by_weekday),
+            group,
             period_start,
             period_end,
         )
         prev_ref = next_ref = ref_date.isoformat()
 
+    moved_to = {
+        override.replacement_date: override
+        for override in (
+            ScheduleOverride.objects
+            .filter(
+                group=group,
+                replacement_date__in=window_dates,
+            )
+            .order_by("created_at", "pk")
+        )
+    }
+
     week_data = []
     for class_date in window_dates:
-        slot = schedule_by_weekday[class_date.weekday()]
+        override = moved_to.get(class_date)
+        slot = schedule_by_weekday.get(class_date.weekday())
+        start_time = slot.start_time if slot else None
+        if override:
+            source_slot = schedule_by_weekday.get(
+                override.original_date.weekday()
+            )
+            start_time = (
+                override.replacement_start_time
+                or (source_slot.start_time if source_slot else start_time)
+            )
+
         week_data.append({
             'date': class_date,
-            'start_time': slot.start_time,
+            'start_time': start_time,
             'is_today': class_date == today,
             'is_future': class_date > today,
+            'is_moved': bool(override),
+            'moved_from': override.original_date if override else None,
         })
 
     # Счётчики в заголовке каждой даты: уникальные пришедшие дети
@@ -738,6 +765,211 @@ def add_trial_child_view(request, group_id):
         ),
     )
     return redirect(f"{reverse('attendance')}?group_id={group.pk}")
+
+
+@login_required
+@require_POST
+@transaction.atomic
+def move_class_view(request):
+    """Разово перенести фактическое занятие группы на другую дату."""
+    group = get_object_or_404(
+        Group.objects.select_related("trainer"),
+        pk=request.POST.get("group_id"),
+        is_active=True,
+    )
+    original_raw = request.POST.get("original_date", "").strip()
+    replacement_raw = request.POST.get("replacement_date", "").strip()
+    replacement_time_raw = request.POST.get(
+        "replacement_time",
+        "",
+    ).strip()
+    extend_subscriptions = (
+        request.POST.get("extend_subscriptions")
+        in {"1", "true", "on", "yes"}
+    )
+
+    try:
+        original_date = date.fromisoformat(original_raw)
+        replacement_date = date.fromisoformat(replacement_raw)
+    except ValueError:
+        messages.error(request, "Укажите корректные даты переноса")
+        return redirect(
+            f"{reverse('attendance')}?group_id={group.pk}"
+        )
+
+    if original_date == replacement_date:
+        messages.error(
+            request,
+            "Новая дата должна отличаться от исходной",
+        )
+        return redirect(
+            f"{reverse('attendance')}?group_id={group.pk}"
+            f"&ref_date={original_date.isoformat()}"
+        )
+
+    if original_date not in effective_class_dates(
+        group,
+        original_date,
+        original_date,
+    ):
+        messages.error(
+            request,
+            "На исходную дату занятия в актуальном расписании нет",
+        )
+        return redirect(
+            f"{reverse('attendance')}?group_id={group.pk}"
+            f"&ref_date={original_date.isoformat()}"
+        )
+
+    if replacement_date in effective_class_dates(
+        group,
+        replacement_date,
+        replacement_date,
+    ):
+        messages.error(
+            request,
+            "На новую дату уже есть занятие этой группы",
+        )
+        return redirect(
+            f"{reverse('attendance')}?group_id={group.pk}"
+            f"&ref_date={original_date.isoformat()}"
+        )
+
+    marks_for_group = Attendance.objects.filter(
+        date=original_date,
+    ).filter(
+        Q(group_snapshot=group)
+        | Q(
+            group_snapshot__isnull=True,
+            child__group=group,
+        )
+    )
+    if marks_for_group.exists():
+        messages.error(
+            request,
+            "Нельзя переносить занятие, по которому уже есть отметки",
+        )
+        return redirect(
+            f"{reverse('attendance')}?group_id={group.pk}"
+            f"&ref_date={original_date.isoformat()}"
+        )
+
+    replacement_time = None
+    if replacement_time_raw:
+        try:
+            replacement_time = datetime.strptime(
+                replacement_time_raw,
+                "%H:%M",
+            ).time()
+        except ValueError:
+            messages.error(request, "Укажите корректное время")
+            return redirect(
+                f"{reverse('attendance')}?group_id={group.pk}"
+                f"&ref_date={original_date.isoformat()}"
+            )
+
+    source_override = (
+        ScheduleOverride.objects
+        .filter(
+            group=group,
+            replacement_date=original_date,
+        )
+        .order_by("-created_at", "-pk")
+        .first()
+    )
+    if replacement_time is None and source_override:
+        replacement_time = source_override.replacement_start_time
+    if replacement_time is None:
+        source_slot = (
+            ScheduleSlot.objects
+            .filter(
+                group=group,
+                weekday=original_date.weekday(),
+            )
+            .order_by("start_time")
+            .first()
+        )
+        replacement_time = (
+            source_slot.start_time
+            if source_slot
+            else None
+        )
+
+    if replacement_time is None:
+        messages.error(
+            request,
+            "Не удалось определить время занятия",
+        )
+        return redirect(
+            f"{reverse('attendance')}?group_id={group.pk}"
+            f"&ref_date={original_date.isoformat()}"
+        )
+
+    if ScheduleOverride.objects.filter(
+        group=group,
+        original_date=original_date,
+    ).exists():
+        messages.error(
+            request,
+            "Эта исходная дата уже использовалась в переносе",
+        )
+        return redirect(
+            f"{reverse('attendance')}?group_id={group.pk}"
+            f"&ref_date={original_date.isoformat()}"
+        )
+
+    affected_subscriptions = 0
+    extension_days = 0
+    if extend_subscriptions:
+        (
+            affected_subscriptions,
+            extension_days,
+        ) = extend_subscriptions_for_schedule_move(
+            group,
+            original_date,
+            replacement_date,
+        )
+
+    override = ScheduleOverride.objects.create(
+        group=group,
+        original_date=original_date,
+        replacement_date=replacement_date,
+        replacement_start_time=replacement_time,
+        extend_subscriptions=extend_subscriptions,
+        extension_days=extension_days,
+        created_by=request.user,
+    )
+
+    extension_note = ""
+    if extend_subscriptions:
+        extension_note = (
+            f"; абонементы +{extension_days} дн."
+            f" ({affected_subscriptions} шт.)"
+        )
+    log_action(
+        request,
+        "schedule.move",
+        override,
+        (
+            f"Перенос занятия {group}: "
+            f"{original_date:%d.%m.%Y} → "
+            f"{replacement_date:%d.%m.%Y} "
+            f"{replacement_time:%H:%M}"
+            f"{extension_note}"
+        ),
+    )
+    messages.success(
+        request,
+        (
+            f"Занятие перенесено на "
+            f"{replacement_date:%d.%m.%Y} "
+            f"{replacement_time:%H:%M}"
+        ),
+    )
+    return redirect(
+        f"{reverse('attendance')}?group_id={group.pk}"
+        f"&ref_date={replacement_date.isoformat()}"
+    )
 
 
 @login_required
