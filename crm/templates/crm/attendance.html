@@ -53,9 +53,17 @@
 <section class="card mb-3 p-3">
     <div class="flex flex-wrap items-center gap-2">
         {% if selected_group %}
-            <select id="group-select" class="field max-w-64 font-bold text-sm" onchange="location.href='?group_id='+this.value+'&{{ filter_query }}'+'&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}'">
-                {% for g in groups %}
-                    <option value="{{ g.id }}" {% if g.id == selected_group.id %}selected{% endif %}>{{ g.name }}</option>
+            {% regroup groups|dictsort:"trainer.full_name" by trainer as trainer_groups %}
+            <select id="group-select"
+                    aria-label="Тренер и группа"
+                    class="field min-w-[18rem] max-w-80 font-bold text-sm"
+                    onchange="location.href='?group_id='+this.value+'&{{ filter_query }}'+'&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}'">
+                {% for trainer_group in trainer_groups %}
+                    <optgroup label="{{ trainer_group.grouper.full_name }}">
+                        {% for g in trainer_group.list %}
+                            <option value="{{ g.id }}" {% if g.id == selected_group.id %}selected{% endif %}>{{ g.name }}</option>
+                        {% endfor %}
+                    </optgroup>
                 {% endfor %}
             </select>
 
