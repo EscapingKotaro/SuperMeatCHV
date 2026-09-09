@@ -5886,6 +5886,23 @@ def build_renewal_rows(month_start, month_end, today=None):
             continue
 
         sessions_left = child.sessions_left() if active_subscription else 0
+        attendance_cutoff = min(today, subscription.end_date)
+        sessions_used = min(
+            subscription.sessions_total,
+            sum(
+                1
+                for mark in child.attendances.all()
+                if (
+                    mark.status in (
+                        Attendance.Status.PRESENT,
+                        Attendance.Status.ABSENT,
+                    )
+                    and subscription.start_date
+                    <= mark.date
+                    <= attendance_cutoff
+                )
+            ),
+        )
         projected_end = (
             child.projected_end_date()
             if active_subscription and sessions_left > 0
@@ -5949,6 +5966,7 @@ def build_renewal_rows(month_start, month_end, today=None):
             "parent_phone": child.parent_phone,
             "subscription": subscription,
             "sessions_left": sessions_left,
+            "sessions_used": sessions_used,
             "projected_end": projected_end,
             "renewal_date": renewal_date,
             "call_date": call_date,

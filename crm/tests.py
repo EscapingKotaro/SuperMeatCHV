@@ -4470,6 +4470,58 @@ class CrmWorkflowTests(TestCase):
             Child.objects.filter(pk=self.child.pk).exists()
         )
 
+    def test_expired_renewal_shows_actual_used_sessions(self):
+        today = timezone.localdate()
+        end_date = today - timedelta(days=1)
+        start_date = end_date - timedelta(days=30)
+        subscription = Subscription.objects.create(
+            child=self.child,
+            start_date=start_date,
+            end_date=end_date,
+            sessions_total=8,
+            price=Decimal("5000"),
+            is_active=True,
+        )
+
+        for offset, status in (
+            (3, Attendance.Status.PRESENT),
+            (2, Attendance.Status.ABSENT),
+            (1, Attendance.Status.PRESENT),
+        ):
+            Attendance.objects.create(
+                child=self.child,
+                date=end_date - timedelta(days=offset),
+                status=status,
+            )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.get(
+            reverse("payments"),
+            {"month": end_date.strftime("%Y-%m")},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        row = next(
+            item
+            for item in response.context["rows"]
+            if item["child"].pk == self.child.pk
+        )
+        self.assertEqual(row["subscription"].pk, subscription.pk)
+        self.assertEqual(row["sessions_left"], 0)
+        self.assertEqual(row["sessions_used"], 3)
+        self.assertContains(
+            response,
+            'data-session-usage data-used="3" data-total="8"',
+        )
+        self.assertContains(response, "3/8")
+        self.assertNotContains(
+            response,
+            'data-session-usage data-used="8" data-total="8"',
+        )
+
     def test_partial_prepayment_reduces_expected_renewal(self):
         today = timezone.localdate()
         next_month = (

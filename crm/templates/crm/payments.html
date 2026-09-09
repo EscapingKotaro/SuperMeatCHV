@@ -47,8 +47,8 @@
             <small class="block {% if row.status == 'Срочно' %}text-red-500{% else %}text-slate-500{% endif %}">{{ row.status }}</small>
           </td>
           <td>
-            <b data-session-usage data-total="{{ row.subscription.sessions_total }}" data-left="{{ row.sessions_left }}">
-              {{ row.sessions_left }} из {{ row.subscription.sessions_total }}
+            <b data-session-usage data-used="{{ row.sessions_used }}" data-total="{{ row.subscription.sessions_total }}">
+              {{ row.sessions_used }}/{{ row.subscription.sessions_total }}
             </b>
             <small class="block text-slate-500">использовано / всего</small>
           </td>
@@ -264,12 +264,6 @@
 {{ tariff_preview|json_script:"tariff-preview-data" }}
 {{ child_discounts|json_script:"child-discount-data" }}
 <script>
-document.querySelectorAll('[data-session-usage]').forEach((element) => {
-  const total = Number(element.dataset.total) || 0;
-  const left = Number(element.dataset.left) || 0;
-  element.textContent = `${Math.max(0, total - left)}/${total}`;
-});
-
 (() => {
   const tariffs = JSON.parse(document.getElementById('tariff-preview-data').textContent) || [];
   const discounts = JSON.parse(document.getElementById('child-discount-data').textContent) || [];
