@@ -4084,6 +4084,98 @@ class CrmWorkflowTests(TestCase):
             'style="width:44px;height:44px"',
         )
 
+    def test_attendance_colors_follow_subscription_state_not_mark_status(self):
+        first_date = timezone.localdate() + timedelta(days=14)
+        expired_date = first_date + timedelta(days=1)
+        renewed_date = first_date + timedelta(days=2)
+
+        for class_date in (first_date, expired_date, renewed_date):
+            ScheduleSlot.objects.create(
+                group=self.group,
+                weekday=class_date.weekday(),
+                start_time=time(18, 0),
+            )
+
+        Subscription.objects.create(
+            child=self.child,
+            start_date=first_date - timedelta(days=20),
+            end_date=first_date,
+            sessions_total=8,
+            price=Decimal("5000"),
+        )
+        Subscription.objects.create(
+            child=self.child,
+            start_date=renewed_date,
+            end_date=renewed_date + timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("5000"),
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=first_date,
+            status=Attendance.Status.ABSENT,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=renewed_date,
+            status=Attendance.Status.PRESENT,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+        )
+
+        self.client.login(username="admin", password="TestPass123!")
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "period": "custom",
+                "date_from": first_date.isoformat(),
+                "date_to": renewed_date.isoformat(),
+                "ref_date": first_date.isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        row = next(
+            item
+            for item in response.context["children_data"]
+            if item["child"].pk == self.child.pk
+        )
+        entries = {
+            entry["date"]: entry
+            for entry in row["attendance_entries"]
+        }
+        self.assertEqual(
+            entries[first_date]["subscription_state"],
+            "active",
+        )
+        self.assertEqual(
+            entries[expired_date]["subscription_state"],
+            "expired",
+        )
+        self.assertEqual(
+            entries[renewed_date]["subscription_state"],
+            "renewed",
+        )
+
+        self.assertContains(response, 'data-subscription-state="active"')
+        self.assertContains(response, 'data-subscription-state="expired"')
+        self.assertContains(response, 'data-subscription-state="renewed"')
+        self.assertContains(response, "bg-white border-slate-200")
+        self.assertContains(response, "bg-red-50 border-red-300")
+        self.assertContains(response, "bg-emerald-50 border-emerald-300")
+        self.assertNotContains(
+            response,
+            "bg-red-100 text-red-700",
+        )
+        self.assertNotContains(
+            response,
+            "bg-emerald-100 text-emerald-700",
+        )
+        self.assertContains(response, "subscriptionStateClasses")
+
     def test_move_class_to_any_free_day_updates_calendar_and_ui(self):
         source_date = timezone.localdate() + timedelta(days=14)
         replacement_date = source_date + timedelta(days=2)

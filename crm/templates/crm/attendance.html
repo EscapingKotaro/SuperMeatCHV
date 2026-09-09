@@ -257,7 +257,8 @@
                                         data-subscription-id="{{ item.subscription_id|default:'' }}"
                                         data-date="{{ entry.date|date:'Y-m-d' }}"
                                         data-state="{% if entry.status == 'present' %}1{% elif entry.status == 'absent' %}2{% elif entry.status == 'frozen' %}3{% elif entry.status == 'vacation' %}4{% elif entry.status == 'excused' %}5{% else %}0{% endif %}"
-                                        class="attendance-cell text-sm {% if entry.is_future %}cursor-not-allowed opacity-50 {% endif %}{% if entry.status == 'present' %}bg-emerald-100 text-emerald-700{% elif entry.status == 'absent' %}bg-red-100 text-red-700{% elif entry.status == 'frozen' %}bg-blue-100 text-blue-700{% elif entry.status == 'vacation' %}bg-amber-100 text-amber-700{% elif entry.status == 'excused' %}bg-yellow-100 text-yellow-700{% else %}bg-slate-100 text-slate-400{% endif %}">
+                                        data-subscription-state="{{ entry.subscription_state }}"
+                                        class="attendance-cell border text-sm {% if entry.is_future %}cursor-not-allowed opacity-50 {% endif %}{% if entry.subscription_state == 'expired' %}bg-red-50 border-red-300{% elif entry.subscription_state == 'renewed' %}bg-emerald-50 border-emerald-300{% else %}bg-white border-slate-200{% endif %} {% if entry.status == 'present' %}text-slate-800{% elif entry.status == 'absent' %}text-slate-500{% elif entry.status == 'frozen' %}text-blue-700{% elif entry.status == 'vacation' %}text-amber-700{% elif entry.status == 'excused' %}text-yellow-700{% else %}text-slate-300{% endif %}">
                                     {% if entry.status == 'present' %}+{% elif entry.status == 'absent' %}×{% elif entry.status == 'frozen' %}❄{% elif entry.status == 'vacation' %}О{% elif entry.status == 'excused' %}У{% endif %}
                                 </button>
                             </td>
@@ -499,22 +500,31 @@
     // СОСТОЯНИЯ
     // =========================================================
     const STATES = {
-        present: { state: "1", symbol: "+", classes: ["bg-emerald-100", "text-emerald-700"] },
-        absent: { state: "2", symbol: "×", classes: ["bg-red-100", "text-red-700"] },
-        frozen: { state: "3", symbol: "❄", classes: ["bg-blue-100", "text-blue-700"] },
-        vacation: { state: "4", symbol: "О", classes: ["bg-amber-100", "text-amber-700"] },
-        excused: { state: "5", symbol: "У", classes: ["bg-yellow-100", "text-yellow-700"] },
-        clear: { state: "0", symbol: "", classes: ["bg-slate-100", "text-slate-400"] }
+        present: { state: "1", symbol: "+", textClass: "text-slate-800" },
+        absent: { state: "2", symbol: "×", textClass: "text-slate-500" },
+        frozen: { state: "3", symbol: "❄", textClass: "text-blue-700" },
+        vacation: { state: "4", symbol: "О", textClass: "text-amber-700" },
+        excused: { state: "5", symbol: "У", textClass: "text-yellow-700" },
+        clear: { state: "0", symbol: "", textClass: "text-slate-300" }
     };
 
     const ALL_CLASSES = [
-        "bg-slate-100", "text-slate-400",
-        "bg-emerald-100", "text-emerald-700",
-        "bg-red-100", "text-red-700",
-        "bg-blue-100", "text-blue-700",
-        "bg-amber-100", "text-amber-700",
-        "bg-yellow-100", "text-yellow-700"
+        "bg-white", "border-slate-200",
+        "bg-red-50", "border-red-300",
+        "bg-emerald-50", "border-emerald-300",
+        "text-slate-300", "text-slate-500", "text-slate-800",
+        "text-blue-700", "text-amber-700", "text-yellow-700"
     ];
+
+    function subscriptionStateClasses(button) {
+        if (button.dataset.subscriptionState === "expired") {
+            return ["bg-red-50", "border-red-300"];
+        }
+        if (button.dataset.subscriptionState === "renewed") {
+            return ["bg-emerald-50", "border-emerald-300"];
+        }
+        return ["bg-white", "border-slate-200"];
+    }
 
     // =========================================================
     // CSRF
@@ -533,7 +543,10 @@
         const config = STATES[status];
         if (!config) return;
         button.classList.remove(...ALL_CLASSES);
-        button.classList.add(...config.classes);
+        button.classList.add(
+            ...subscriptionStateClasses(button),
+            config.textClass
+        );
         button.textContent = config.symbol;
         button.dataset.state = config.state;
     }
