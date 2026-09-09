@@ -288,6 +288,7 @@ def attendance_view(request):
             'date': class_date,
             'start_time': slot.start_time,
             'is_today': class_date == today,
+            'is_future': class_date > today,
         })
 
     # 5. ПОЛУЧАЕМ ДЕТЕЙ (с учетом архива)
@@ -366,6 +367,7 @@ def attendance_view(request):
             entries.append({
                 'date': wd['date'],
                 'status': status,
+                'is_future': wd['is_future'],
             })
 
         # Календарная дата окончания может приходиться на день без занятия.
@@ -520,6 +522,15 @@ def mark_attendance_view(request):
             {
                 "status": "error",
                 "message": "Некорректная дата",
+            },
+            status=400,
+        )
+
+    if mark_date > timezone.localdate():
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "Нельзя ставить отметки за будущие занятия",
             },
             status=400,
         )
@@ -823,10 +834,10 @@ def expenses_page(request):
             messages.success(request, "Расход сохранён")
             return redirect(filter_url)
 
-    messages.error(
-        request,
-        "Проверьте заполнение формы",
-    )
+        messages.error(
+            request,
+            "Проверьте заполнение формы",
+        )
 
     monthly_expenses = (
         Expense.objects

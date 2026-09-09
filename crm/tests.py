@@ -95,6 +95,110 @@ class CrmWorkflowTests(TestCase):
         self.client.login(username="boss", password="TestPass123!")
         self.assertEqual(self.client.get(reverse("boss")).status_code, 200)
 
+    def test_expenses_get_does_not_show_form_error(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(reverse("expenses"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(
+            response,
+            "Проверьте заполнение формы",
+        )
+
+    def test_invalid_expense_post_shows_form_error(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("expenses"),
+            {
+                "title": "",
+                "category": Expense.Category.HOUSEHOLD,
+                "amount": "",
+                "date": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            "Проверьте заполнение формы",
+        )
+
+    def test_future_attendance_mark_is_rejected(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        future_date = timezone.localdate() + timedelta(days=1)
+
+        response = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "date": future_date.isoformat(),
+                "status": Attendance.Status.PRESENT,
+            },
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["status"], "error")
+        self.assertFalse(
+            Attendance.objects.filter(
+                child=self.child,
+                date=future_date,
+            ).exists()
+        )
+
+    def test_future_attendance_cells_are_read_only(self):
+        today = timezone.localdate()
+        future_date = today + timedelta(days=1)
+
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=future_date.weekday(),
+            start_time=time(18, 0),
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "ref_date": today.isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        child_row = next(
+            item
+            for item in response.context["children_data"]
+            if item["child"].pk == self.child.pk
+        )
+        future_entries = [
+            item
+            for item in child_row["attendance_entries"]
+            if item["date"] > today
+        ]
+
+        self.assertTrue(future_entries)
+        self.assertTrue(
+            all(item["is_future"] for item in future_entries)
+        )
+        self.assertContains(response, 'aria-disabled="true"')
+
     def test_admin_can_create_expense(self):
         today = timezone.localdate()
 
