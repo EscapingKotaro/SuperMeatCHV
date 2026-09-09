@@ -301,17 +301,24 @@
     <div class="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" onclick="document.getElementById('trial-modal').classList.add('hidden')"></div>
     
     <!-- Само окно -->
-    <div class="relative bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl transform transition-all">
+    <div class="relative bg-white rounded-2xl p-6 w-full max-w-2xl shadow-2xl transform transition-all">
         <button onclick="document.getElementById('trial-modal').classList.add('hidden')" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
             <i data-lucide="x" class="h-5 w-5"></i>
         </button>
         
         <h3 class="text-lg font-extrabold mb-1">Добавить на пробное</h3>
-        <p class="text-xs text-slate-500 mb-4">Без оплаты через 14 дней спортсмен переходит в потерянные. История сохраняется.</p>
+        <p class="text-xs text-slate-500 mb-4">Без оплаты через 1 месяц спортсмен переходит в потерянные. История сохраняется.</p>
+
+        <div class="mb-4 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+            <div><b class="text-slate-800">{{ selected_group.name }}</b></div>
+            {% if trainer %}
+                <div class="mt-0.5">Тренер: {{ trainer.full_name }}</div>
+            {% endif %}
+        </div>
         
         <form method="post" action="{% url 'add_trial_child' selected_group.id %}">
             {% csrf_token %}
-            <div class="space-y-3">
+            <div class="grid gap-3 sm:grid-cols-2">
                 <div>
                     <label class="block text-xs font-medium text-slate-700 mb-1">Фамилия</label>
                     <input type="text" name="last_name" required class="field w-full">
@@ -320,9 +327,33 @@
                     <label class="block text-xs font-medium text-slate-700 mb-1">Имя</label>
                     <input type="text" name="first_name" required class="field w-full">
                 </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Отчество</label>
+                    <input type="text" name="patronymic" class="field w-full">
+                </div>
                 <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Дата рождения</label>
+                    <input type="date" name="birth_date" class="field w-full">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Возраст, если дата рождения неизвестна</label>
+                    <input type="number" name="age" min="0" max="100" class="field w-full" placeholder="Например, 8">
+                </div>
+                <div class="sm:col-span-2">
                     <label class="block text-xs font-medium text-slate-700 mb-1">Телефон родителя</label>
                     <input type="tel" name="parent_phone" class="field w-full" placeholder="+7 (___) ___-__-__">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Дата пробного</label>
+                    <input type="date" name="trial_date" required class="field w-full" value="{{ ref_date|date:'Y-m-d' }}">
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Время</label>
+                    <input type="time" name="trial_time" required class="field w-full">
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-xs font-medium text-slate-700 mb-1">Комментарий</label>
+                    <textarea name="comment" rows="3" class="field w-full" placeholder="Комментарий по пробному"></textarea>
                 </div>
             </div>
             <div class="flex gap-2 mt-6">
