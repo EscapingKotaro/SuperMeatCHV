@@ -1567,15 +1567,14 @@ class CrmWorkflowTests(TestCase):
             with self.subTest(name=name):
                 self.assertEqual(self.client.get(reverse(name)).status_code, 200)
 
-    def test_attendance_renders_schedule_window(self):
+    def test_attendance_renders_all_calendar_days_around_reference(self):
         today = timezone.localdate()
 
-        for weekday in range(7):
-            ScheduleSlot.objects.create(
-                group=self.group,
-                weekday=weekday,
-                start_time=time(18, 0),
-            )
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
 
         end_date = today + timedelta(days=5)
         Subscription.objects.create(
@@ -1594,16 +1593,84 @@ class CrmWorkflowTests(TestCase):
         })
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn("week_data", response.context)
-        self.assertGreaterEqual(len(response.context["week_data"]), 6)
-        self.assertLessEqual(len(response.context["week_data"]), 10)
+
+        week_data = response.context["week_data"]
+        self.assertEqual(
+            [item["date"] for item in week_data],
+            [
+                today + timedelta(days=offset)
+                for offset in range(-4, 4)
+            ],
+        )
+        self.assertEqual(len(week_data), 8)
+        self.assertTrue(week_data[4]["has_class"])
+        self.assertTrue(
+            any(not item["has_class"] for item in week_data)
+        )
+        self.assertContains(response, "8 дней")
 
         child_data = next(
             item for item in response.context["children_data"]
             if item["child"].pk == self.child.pk
         )
 
+        # Календарное окончание раньше прогнозного исчерпания восьми
+        # занятий, поэтому именно оно является границей абонемента.
         self.assertEqual(child_data["subscription_end"], end_date)
+
+    def test_attendance_sessions_sort_uses_completed_sessions(self):
+        today = timezone.localdate()
+        other = Child.objects.create(
+            last_name="Петрова",
+            first_name="Мария",
+            birth_year=2015,
+            group=self.group,
+        )
+
+        for child in (self.child, other):
+            Subscription.objects.create(
+                child=child,
+                start_date=today - timedelta(days=10),
+                end_date=today + timedelta(days=20),
+                sessions_total=8,
+                price=Decimal("5000"),
+            )
+
+        for offset in (3, 2, 1):
+            Attendance.objects.create(
+                child=self.child,
+                date=today - timedelta(days=offset),
+                status=Attendance.Status.PRESENT,
+            )
+
+        Attendance.objects.create(
+            child=other,
+            date=today - timedelta(days=1),
+            status=Attendance.Status.PRESENT,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "ref_date": today.isoformat(),
+                "sort": "sessions",
+            },
+        )
+
+        ordered_ids = [
+            item["child"].pk
+            for item in response.context["children_data"]
+        ]
+        self.assertEqual(
+            ordered_ids[:2],
+            [self.child.pk, other.pk],
+        )
 
     def test_login_remember_me_sets_two_week_session(self):
         self.client.logout()
@@ -3159,6 +3226,48 @@ class CrmWorkflowTests(TestCase):
         self.assertContains(
             response,
             f"до {projected_end:%d.%m}",
+        )
+        self.assertContains(
+            response,
+            "border-r-2 border-red-500",
+        )
+
+    def test_subscription_end_marker_stays_on_today_when_sessions_are_exhausted(self):
+        today = timezone.localdate()
+        self._create_daily_schedule()
+        Subscription.objects.create(
+            child=self.child,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            sessions_total=1,
+            price=Decimal("3000"),
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=today,
+            status=Attendance.Status.PRESENT,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "ref_date": today.isoformat(),
+            },
+        )
+        row = self._attendance_child_row(response)
+
+        self.assertEqual(row["sessions_left"], 0)
+        self.assertEqual(row["subscription_end"], today)
+        self.assertTrue(row["subscription_ending_soon"])
+        self.assertEqual(
+            response.context["week_data"][row["subscription_end_index"]]["date"],
+            today,
         )
         self.assertContains(
             response,

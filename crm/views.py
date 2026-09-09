@@ -174,25 +174,6 @@ from datetime import timedelta, datetime
 from .models import *
 from .forms import ChildForm
 
-def generate_class_dates(group, start_date, limit=60):
-    """Генерирует список дат занятий"""
-    slots = ScheduleSlot.objects.filter(group=group).order_by('weekday', 'start_time')
-    if not slots:
-        return []
-    
-    dates = []
-    current = start_date
-    end_limit = start_date + timedelta(days=180)
-    
-    while current <= end_limit and len(dates) < limit:
-        for slot in slots:
-            if current.weekday() == slot.weekday:
-                dates.append(current)
-        current += timedelta(days=1)
-    
-    return sorted(list(set(dates)))
-
-
 @login_required
 def logout_page(request):
     log_action(
@@ -239,53 +220,34 @@ def attendance_view(request):
     else:
         ref_date = today
 
-    # 3. Генерируем даты
-    start_of_week = ref_date - timedelta(days=ref_date.weekday())
-    all_class_dates = generate_class_dates(group, start_of_week, limit=60)
+    # 3. Показываем все календарные дни: 4 назад и 3 вперёд
+    # относительно выбранной даты, как зафиксировано в актуальном ТЗ.
+    window_dates = [
+        ref_date + timedelta(days=offset)
+        for offset in range(-4, 4)
+    ]
 
-    if not all_class_dates:
-        return render(
-            request,
-            "crm/attendance.html",
-            page_context(
-                request,
-                "attendance",
-                groups=Group.objects.filter(is_active=True),
-                selected_group=group,
-                week_data=[],
-                children_data=[],
-                ref_date=ref_date,
-                error="Нет расписания",
-            ),
-        )
+    schedule_by_weekday = {}
+    for slot in (
+        ScheduleSlot.objects
+        .filter(group=group)
+        .order_by("weekday", "start_time")
+    ):
+        schedule_by_weekday.setdefault(slot.weekday, slot)
 
-    # 4. Находим индекс
-    current_index = 0
-    for i, d in enumerate(all_class_dates):
-        if d >= ref_date:
-            current_index = i
-            break
-
-    if all_class_dates[-1] < ref_date:
-        current_index = len(all_class_dates) - 1
-
-    # 5. Формируем окно
-    start_idx = max(0, current_index - 4)
-    end_idx = min(len(all_class_dates), current_index + 6)
-    window_dates = all_class_dates[start_idx:end_idx]
-
-    # 6. Подготовка данных о днях
+    # 4. Подготовка данных о днях. Дни без занятия остаются в сетке,
+    # чтобы календарь не перескакивал через даты.
     week_data = []
     for d in window_dates:
-        slots_today = ScheduleSlot.objects.filter(group=group, weekday=d.weekday())
-        start_time = slots_today.first().start_time if slots_today else None
+        slot = schedule_by_weekday.get(d.weekday())
         week_data.append({
             'date': d,
-            'start_time': start_time,
-            'is_today': d == today
+            'start_time': slot.start_time if slot else None,
+            'has_class': slot is not None,
+            'is_today': d == today,
         })
 
-    # 7. ПОЛУЧАЕМ ДЕТЕЙ (с учетом архива)
+    # 5. ПОЛУЧАЕМ ДЕТЕЙ (с учетом архива)
     if show_archived:
         children_qs = Child.objects.filter(
             group=group,
@@ -301,11 +263,23 @@ def attendance_view(request):
         'subscriptions', 'payments', 'attendances', 'ranks'
     )
 
-    # 8. СОРТИРОВКА (превращаем в список и сортируем)
+    # 6. СОРТИРОВКА (превращаем в список и сортируем)
     children_list = list(children_qs)
     
     if sort_by == 'sessions':
-        children_list.sort(key=lambda c: c.sessions_left(), reverse=True)
+        def completed_sessions(child):
+            subscription = child.active_subscription()
+            if not subscription:
+                return 0
+            return max(
+                0,
+                subscription.sessions_total - child.sessions_left(),
+            )
+
+        children_list.sort(
+            key=completed_sessions,
+            reverse=True,
+        )
     elif sort_by == 'debt':
         children_list.sort(key=lambda c: c.debt(), reverse=True)
     else:
@@ -314,7 +288,23 @@ def attendance_view(request):
     children_data = []
     for child in children_list:
         active_sub = child.active_subscription()
-        projected_end = child.projected_end_date()
+        sessions_left = child.sessions_left()
+        projected_end = (
+            child.projected_end_date()
+            if active_sub and sessions_left > 0
+            else None
+        )
+
+        # Единая граница для табеля: абонемент заканчивается либо по
+        # исчерпанию занятий, либо по календарной дате — что наступит раньше.
+        subscription_end = None
+        if active_sub:
+            end_candidates = [active_sub.end_date]
+            if sessions_left <= 0:
+                end_candidates.append(today)
+            elif projected_end:
+                end_candidates.append(projected_end)
+            subscription_end = min(end_candidates)
 
         att_map = {}
         for att in child.attendances.filter(date__in=window_dates):
@@ -323,15 +313,19 @@ def attendance_view(request):
         entries = []
         sub_end_index = None
         subscription_ending_soon = (
-            projected_end is not None
-            and 0 <= (projected_end - today).days <= 7
+            subscription_end is not None
+            and 0 <= (subscription_end - today).days <= 7
         )
 
         for idx, wd in enumerate(week_data):
             status = att_map.get(wd['date'], '')
-            entries.append({'date': wd['date'], 'status': status})
+            entries.append({
+                'date': wd['date'],
+                'status': status,
+                'has_class': wd['has_class'],
+            })
             
-            if projected_end and wd['date'] == projected_end:
+            if subscription_end and wd['date'] == subscription_end:
                 sub_end_index = idx
 
         # Авто-перевод в потерянные, если пробный истек (только для не-архивных)
@@ -342,12 +336,12 @@ def attendance_view(request):
             'child': child,
             'initials': f"{child.last_name[0]}{child.first_name[0]}".upper(),
             'age': child.age_display(),
-            'sessions_left': child.sessions_left(),
+            'sessions_left': sessions_left,
             'sessions_total': active_sub.sessions_total if active_sub else 0,
             'debt': child.debt(),
             'has_certificate': child.has_certificate(),
             'discount_percent': child.discount_percent,
-            'subscription_end': projected_end,
+            'subscription_end': subscription_end,
             'subscription_end_index': sub_end_index,
             'subscription_ending_soon': subscription_ending_soon,
             'is_trial': child.status == Child.Status.TRIAL,
@@ -355,14 +349,9 @@ def attendance_view(request):
             'attendance_entries': entries,
         })
 
-    # 9. Переключатель дат
-    if len(window_dates) >= 2:
-        window_span = (window_dates[-1] - window_dates[0]).days
-    else:
-        window_span = 7
-
-    prev_ref = (window_dates[0] - timedelta(days=window_span)).strftime('%Y-%m-%d') if window_dates else (today - timedelta(days=7)).strftime('%Y-%m-%d')
-    next_ref = (window_dates[-1] + timedelta(days=window_span)).strftime('%Y-%m-%d') if window_dates else (today + timedelta(days=7)).strftime('%Y-%m-%d')
+    # 7. Переключатель дат: стрелки двигают окно ровно на неделю.
+    prev_ref = (ref_date - timedelta(days=7)).strftime('%Y-%m-%d')
+    next_ref = (ref_date + timedelta(days=7)).strftime('%Y-%m-%d')
 
     # Базовые параметры для ссылок, чтобы сортировка не слетала
     base_params = f"group_id={group.id}&ref_date={{}}&sort={sort_by}"
