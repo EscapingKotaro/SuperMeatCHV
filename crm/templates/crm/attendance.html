@@ -135,6 +135,7 @@
             <span class="badge border border-slate-200 bg-white px-1.5 py-0.5 text-slate-700">+ Пришёл</span>
             <span class="badge border border-slate-200 bg-white px-1.5 py-0.5 text-slate-500">× Пропуск</span>
             <span class="badge bg-blue-100 text-blue-700 px-1.5 py-0.5">❄ Заморозка</span>
+            <span class="badge bg-rose-100 text-rose-700 px-1.5 py-0.5">Б Больничный</span>
             <span class="badge bg-amber-100 text-amber-700 px-1.5 py-0.5">О Отпуск</span>
             <span class="badge bg-yellow-100 text-yellow-700 px-1.5 py-0.5" title="Пропуск по уважительной причине — сдвигает окончание абонемента">У Уважительная</span>
         </div>
@@ -279,10 +280,10 @@
                                         data-child-id="{{ item.child.id }}"
                                         data-subscription-id="{{ item.subscription_id|default:'' }}"
                                         data-date="{{ entry.date|date:'Y-m-d' }}"
-                                        data-state="{% if entry.status == 'present' %}1{% elif entry.status == 'absent' %}2{% elif entry.status == 'frozen' %}3{% elif entry.status == 'vacation' %}4{% elif entry.status == 'excused' %}5{% else %}0{% endif %}"
+                                        data-state="{% if entry.status == 'present' %}1{% elif entry.status == 'absent' %}2{% elif entry.status == 'frozen' %}3{% elif entry.status == 'vacation' %}4{% elif entry.status == 'excused' %}5{% elif entry.status == 'sick' %}6{% else %}0{% endif %}"
                                         data-subscription-state="{{ entry.subscription_state }}"
-                                        class="attendance-cell border text-sm {% if entry.is_future %}cursor-not-allowed opacity-50 {% endif %}{% if entry.subscription_state == 'expired' %}bg-red-50 border-red-300{% elif entry.subscription_state == 'renewed' %}bg-emerald-50 border-emerald-300{% else %}bg-white border-slate-200{% endif %} {% if entry.status == 'present' %}text-slate-800{% elif entry.status == 'absent' %}text-slate-500{% elif entry.status == 'frozen' %}text-blue-700{% elif entry.status == 'vacation' %}text-amber-700{% elif entry.status == 'excused' %}text-yellow-700{% else %}text-slate-300{% endif %}">
-                                    {% if entry.status == 'present' %}+{% elif entry.status == 'absent' %}×{% elif entry.status == 'frozen' %}❄{% elif entry.status == 'vacation' %}О{% elif entry.status == 'excused' %}У{% endif %}
+                                        class="attendance-cell border text-sm {% if entry.is_future %}cursor-not-allowed opacity-50 {% endif %}{% if entry.subscription_state == 'expired' %}bg-red-50 border-red-300{% elif entry.subscription_state == 'renewed' %}bg-emerald-50 border-emerald-300{% else %}bg-white border-slate-200{% endif %} {% if entry.status == 'present' %}text-slate-800{% elif entry.status == 'absent' %}text-slate-500{% elif entry.status == 'frozen' %}text-blue-700{% elif entry.status == 'vacation' %}text-amber-700{% elif entry.status == 'excused' %}text-yellow-700{% elif entry.status == 'sick' %}text-rose-700{% else %}text-slate-300{% endif %}">
+                                    {% if entry.status == 'present' %}+{% elif entry.status == 'absent' %}×{% elif entry.status == 'frozen' %}❄{% elif entry.status == 'vacation' %}О{% elif entry.status == 'excused' %}У{% elif entry.status == 'sick' %}Б{% endif %}
                                 </button>
                             </td>
                         {% endfor %}
@@ -330,10 +331,17 @@
     </button>
 
     <button type="button"
-            data-attendance-choice="frozen"
+            data-attendance-choice="reason_frozen"
             class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-blue-50">
         <span class="grid h-6 w-6 place-items-center rounded-md bg-blue-100 text-blue-700">❄</span>
-        <span>Заморозка</span>
+        <span>Заморозка…</span>
+    </button>
+
+    <button type="button"
+            data-attendance-choice="reason_sick"
+            class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-rose-50">
+        <span class="grid h-6 w-6 place-items-center rounded-md bg-rose-100 font-bold text-rose-700">Б</span>
+        <span>Больничный…</span>
     </button>
 
     <button type="button"
@@ -344,10 +352,10 @@
     </button>
 
     <button type="button"
-            data-attendance-choice="excused"
+            data-attendance-choice="reason_excused"
             class="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm hover:bg-yellow-50">
         <span class="grid h-6 w-6 place-items-center rounded-md bg-yellow-100 font-bold text-yellow-700">У</span>
-        <span>Уважительная</span>
+        <span>Уважительная…</span>
     </button>
 
     <div class="my-1 border-t border-slate-100"></div>
@@ -359,6 +367,71 @@
         <span>Убрать отметку</span>
     </button>
     <button type="button" data-cancel-subscription class="btn text-red-600 w-full">Отменить абонемент</button>
+</div>
+
+<div id="attendance-reason-modal" class="hidden fixed inset-0 z-[80] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-950/50 backdrop-blur-sm"
+         data-reason-close></div>
+    <div class="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+        <button type="button"
+                data-reason-close
+                class="absolute right-4 top-4 text-slate-400 hover:text-slate-600"
+                aria-label="Закрыть">
+            <i data-lucide="x" class="h-5 w-5"></i>
+        </button>
+
+        <h3 class="text-lg font-extrabold" data-reason-title>Причина пропуска</h3>
+        <p class="mt-1 text-xs text-slate-500">
+            Комментарий, документ и период сохраняются отдельно, а отметки ставятся только на занятия группы внутри периода.
+        </p>
+
+        <form id="attendance-reason-form"
+              action="{% url 'attendance_reason' %}"
+              method="post"
+              enctype="multipart/form-data"
+              class="mt-5 space-y-4">
+            {% csrf_token %}
+            <input type="hidden" name="child_id" data-reason-child>
+            <input type="hidden" name="kind" data-reason-kind>
+
+            <div class="grid gap-3 sm:grid-cols-2">
+                <div>
+                    <label class="label" for="reason-date-from">Период с</label>
+                    <input id="reason-date-from" type="date" name="date_from" required class="field" data-reason-from>
+                </div>
+                <div>
+                    <label class="label" for="reason-date-to">Период по</label>
+                    <input id="reason-date-to" type="date" name="date_to" required class="field" data-reason-to>
+                </div>
+            </div>
+
+            <div>
+                <label class="label" for="reason-comment">Комментарий</label>
+                <textarea id="reason-comment"
+                          name="comment"
+                          rows="3"
+                          class="field"
+                          placeholder="Причина, пояснение администратора"></textarea>
+            </div>
+
+            <div>
+                <label class="label" for="reason-document" data-reason-document-label>
+                    Заявление / справка
+                </label>
+                <input id="reason-document"
+                       type="file"
+                       name="document"
+                       class="field"
+                       accept="image/*,.pdf,.doc,.docx">
+                <p class="mt-1 text-[11px] text-slate-400" data-reason-hint></p>
+            </div>
+
+            <div class="flex gap-2 pt-1">
+                <button type="submit" class="btn btn-primary flex-1">Сохранить причину</button>
+                <button type="button" data-reason-close class="btn btn-soft flex-1">Отмена</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 {% if selected_group and week_data %}
@@ -543,6 +616,7 @@
         frozen: { state: "3", symbol: "❄", textClass: "text-blue-700" },
         vacation: { state: "4", symbol: "О", textClass: "text-amber-700" },
         excused: { state: "5", symbol: "У", textClass: "text-yellow-700" },
+        sick: { state: "6", symbol: "Б", textClass: "text-rose-700" },
         clear: { state: "0", symbol: "", textClass: "text-slate-300" }
     };
 
@@ -551,7 +625,7 @@
         "bg-red-50", "border-red-300",
         "bg-emerald-50", "border-emerald-300",
         "text-slate-300", "text-slate-500", "text-slate-800",
-        "text-blue-700", "text-amber-700", "text-yellow-700"
+        "text-blue-700", "text-amber-700", "text-yellow-700", "text-rose-700"
     ];
 
     function subscriptionStateClasses(button) {
@@ -654,6 +728,76 @@
         menu.classList.add("hidden");
         activeButton = null;
     }
+
+    const reasonModal = document.getElementById("attendance-reason-modal");
+    const reasonForm = document.getElementById("attendance-reason-form");
+
+    const REASON_META = {
+        excused: {
+            title: "Уважительная причина",
+            document: "Заявление",
+            hint: "Можно приложить заявление или оставить только комментарий."
+        },
+        sick: {
+            title: "Больничный",
+            document: "Справка",
+            hint: "Укажите весь период больничного; справку можно приложить сразу."
+        },
+        frozen: {
+            title: "Заморозка",
+            document: "Заявление",
+            hint: "Укажите период заморозки и при необходимости приложите заявление."
+        }
+    };
+
+    function openReasonModal(button, kind) {
+        const meta = REASON_META[kind];
+        if (!reasonModal || !reasonForm || !meta) return;
+
+        reasonForm.reset();
+        reasonForm.querySelector("[data-reason-child]").value = button.dataset.childId;
+        reasonForm.querySelector("[data-reason-kind]").value = kind;
+        reasonForm.querySelector("[data-reason-from]").value = button.dataset.date;
+        reasonForm.querySelector("[data-reason-to]").value = button.dataset.date;
+        reasonModal.querySelector("[data-reason-title]").textContent = meta.title;
+        reasonModal.querySelector("[data-reason-document-label]").textContent = meta.document;
+        reasonModal.querySelector("[data-reason-hint]").textContent = meta.hint;
+        reasonModal.classList.remove("hidden");
+    }
+
+    function closeReasonModal() {
+        reasonModal?.classList.add("hidden");
+    }
+
+    reasonModal?.querySelectorAll("[data-reason-close]").forEach((node) => {
+        node.addEventListener("click", closeReasonModal);
+    });
+
+    reasonForm?.addEventListener("submit", async function(event) {
+        event.preventDefault();
+        const submit = reasonForm.querySelector('[type="submit"]');
+        submit.disabled = true;
+        try {
+            const response = await fetch(reasonForm.action, {
+                method: "POST",
+                credentials: "same-origin",
+                headers: {
+                    "X-CSRFToken": getCsrfToken(),
+                    "X-Requested-With": "XMLHttpRequest"
+                },
+                body: new FormData(reasonForm)
+            });
+            const data = await response.json();
+            if (!response.ok || data.status !== "ok") {
+                throw new Error(data.message || `HTTP ${response.status}`);
+            }
+            window.location.reload();
+        } catch (error) {
+            alert("Не удалось сохранить причину: " + error.message);
+        } finally {
+            submit.disabled = false;
+        }
+    });
 
     // =========================================================
     // API: СОХРАНИТЬ / УДАЛИТЬ
@@ -783,6 +927,11 @@
 
         if (status === "clear") {
             await clearAttendance(button);
+        } else if (status.startsWith("reason_")) {
+            openReasonModal(
+                button,
+                status.replace("reason_", "")
+            );
         } else if (status === "debt_present") {
             await saveAttendance(
                 button,
@@ -816,6 +965,7 @@
     document.addEventListener("keydown", function(event) {
         if (event.key === "Escape") {
             closeMenu();
+            closeReasonModal();
             document.getElementById("move-class-modal")?.classList.add("hidden");
             document.getElementById("trial-modal")?.classList.add("hidden");
         }

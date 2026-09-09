@@ -21,6 +21,7 @@ urlpatterns = [
     path("attendance/", login_required(views.attendance_view, login_url="login"), name="attendance"),
     path("attendance/mark/", views.mark_attendance_view, name="mark_attendance"),
     path("attendance/cancel/", views.cancel_attendance_view, name="cancel_attendance"),
+    path("attendance/reason/", views.attendance_reason_view, name="attendance_reason"),
     path("attendance/move-class/", views.move_class_view, name="move_class"),
 
     # Дети / спортсмены

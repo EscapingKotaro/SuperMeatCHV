@@ -2,6 +2,7 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
 from django.db.models.deletion import ProtectedError
 from django.test import TestCase
@@ -13,6 +14,7 @@ from .models import (
     Apparatus,
     ApparatusScore,
     Attendance,
+    AttendanceReason,
     AuditEvent,
     Child,
     Competition,
@@ -987,6 +989,177 @@ class CrmWorkflowTests(TestCase):
             attendance.charge_amount,
             Decimal("0"),
         )
+
+    def test_attendance_reason_period_creates_sick_marks_and_document(self):
+        start = timezone.localdate()
+        end = start + timedelta(days=2)
+        for class_date in (
+            start,
+            start + timedelta(days=1),
+            end,
+        ):
+            ScheduleSlot.objects.create(
+                group=self.group,
+                weekday=class_date.weekday(),
+                start_time=time(18, 0),
+            )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.post(
+            reverse("attendance_reason"),
+            {
+                "child_id": self.child.pk,
+                "kind": AttendanceReason.Kind.SICK,
+                "date_from": start.isoformat(),
+                "date_to": end.isoformat(),
+                "comment": "ОРВИ",
+                "document": SimpleUploadedFile(
+                    "sick-note.pdf",
+                    b"%PDF-test",
+                    content_type="application/pdf",
+                ),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["attendance_count"], 3)
+
+        reason = AttendanceReason.objects.get(
+            child=self.child,
+            kind=AttendanceReason.Kind.SICK,
+        )
+        self.assertEqual(reason.date_from, start)
+        self.assertEqual(reason.date_to, end)
+        self.assertEqual(reason.comment, "ОРВИ")
+        self.assertTrue(reason.document.name.endswith("sick-note.pdf"))
+        self.assertEqual(reason.created_by, self.admin)
+
+        marks = list(
+            Attendance.objects
+            .filter(
+                child=self.child,
+                reason=reason,
+            )
+            .order_by("date")
+        )
+        self.assertEqual(
+            [mark.date for mark in marks],
+            [
+                start,
+                start + timedelta(days=1),
+                end,
+            ],
+        )
+        self.assertTrue(
+            all(
+                mark.status == Attendance.Status.SICK
+                and mark.comment == "ОРВИ"
+                and mark.charge_amount == Decimal("0")
+                for mark in marks
+            )
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                actor=self.admin,
+                action="attendance.reason",
+                object_id=str(reason.pk),
+            ).exists()
+        )
+        reason.document.delete(save=False)
+
+    def test_attendance_reason_period_uses_only_real_class_dates(self):
+        start = timezone.localdate()
+        middle = start + timedelta(days=1)
+        end = start + timedelta(days=2)
+        for class_date in (start, end):
+            ScheduleSlot.objects.create(
+                group=self.group,
+                weekday=class_date.weekday(),
+                start_time=time(18, 0),
+            )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.post(
+            reverse("attendance_reason"),
+            {
+                "child_id": self.child.pk,
+                "kind": AttendanceReason.Kind.FROZEN,
+                "date_from": start.isoformat(),
+                "date_to": end.isoformat(),
+                "comment": "Заявление родителя",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        reason = AttendanceReason.objects.get(
+            child=self.child,
+            kind=AttendanceReason.Kind.FROZEN,
+        )
+        self.assertEqual(
+            list(
+                Attendance.objects
+                .filter(reason=reason)
+                .order_by("date")
+                .values_list("date", flat=True)
+            ),
+            [start, end],
+        )
+        self.assertFalse(
+            Attendance.objects.filter(
+                child=self.child,
+                date=middle,
+            ).exists()
+        )
+
+    def test_attendance_reason_ui_has_compact_detail_form(self):
+        today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "period": "day",
+                "ref_date": today.isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'id="attendance-reason-modal"',
+        )
+        self.assertContains(
+            response,
+            'data-attendance-choice="reason_excused"',
+        )
+        self.assertContains(
+            response,
+            'data-attendance-choice="reason_sick"',
+        )
+        self.assertContains(
+            response,
+            'data-attendance-choice="reason_frozen"',
+        )
+        self.assertContains(response, 'name="date_from"')
+        self.assertContains(response, 'name="date_to"')
+        self.assertContains(response, 'name="comment"')
+        self.assertContains(response, 'name="document"')
+        self.assertContains(response, "openReasonModal")
 
     def test_competition_scores_places_and_export(self):
         competition = Competition.objects.create(name="Кубок", date=timezone.localdate())

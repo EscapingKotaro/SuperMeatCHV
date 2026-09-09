@@ -50,6 +50,7 @@ from .models import (
     Notification,
     ApparatusScore,
     Attendance,
+    AttendanceReason,
     AuditEvent,
     Camp,
     CampStay,
@@ -1092,6 +1093,7 @@ def mark_attendance_view(request):
         Attendance.Status.PRESENT,
         Attendance.Status.ABSENT,
         Attendance.Status.EXCUSED,
+        Attendance.Status.SICK,
         Attendance.Status.FROZEN,
         Attendance.Status.VACATION,
     }
@@ -1235,6 +1237,174 @@ def mark_attendance_view(request):
             "charge_amount": str(attendance.charge_amount),
         }
     )
+
+@login_required
+@require_POST
+@transaction.atomic
+def attendance_reason_view(request):
+    """Сохранить причину пропуска и применить её ко всем занятиям периода."""
+    child = get_object_or_404(
+        Child.objects.select_related("group__trainer"),
+        pk=request.POST.get("child_id"),
+    )
+    kind = request.POST.get("kind", "").strip()
+    date_from_raw = request.POST.get("date_from", "").strip()
+    date_to_raw = request.POST.get("date_to", "").strip() or date_from_raw
+    comment = request.POST.get("comment", "").strip()
+    document = request.FILES.get("document")
+
+    allowed_kinds = {
+        AttendanceReason.Kind.EXCUSED,
+        AttendanceReason.Kind.SICK,
+        AttendanceReason.Kind.FROZEN,
+    }
+    if kind not in allowed_kinds:
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "Некорректная причина пропуска",
+            },
+            status=400,
+        )
+
+    try:
+        date_from = date.fromisoformat(date_from_raw)
+        date_to = date.fromisoformat(date_to_raw)
+    except ValueError:
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "Укажите корректный период",
+            },
+            status=400,
+        )
+
+    if date_to < date_from:
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "Дата окончания раньше даты начала",
+            },
+            status=400,
+        )
+    if (date_to - date_from).days > 365:
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "Период причины не может быть больше года",
+            },
+            status=400,
+        )
+    if not child.group:
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "У ребёнка нет группы",
+            },
+            status=409,
+        )
+
+    class_dates = effective_class_dates(
+        child.group,
+        date_from,
+        date_to,
+    )
+    if not class_dates:
+        return JsonResponse(
+            {
+                "status": "error",
+                "message": "В выбранном периоде нет занятий группы",
+            },
+            status=400,
+        )
+
+    status_by_kind = {
+        AttendanceReason.Kind.EXCUSED: Attendance.Status.EXCUSED,
+        AttendanceReason.Kind.SICK: Attendance.Status.SICK,
+        AttendanceReason.Kind.FROZEN: Attendance.Status.FROZEN,
+    }
+    reason = AttendanceReason.objects.create(
+        child=child,
+        kind=kind,
+        date_from=date_from,
+        date_to=date_to,
+        comment=comment,
+        document=document,
+        created_by=request.user,
+    )
+
+    status = status_by_kind[kind]
+    changed = 0
+    legacy_comment = comment[:255]
+    for class_date in class_dates:
+        attendance = (
+            Attendance.objects
+            .select_for_update()
+            .filter(
+                child=child,
+                date=class_date,
+                slot=None,
+            )
+            .order_by("pk")
+            .first()
+        )
+        if attendance is None:
+            Attendance.objects.create(
+                child=child,
+                date=class_date,
+                slot=None,
+                group_snapshot=child.group,
+                trainer_snapshot=child.trainer,
+                salary_rate_snapshot=child.group.salary_rate,
+                status=status,
+                comment=legacy_comment,
+                reason=reason,
+                charge_amount=Decimal("0"),
+            )
+        else:
+            attendance.status = status
+            attendance.comment = legacy_comment
+            attendance.reason = reason
+            attendance.charge_amount = Decimal("0")
+            update_fields = [
+                "status",
+                "comment",
+                "reason",
+                "charge_amount",
+            ]
+            if attendance.group_snapshot_id is None:
+                attendance.group_snapshot = child.group
+                attendance.trainer_snapshot = child.trainer
+                attendance.salary_rate_snapshot = child.group.salary_rate
+                update_fields.extend([
+                    "group_snapshot",
+                    "trainer_snapshot",
+                    "salary_rate_snapshot",
+                ])
+            attendance.save(update_fields=update_fields)
+        changed += 1
+
+    log_action(
+        request,
+        "attendance.reason",
+        reason,
+        (
+            f"{reason.get_kind_display()} для {child}: "
+            f"{date_from:%d.%m.%Y}–{date_to:%d.%m.%Y}, "
+            f"занятий: {changed}"
+        ),
+    )
+    return JsonResponse(
+        {
+            "status": "ok",
+            "reason_id": reason.pk,
+            "attendance_count": changed,
+            "kind": kind,
+            "date_from": date_from.isoformat(),
+            "date_to": date_to.isoformat(),
+        }
+    )
+
 
 @login_required
 @transaction.atomic

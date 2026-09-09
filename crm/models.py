@@ -719,12 +719,62 @@ class Payment(models.Model):
         return f"{self.child} · {self.amount} · {self.date:%d.%m.%y}"
 
 
+class AttendanceReason(models.Model):
+    """Документы и период для уважительной причины, больничного или заморозки."""
+
+    class Kind(models.TextChoices):
+        EXCUSED = "excused", "Уважительная причина"
+        SICK = "sick", "Больничный"
+        FROZEN = "frozen", "Заморозка"
+
+    child = models.ForeignKey(
+        Child,
+        on_delete=models.CASCADE,
+        related_name="attendance_reasons",
+        verbose_name="ребёнок",
+    )
+    kind = models.CharField(
+        "Причина",
+        max_length=12,
+        choices=Kind.choices,
+    )
+    date_from = models.DateField("Период с")
+    date_to = models.DateField("Период по")
+    comment = models.TextField("Комментарий", blank=True)
+    document = models.FileField(
+        "Заявление / справка",
+        upload_to="attendance_reasons/",
+        blank=True,
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="attendance_reasons_created",
+        verbose_name="создал",
+    )
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Причина пропуска"
+        verbose_name_plural = "Причины пропусков"
+        ordering = ("-date_from", "-created_at")
+
+    def __str__(self):
+        return (
+            f"{self.child} · {self.get_kind_display()} · "
+            f"{self.date_from:%d.%m.%Y}–{self.date_to:%d.%m.%Y}"
+        )
+
+
 class Attendance(models.Model):
-    """Табель отметок: плюс / пропуск / заморозка / отпуск / уважительная."""
+    """Табель отметок: посещение и причины пропуска."""
     class Status(models.TextChoices):
         PRESENT  = "present",  "✅ Посещение"
         ABSENT   = "absent",   "🟥 Пропуск"
         EXCUSED  = "excused",  "Пропуск по уважительной (сдвигает окончание)"
+        SICK     = "sick",     "Больничный"
         FROZEN   = "frozen",   "🟦 Заморозка"
         VACATION = "vacation", "🟨 Отпуск"
 
@@ -747,6 +797,14 @@ class Attendance(models.Model):
     )
     status = models.CharField("Отметка", max_length=10, choices=Status.choices, default=Status.PRESENT)
     comment = models.CharField("Комментарий", max_length=255, blank=True)
+    reason = models.ForeignKey(
+        AttendanceReason,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="attendances",
+        verbose_name="Причина пропуска",
+    )
     charge_amount = models.DecimalField("Начислено за занятие в долг, ₽",
                                         max_digits=10, decimal_places=2, default=0)
 
