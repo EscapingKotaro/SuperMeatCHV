@@ -1607,56 +1607,59 @@ class CrmWorkflowTests(TestCase):
             with self.subTest(name=name):
                 self.assertEqual(self.client.get(reverse(name)).status_code, 200)
 
-    def test_attendance_renders_all_calendar_days_around_reference(self):
+    def test_attendance_skips_days_without_classes(self):
         today = timezone.localdate()
-
-        ScheduleSlot.objects.create(
-            group=self.group,
-            weekday=today.weekday(),
-            start_time=time(18, 0),
+        ref_date = today + timedelta(
+            days=(7 - today.weekday()) % 7,
         )
 
-        end_date = today + timedelta(days=5)
+        for weekday in (0, 2):
+            ScheduleSlot.objects.create(
+                group=self.group,
+                weekday=weekday,
+                start_time=time(18, 0),
+            )
+
         Subscription.objects.create(
             child=self.child,
             start_date=today,
-            end_date=end_date,
+            end_date=today + timedelta(days=60),
             sessions_total=8,
             price=Decimal("5000"),
         )
 
-        self.client.login(username="admin", password="TestPass123!")
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
 
-        response = self.client.get(reverse("attendance"), {
-            "group_id": self.group.pk,
-            "ref_date": today.isoformat(),
-        })
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "ref_date": ref_date.isoformat(),
+            },
+        )
 
         self.assertEqual(response.status_code, 200)
 
         week_data = response.context["week_data"]
-        self.assertEqual(
-            [item["date"] for item in week_data],
-            [
-                today + timedelta(days=offset)
-                for offset in range(-4, 4)
-            ],
-        )
-        self.assertEqual(len(week_data), 8)
-        self.assertTrue(week_data[4]["has_class"])
+        self.assertGreaterEqual(len(week_data), 6)
+        self.assertLessEqual(len(week_data), 10)
         self.assertTrue(
-            any(not item["has_class"] for item in week_data)
+            all(
+                item["date"].weekday() in {0, 2}
+                for item in week_data
+            )
         )
-        self.assertContains(response, "8 дней")
-
-        child_data = next(
-            item for item in response.context["children_data"]
-            if item["child"].pk == self.child.pk
+        self.assertContains(
+            response,
+            f"{len(week_data)} занятий",
         )
-
-        # Календарное окончание раньше прогнозного исчерпания восьми
-        # занятий, поэтому именно оно является границей абонемента.
-        self.assertEqual(child_data["subscription_end"], end_date)
+        self.assertNotContains(
+            response,
+            "8 дней",
+        )
 
     def test_attendance_sessions_sort_uses_completed_sessions(self):
         today = timezone.localdate()
@@ -3224,6 +3227,65 @@ class CrmWorkflowTests(TestCase):
         self.assertContains(
             response,
             f"до {today:%d.%m}",
+        )
+
+    def test_subscription_end_marker_handles_hidden_non_class_date(self):
+        today = timezone.localdate()
+        days_until_monday = (7 - today.weekday()) % 7
+        if days_until_monday == 0:
+            days_until_monday = 7
+
+        monday = today + timedelta(days=days_until_monday)
+        hidden_end = monday + timedelta(days=1)
+        wednesday = monday + timedelta(days=2)
+
+        for weekday in (monday.weekday(), wednesday.weekday()):
+            ScheduleSlot.objects.create(
+                group=self.group,
+                weekday=weekday,
+                start_time=time(18, 0),
+            )
+
+        Subscription.objects.create(
+            child=self.child,
+            start_date=today,
+            end_date=hidden_end,
+            sessions_total=20,
+            price=Decimal("6000"),
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "ref_date": hidden_end.isoformat(),
+            },
+        )
+        row = self._attendance_child_row(response)
+        visible_dates = [
+            item["date"]
+            for item in response.context["week_data"]
+        ]
+
+        self.assertNotIn(hidden_end, visible_dates)
+        self.assertEqual(row["subscription_end"], hidden_end)
+        self.assertIsNotNone(row["subscription_end_index"])
+        self.assertEqual(
+            visible_dates[row["subscription_end_index"]],
+            monday,
+        )
+        self.assertGreater(
+            visible_dates[row["subscription_end_index"] + 1],
+            hidden_end,
+        )
+        self.assertContains(
+            response,
+            "border-r-2 border-red-500",
         )
 
     def test_subscription_end_marker_is_shown_even_earlier_than_seven_days(self):

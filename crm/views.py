@@ -174,6 +174,27 @@ from datetime import timedelta, datetime
 from .models import *
 from .forms import ChildForm
 
+def generate_class_dates(group, start_date, limit=60):
+    """Генерирует только даты, в которые у группы есть занятия."""
+    slots = ScheduleSlot.objects.filter(
+        group=group,
+    ).order_by("weekday", "start_time")
+    if not slots:
+        return []
+
+    dates = []
+    current = start_date
+    end_limit = start_date + timedelta(days=180)
+
+    while current <= end_limit and len(dates) < limit:
+        for slot in slots:
+            if current.weekday() == slot.weekday:
+                dates.append(current)
+        current += timedelta(days=1)
+
+    return sorted(set(dates))
+
+
 @login_required
 def logout_page(request):
     log_action(
@@ -220,12 +241,42 @@ def attendance_view(request):
     else:
         ref_date = today
 
-    # 3. Показываем все календарные дни: 4 назад и 3 вперёд
-    # относительно выбранной даты, как зафиксировано в актуальном ТЗ.
-    window_dates = [
-        ref_date + timedelta(days=offset)
-        for offset in range(-4, 4)
-    ]
+    # 3. Табель показывает только реальные дни занятий группы.
+    start_of_week = ref_date - timedelta(days=ref_date.weekday())
+    all_class_dates = generate_class_dates(
+        group,
+        start_of_week,
+        limit=60,
+    )
+
+    if not all_class_dates:
+        return render(
+            request,
+            "crm/attendance.html",
+            page_context(
+                request,
+                "attendance",
+                groups=Group.objects.filter(is_active=True),
+                selected_group=group,
+                week_data=[],
+                children_data=[],
+                ref_date=ref_date,
+                error="Нет расписания",
+            ),
+        )
+
+    current_index = 0
+    for i, class_date in enumerate(all_class_dates):
+        if class_date >= ref_date:
+            current_index = i
+            break
+
+    if all_class_dates[-1] < ref_date:
+        current_index = len(all_class_dates) - 1
+
+    start_idx = max(0, current_index - 4)
+    end_idx = min(len(all_class_dates), current_index + 6)
+    window_dates = all_class_dates[start_idx:end_idx]
 
     schedule_by_weekday = {}
     for slot in (
@@ -235,16 +286,13 @@ def attendance_view(request):
     ):
         schedule_by_weekday.setdefault(slot.weekday, slot)
 
-    # 4. Подготовка данных о днях. Дни без занятия остаются в сетке,
-    # чтобы календарь не перескакивал через даты.
     week_data = []
-    for d in window_dates:
-        slot = schedule_by_weekday.get(d.weekday())
+    for class_date in window_dates:
+        slot = schedule_by_weekday[class_date.weekday()]
         week_data.append({
-            'date': d,
-            'start_time': slot.start_time if slot else None,
-            'has_class': slot is not None,
-            'is_today': d == today,
+            'date': class_date,
+            'start_time': slot.start_time,
+            'is_today': class_date == today,
         })
 
     # 5. ПОЛУЧАЕМ ДЕТЕЙ (с учетом архива)
@@ -312,6 +360,7 @@ def attendance_view(request):
 
         entries = []
         sub_end_index = None
+        subscription_end_before_window = False
         subscription_ending_soon = (
             subscription_end is not None
             and 0 <= (subscription_end - today).days <= 7
@@ -322,11 +371,21 @@ def attendance_view(request):
             entries.append({
                 'date': wd['date'],
                 'status': status,
-                'has_class': wd['has_class'],
             })
-            
-            if subscription_end and wd['date'] == subscription_end:
-                sub_end_index = idx
+
+        # Календарная дата окончания может приходиться на день без занятия.
+        # Тогда границу ставим после последнего видимого занятия до неё.
+        # Если окончание уже перед первым видимым занятием — рисуем границу
+        # слева от первой колонки.
+        if subscription_end and week_data:
+            if subscription_end < week_data[0]['date']:
+                subscription_end_before_window = True
+            elif subscription_end <= week_data[-1]['date']:
+                for idx, wd in enumerate(week_data):
+                    if wd['date'] <= subscription_end:
+                        sub_end_index = idx
+                    else:
+                        break
 
         # Авто-перевод в потерянные, если пробный истек (только для не-архивных)
         if not show_archived and child.is_trial_expired():
@@ -343,15 +402,25 @@ def attendance_view(request):
             'discount_percent': child.discount_percent,
             'subscription_end': subscription_end,
             'subscription_end_index': sub_end_index,
+            'subscription_end_before_window': subscription_end_before_window,
             'subscription_ending_soon': subscription_ending_soon,
             'is_trial': child.status == Child.Status.TRIAL,
             'is_archived': child.status in [Child.Status.ARCHIVED, Child.Status.LOST],
             'attendance_entries': entries,
         })
 
-    # 7. Переключатель дат: стрелки двигают окно ровно на неделю.
-    prev_ref = (ref_date - timedelta(days=7)).strftime('%Y-%m-%d')
-    next_ref = (ref_date + timedelta(days=7)).strftime('%Y-%m-%d')
+    # 7. Переключатель дат двигается по соседним окнам занятий.
+    if len(window_dates) >= 2:
+        window_span = (window_dates[-1] - window_dates[0]).days
+    else:
+        window_span = 7
+
+    prev_ref = (
+        window_dates[0] - timedelta(days=window_span)
+    ).strftime('%Y-%m-%d')
+    next_ref = (
+        window_dates[-1] + timedelta(days=window_span)
+    ).strftime('%Y-%m-%d')
 
     # Базовые параметры для ссылок, чтобы сортировка не слетала
     base_params = f"group_id={group.id}&ref_date={{}}&sort={sort_by}"

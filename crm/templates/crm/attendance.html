@@ -76,7 +76,7 @@
             </div>
 
             <span class="text-[10px] text-slate-400">
-                {{ week_data|length }} дней
+                {{ week_data|length }} занятий
             </span>
 
         {% else %}
@@ -105,9 +105,9 @@
                         {% endif %}
                     </th>
                     {% for entry in week_data %}
-                        <th class="text-center {% if entry.is_today %}bg-orange-50 text-[#FF5C35]{% elif not entry.has_class %}bg-slate-50/70 text-slate-300{% endif %} w-[60px]">
+                        <th class="text-center {% if entry.is_today %}bg-orange-50 text-[#FF5C35]{% endif %} w-[60px]">
                             <div class="text-[10px] font-medium">{{ entry.date|date:"D" }}</div>
-                            <b class="text-xs {% if entry.is_today %}text-[#FF5C35]{% elif not entry.has_class %}text-slate-400{% else %}text-slate-900{% endif %}">
+                            <b class="text-xs {% if entry.is_today %}text-[#FF5C35]{% else %}text-slate-900{% endif %}">
                                 {{ entry.date|date:"d.m" }}
                             </b>
                             {% if entry.start_time %}
@@ -175,8 +175,7 @@
                         </td>
 
                         {% for entry in item.attendance_entries %}
-                            <td class="text-center {% if entry.date == today %}bg-orange-50/40{% elif not entry.has_class %}bg-slate-50/60{% endif %} {% if forloop.counter0 == item.subscription_end_index %}border-r-2 border-red-500{% endif %}">
-                                {% if entry.has_class %}
+                            <td class="text-center {% if entry.date == today %}bg-orange-50/40{% endif %} {% if item.subscription_end_before_window and forloop.first %}border-l-2 border-red-500{% endif %} {% if forloop.counter0 == item.subscription_end_index %}border-r-2 border-red-500{% endif %}">
                                 <button data-attendance
                                         data-child-id="{{ item.child.id }}"
                                         data-date="{{ entry.date|date:'Y-m-d' }}"
@@ -184,9 +183,6 @@
                                         class="attendance-cell w-8 h-8 text-xs {% if entry.status == 'present' %}bg-emerald-100 text-emerald-700{% elif entry.status == 'absent' %}bg-red-100 text-red-700{% elif entry.status == 'frozen' %}bg-blue-100 text-blue-700{% elif entry.status == 'vacation' %}bg-amber-100 text-amber-700{% elif entry.status == 'excused' %}bg-yellow-100 text-yellow-700{% else %}bg-slate-100 text-slate-400{% endif %}">
                                     {% if entry.status == 'present' %}+{% elif entry.status == 'absent' %}×{% elif entry.status == 'frozen' %}❄{% elif entry.status == 'vacation' %}О{% elif entry.status == 'excused' %}У{% endif %}
                                 </button>
-                                {% else %}
-                                <span class="inline-grid h-8 w-8 place-items-center text-xs text-slate-300">—</span>
-                                {% endif %}
                             </td>
                         {% endfor %}
                     </tr>
