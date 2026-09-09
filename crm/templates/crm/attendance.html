@@ -1,4 +1,5 @@
 {% extends 'crm/base.html' %}
+{% block main_class %}w-full max-w-none px-3 py-5 lg:px-5{% endblock %}
 {% block actions %}
 <div class="flex gap-2 flex-wrap">
     <!-- Сортировка -->
@@ -49,18 +50,18 @@
 </div>
 {% endblock %}
 {% block content %}
-<section class="card mb-3 p-2">
+<section class="card mb-3 p-3">
     <div class="flex flex-wrap items-center gap-2">
         {% if selected_group %}
-            <select id="group-select" class="field max-w-48 font-bold text-sm" onchange="location.href='?group_id='+this.value+'&ref_date={{ ref_date|date:'Y-m-d' }}'+'&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}'">
+            <select id="group-select" class="field max-w-64 font-bold text-sm" onchange="location.href='?group_id='+this.value+'&ref_date={{ ref_date|date:'Y-m-d' }}'+'&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}'">
                 {% for g in groups %}
                     <option value="{{ g.id }}" {% if g.id == selected_group.id %}selected{% endif %}>{{ g.name }}</option>
                 {% endfor %}
             </select>
 
             <div class="flex items-center gap-1 rounded-lg bg-slate-100 p-0.5">
-                <a data-attendance-prev aria-label="Предыдущее занятие" title="Alt + ←" href="?group_id={{ selected_group.id }}&ref_date={{ prev_ref }}&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}" class="grid h-7 w-7 place-items-center rounded-md hover:bg-white hover:shadow-sm transition">
-                    <i data-lucide="chevron-left" class="h-3.5 w-3.5"></i>
+                <a data-attendance-prev aria-label="Предыдущее занятие" title="Alt + ←" href="?group_id={{ selected_group.id }}&ref_date={{ prev_ref }}&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}" class="grid h-9 w-9 place-items-center rounded-md hover:bg-white hover:shadow-sm transition">
+                    <i data-lucide="chevron-left" class="h-4 w-4"></i>
                 </a>
 
                 <form method="get" class="flex items-center gap-1">
@@ -68,17 +69,17 @@
                     <input type="hidden" name="sort" value="{{ sort_by }}">
                     {% if show_archived %}<input type="hidden" name="show_archived" value="1">{% endif %}
                     <input type="date" name="ref_date" value="{{ ref_date|date:'Y-m-d' }}"
-                           class="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer hover:text-[#FF5C35] px-1"
+                           class="bg-transparent text-sm font-semibold text-slate-700 outline-none cursor-pointer hover:text-[#FF5C35] px-1"
                            onchange="this.form.submit()">
                 </form>
 
-                <a data-attendance-next aria-label="Следующее занятие" title="Alt + →" href="?group_id={{ selected_group.id }}&ref_date={{ next_ref }}&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}" class="grid h-7 w-7 place-items-center rounded-md hover:bg-white hover:shadow-sm transition">
-                    <i data-lucide="chevron-right" class="h-3.5 w-3.5"></i>
+                <a data-attendance-next aria-label="Следующее занятие" title="Alt + →" href="?group_id={{ selected_group.id }}&ref_date={{ next_ref }}&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}" class="grid h-9 w-9 place-items-center rounded-md hover:bg-white hover:shadow-sm transition">
+                    <i data-lucide="chevron-right" class="h-4 w-4"></i>
                 </a>
             </div>
 
             <a class="btn btn-soft" href="?group_id={{ selected_group.id }}&sort={{ sort_by }}{% if show_archived %}&show_archived=1{% endif %}">Сегодня</a>
-            <span class="text-[10px] text-slate-400">
+            <span class="text-xs text-slate-400">
                 {{ week_data|length }} занятий
             </span>
 
@@ -86,7 +87,7 @@
             <span class="text-slate-500 text-sm">Нет групп</span>
         {% endif %}
 
-        <div class="ml-auto flex flex-wrap gap-1.5 text-[9px] font-bold text-slate-600">
+        <div class="ml-auto flex flex-wrap gap-2 text-xs font-bold text-slate-600">
             <span class="badge bg-emerald-100 text-emerald-700 px-1.5 py-0.5">+ Пришёл</span>
             <span class="badge bg-red-100 text-red-700 px-1.5 py-0.5">× Пропуск</span>
             <span class="badge bg-blue-100 text-blue-700 px-1.5 py-0.5">❄ Заморозка</span>
@@ -97,25 +98,25 @@
 </section>
 <section class="card overflow-hidden">
     <div class="table-wrap">
-        <table class="data-table min-w-[1200px]">
+        <table class="data-table min-w-[1280px]">
             <thead>
                 <tr>
-                    <th class="sticky left-0 z-10 bg-[#FAFBFC] text-center w-[200px]">
+                    <th class="sticky left-0 z-10 min-w-[260px] w-[260px] bg-[#FAFBFC] text-center">
                         {% if trainer %}
-                            <div class="text-[9px] text-slate-400 font-normal uppercase tracking-wider">Преподаватель</div>
-                            <div class="font-extrabold text-slate-900 text-xs">{{ trainer.full_name }}</div>
+                            <div class="text-[10px] text-slate-400 font-normal uppercase tracking-wider">Преподаватель</div>
+                            <div class="font-extrabold text-slate-900 text-sm">{{ trainer.full_name }}</div>
                         {% else %}
                             Спортсмен
                         {% endif %}
                     </th>
                     {% for entry in week_data %}
-                        <th class="text-center {% if entry.is_today %}bg-orange-50 text-[#FF5C35]{% endif %} w-[60px]">
-                            <div class="text-[10px] font-medium">{{ entry.date|date:"D" }}</div>
-                            <b class="text-xs {% if entry.is_today %}text-[#FF5C35]{% else %}text-slate-900{% endif %}">
+                        <th class="min-w-[72px] w-[72px] text-center {% if entry.is_today %}bg-orange-50 text-[#FF5C35]{% endif %}">
+                            <div class="text-xs font-medium">{{ entry.date|date:"D" }}</div>
+                            <b class="text-sm {% if entry.is_today %}text-[#FF5C35]{% else %}text-slate-900{% endif %}">
                                 {{ entry.date|date:"d.m" }}
                             </b>
                             {% if entry.start_time %}
-                                <div class="text-[8px] font-normal text-slate-400">{{ entry.start_time|date:"H:i" }}</div>
+                                <div class="text-[10px] font-normal text-slate-400">{{ entry.start_time|date:"H:i" }}</div>
                             {% endif %}
                         </th>
                     {% endfor %}
@@ -124,37 +125,37 @@
             <tbody>
                 {% for item in children_data %}
                     <tr class="{% if item.is_archived %}bg-slate-100 opacity-70{% elif item.is_trial %}bg-purple-50/30{% endif %}">
-                        <td class="sticky left-0 {% if item.is_archived %}bg-slate-100{% else %}bg-white{% endif %}">
-                            <a href="{% url 'child_card' item.child.id %}" class="block hover:bg-slate-50 px-1.5 py-1 rounded transition relative">
+                        <td class="sticky left-0 z-[2] min-w-[260px] w-[260px] {% if item.is_archived %}bg-slate-100{% else %}bg-white{% endif %}">
+                            <a href="{% url 'child_card' item.child.id %}" class="block hover:bg-slate-50 px-2.5 py-2 rounded transition relative">
                                 {% if item.is_trial %}
-                                <span class="absolute -top-1 -right-1 px-1.5 py-0.5 text-[8px] font-bold bg-purple-100 text-purple-700 rounded-full">ПРОБ</span>
+                                <span class="absolute -top-1 -right-1 px-1.5 py-0.5 text-[9px] font-bold bg-purple-100 text-purple-700 rounded-full">ПРОБ</span>
                                 {% endif %}
                                 {% if item.is_archived %}
-                                <span class="absolute -top-1 -right-1 px-1.5 py-0.5 text-[8px] font-bold bg-slate-200 text-slate-600 rounded-full">АРХИВ</span>
+                                <span class="absolute -top-1 -right-1 px-1.5 py-0.5 text-[9px] font-bold bg-slate-200 text-slate-600 rounded-full">АРХИВ</span>
                                 {% endif %}
 
                                 <div class="flex items-baseline justify-between gap-1">
-                                    <b class="text-xs truncate {% if item.is_archived %}text-slate-500 line-through{% endif %}">{{ item.child.last_name }} {{ item.child.first_name }}</b>
-                                    <span class="text-[9px] text-slate-400 whitespace-nowrap font-medium">{{ item.age }}</span>
+                                    <b class="text-sm truncate {% if item.is_archived %}text-slate-500 line-through{% endif %}">{{ item.child.last_name }} {{ item.child.first_name }}</b>
+                                    <span class="text-xs text-slate-400 whitespace-nowrap font-medium">{{ item.age }}</span>
                                 </div>
 
-                                <div class="flex items-center justify-between gap-1 mt-0.5">
-                                    <div class="flex items-center gap-1">
-                                        <span class="text-[10px] font-bold text-slate-700">{{ item.sessions_left }}/{{ item.sessions_total }}</span>
+                                <div class="flex items-center justify-between gap-2 mt-1">
+                                    <div class="flex items-center gap-1.5">
+                                        <span class="text-xs font-bold text-slate-700">{{ item.sessions_left }}/{{ item.sessions_total }}</span>
                                         {% if item.debt > 0 %}
                                         <span class="inline-flex items-center text-red-600" title="Долг {{ item.debt|floatformat:0 }} ₽">
-                                            <i data-lucide="coins" class="h-2.5 w-2.5"></i>
+                                            <i data-lucide="coins" class="h-4 w-4"></i>
                                         </span>
                                         {% endif %}
                                         {% if item.has_certificate %}
-                                        <span class="inline-flex items-center text-blue-600" title="Справка есть"><i data-lucide="file-text" class="h-2.5 w-2.5"></i></span>
+                                        <span class="inline-flex items-center text-blue-600" title="Справка есть"><i data-lucide="file-text" class="h-4 w-4"></i></span>
                                         {% endif %}
                                         {% if item.discount_percent > 0 %}
-                                        <span class="inline-flex items-center text-emerald-600" title="Скидка {{ item.discount_percent }}%"><i data-lucide="percent" class="h-2.5 w-2.5"></i></span>
+                                        <span class="inline-flex items-center text-emerald-600" title="Скидка {{ item.discount_percent }}%"><i data-lucide="percent" class="h-4 w-4"></i></span>
                                         {% endif %}
                                     </div>
                                     {% if item.subscription_end %}
-                                    <span class="text-[9px] {% if item.subscription_ending_soon %}text-red-600 font-bold{% else %}text-slate-400{% endif %} whitespace-nowrap">
+                                    <span class="text-xs {% if item.subscription_ending_soon %}text-red-600 font-bold{% else %}text-slate-400{% endif %} whitespace-nowrap">
                                         до {{ item.subscription_end|date:"d.m" }}
                                     </span>
                                     {% endif %}
@@ -164,15 +165,15 @@
                             {% if not item.is_archived %}
                             <form method="post" action="{% url 'archive_child' item.child.id %}" class="mt-1" onsubmit="return confirm('Архивировать {{ item.child.last_name }}? Он исчезнет из активного табеля.')">
                                 {% csrf_token %}
-                                <button type="submit" class="text-[9px] text-slate-400 hover:text-red-600 flex items-center gap-0.5">
-                                    <i data-lucide="archive" class="h-2.5 w-2.5"></i>В архив
+                                <button type="submit" class="text-xs text-slate-400 hover:text-red-600 flex items-center gap-1">
+                                    <i data-lucide="archive" class="h-3.5 w-3.5"></i>В архив
                                 </button>
                             </form>
                             {% else %}
                             <form method="post" action="{% url 'restore_child' item.child.id %}" class="mt-1">
                                 {% csrf_token %}
-                                <button type="submit" class="text-[9px] text-emerald-600 hover:text-emerald-800 flex items-center gap-0.5">
-                                    <i data-lucide="rotate-ccw" class="h-2.5 w-2.5"></i>Вернуть
+                                <button type="submit" class="text-xs text-emerald-600 hover:text-emerald-800 flex items-center gap-1">
+                                    <i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i>Вернуть
                                 </button>
                             </form>
                             {% endif %}
@@ -187,7 +188,8 @@
                                         data-subscription-id="{{ item.subscription_id|default:'' }}"
                                         data-date="{{ entry.date|date:'Y-m-d' }}"
                                         data-state="{% if entry.status == 'present' %}1{% elif entry.status == 'absent' %}2{% elif entry.status == 'frozen' %}3{% elif entry.status == 'vacation' %}4{% elif entry.status == 'excused' %}5{% else %}0{% endif %}"
-                                        class="attendance-cell w-8 h-8 text-xs {% if entry.is_future %}cursor-not-allowed opacity-50 {% endif %}{% if entry.status == 'present' %}bg-emerald-100 text-emerald-700{% elif entry.status == 'absent' %}bg-red-100 text-red-700{% elif entry.status == 'frozen' %}bg-blue-100 text-blue-700{% elif entry.status == 'vacation' %}bg-amber-100 text-amber-700{% elif entry.status == 'excused' %}bg-yellow-100 text-yellow-700{% else %}bg-slate-100 text-slate-400{% endif %}">
+                                        style="width:44px;height:44px"
+                                        class="attendance-cell text-sm {% if entry.is_future %}cursor-not-allowed opacity-50 {% endif %}{% if entry.status == 'present' %}bg-emerald-100 text-emerald-700{% elif entry.status == 'absent' %}bg-red-100 text-red-700{% elif entry.status == 'frozen' %}bg-blue-100 text-blue-700{% elif entry.status == 'vacation' %}bg-amber-100 text-amber-700{% elif entry.status == 'excused' %}bg-yellow-100 text-yellow-700{% else %}bg-slate-100 text-slate-400{% endif %}">
                                     {% if entry.status == 'present' %}+{% elif entry.status == 'absent' %}×{% elif entry.status == 'frozen' %}❄{% elif entry.status == 'vacation' %}О{% elif entry.status == 'excused' %}У{% endif %}
                                 </button>
                             </td>

@@ -154,7 +154,7 @@
     <!-- =========================
          ОСНОВНОЙ КОНТЕНТ
     ========================== -->
-    <main class="mx-auto max-w-[1500px] px-4 py-7 lg:px-7">
+    <main class="{% block main_class %}mx-auto max-w-[1500px] px-4 py-7 lg:px-7{% endblock %}">
         <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
             <div>
                 {% if title %}
