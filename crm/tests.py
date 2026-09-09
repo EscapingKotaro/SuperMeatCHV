@@ -29,8 +29,10 @@ from .models import (
     StaffProfile,
     Subscription,
     Tariff,
+    ScheduleOverride,
     ScheduleSlot,
     Trainer,
+    effective_class_dates,
     expire_trials,
 )
 
@@ -4063,6 +4065,220 @@ class CrmWorkflowTests(TestCase):
             response,
             'style="width:44px;height:44px"',
         )
+
+    def test_move_class_to_any_free_day_updates_calendar_and_ui(self):
+        source_date = timezone.localdate() + timedelta(days=14)
+        replacement_date = source_date + timedelta(days=2)
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=source_date.weekday(),
+            start_time=time(18, 0),
+        )
+        self.client.login(username="admin", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("move_class"),
+            {
+                "group_id": self.group.pk,
+                "original_date": source_date.isoformat(),
+                "replacement_date": replacement_date.isoformat(),
+                "replacement_time": "19:30",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        override = ScheduleOverride.objects.get(group=self.group)
+        self.assertEqual(override.original_date, source_date)
+        self.assertEqual(override.replacement_date, replacement_date)
+        self.assertEqual(
+            (override.replacement_start_time.hour, override.replacement_start_time.minute),
+            (19, 30),
+        )
+        self.assertEqual(
+            effective_class_dates(
+                self.group,
+                source_date,
+                replacement_date,
+            ),
+            [replacement_date],
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action="schedule.move",
+                object_id=str(override.pk),
+            ).exists()
+        )
+
+        page = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "period": "custom",
+                "date_from": source_date.isoformat(),
+                "date_to": replacement_date.isoformat(),
+                "ref_date": replacement_date.isoformat(),
+            },
+        )
+        self.assertEqual(page.status_code, 200)
+        self.assertEqual(
+            [entry["date"] for entry in page.context["week_data"]],
+            [replacement_date],
+        )
+        entry = page.context["week_data"][0]
+        self.assertTrue(entry["is_moved"])
+        self.assertEqual(entry["moved_from"], source_date)
+        self.assertEqual(
+            (entry["start_time"].hour, entry["start_time"].minute),
+            (19, 30),
+        )
+        self.assertContains(page, "Перенести занятие")
+        self.assertContains(page, 'name="replacement_date"')
+        self.assertContains(page, 'name="replacement_time"')
+        self.assertContains(page, 'name="extend_subscriptions"')
+        self.assertContains(page, f"↪ с {source_date:%d.%m}")
+
+    def test_moved_class_can_be_moved_again(self):
+        source_date = timezone.localdate() + timedelta(days=14)
+        first_target = source_date + timedelta(days=1)
+        second_target = source_date + timedelta(days=2)
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=source_date.weekday(),
+            start_time=time(18, 0),
+        )
+        self.client.login(username="admin", password="TestPass123!")
+
+        first = self.client.post(
+            reverse("move_class"),
+            {
+                "group_id": self.group.pk,
+                "original_date": source_date.isoformat(),
+                "replacement_date": first_target.isoformat(),
+                "replacement_time": "18:45",
+            },
+        )
+        self.assertEqual(first.status_code, 302)
+
+        second = self.client.post(
+            reverse("move_class"),
+            {
+                "group_id": self.group.pk,
+                "original_date": first_target.isoformat(),
+                "replacement_date": second_target.isoformat(),
+                "replacement_time": "",
+            },
+        )
+        self.assertEqual(second.status_code, 302)
+        self.assertEqual(
+            ScheduleOverride.objects.filter(group=self.group).count(),
+            2,
+        )
+        self.assertEqual(
+            effective_class_dates(
+                self.group,
+                source_date,
+                second_target,
+            ),
+            [second_target],
+        )
+        latest = ScheduleOverride.objects.get(
+            group=self.group,
+            original_date=first_target,
+        )
+        self.assertEqual(
+            (latest.replacement_start_time.hour, latest.replacement_start_time.minute),
+            (18, 45),
+        )
+
+    def test_move_class_rejects_conflict_and_existing_marks(self):
+        source_date = timezone.localdate() + timedelta(days=14)
+        occupied_date = source_date + timedelta(days=1)
+        free_date = source_date + timedelta(days=2)
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=source_date.weekday(),
+            start_time=time(18, 0),
+        )
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=occupied_date.weekday(),
+            start_time=time(19, 0),
+        )
+        self.client.login(username="admin", password="TestPass123!")
+
+        conflict = self.client.post(
+            reverse("move_class"),
+            {
+                "group_id": self.group.pk,
+                "original_date": source_date.isoformat(),
+                "replacement_date": occupied_date.isoformat(),
+                "replacement_time": "20:00",
+            },
+        )
+        self.assertEqual(conflict.status_code, 302)
+        self.assertFalse(
+            ScheduleOverride.objects.filter(group=self.group).exists()
+        )
+
+        Attendance.objects.create(
+            child=self.child,
+            date=source_date,
+            status=Attendance.Status.PRESENT,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+        )
+        marked = self.client.post(
+            reverse("move_class"),
+            {
+                "group_id": self.group.pk,
+                "original_date": source_date.isoformat(),
+                "replacement_date": free_date.isoformat(),
+                "replacement_time": "20:00",
+            },
+        )
+        self.assertEqual(marked.status_code, 302)
+        self.assertFalse(
+            ScheduleOverride.objects.filter(group=self.group).exists()
+        )
+
+    def test_move_class_optionally_extends_active_subscriptions(self):
+        source_date = timezone.localdate() + timedelta(days=14)
+        replacement_date = source_date + timedelta(days=3)
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=source_date.weekday(),
+            start_time=time(18, 0),
+        )
+        subscription = Subscription.objects.create(
+            child=self.child,
+            start_date=source_date - timedelta(days=10),
+            end_date=source_date + timedelta(days=20),
+            sessions_total=8,
+            price=Decimal("5000"),
+        )
+        original_end = subscription.end_date
+        self.client.login(username="admin", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("move_class"),
+            {
+                "group_id": self.group.pk,
+                "original_date": source_date.isoformat(),
+                "replacement_date": replacement_date.isoformat(),
+                "replacement_time": "18:00",
+                "extend_subscriptions": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        subscription.refresh_from_db()
+        self.assertEqual(
+            subscription.end_date,
+            original_end + timedelta(days=3),
+        )
+        override = ScheduleOverride.objects.get(group=self.group)
+        self.assertTrue(override.extend_subscriptions)
+        self.assertEqual(override.extension_days, 3)
 
     def test_attendance_period_presets_use_real_class_dates(self):
         reference = timezone.localdate().replace(day=15)
