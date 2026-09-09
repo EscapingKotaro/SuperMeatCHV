@@ -1,45 +1,38 @@
 {% extends 'crm/base.html' %}
 {% block actions %}
 <div class="flex flex-wrap gap-2">
-  <a href="?new_tariff=1" class="btn btn-soft">
-    <i data-lucide="settings-2">
-    </i>Новый тариф</a>
-  <a href="?new_subscription=1" class="btn btn-soft">
-    <i data-lucide="ticket-plus">
-    </i>Назначить абонемент</a>
   <button data-modal="payment-modal" class="btn btn-primary">
-    <i data-lucide="plus">
-    </i>Принять оплату</button>
+    <i data-lucide="plus"></i>
+    Принять оплату
+  </button>
+  <a href="?new_subscription=1" class="btn btn-soft">
+    <i data-lucide="ticket-plus"></i>
+    Оформить / продлить абонемент
+  </a>
 </div>
 {% endblock %}
 {% block content %}
-<div class="mb-4 grid gap-3 sm:grid-cols-3">
-  <div class="card metric">
-    <p class="metric-label">Нужно связаться срочно</p>
-    <p class="metric-value">{{ urgent_count }}</p>
-  </div>
-  <div class="card metric">
-    <p class="metric-label">Продления в выбранном месяце</p>
-    <p class="metric-value">{{ renewals|length }}</p>
-  </div>
-  <div class="card metric">
-    <p class="metric-label">Ожидаемая сумма</p>
-    <p class="metric-value">{{ expected }} ₽</p>
-  </div>
+<div class="mb-4 flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-xs text-slate-600">
+  <span>Ближайших оплат: <b class="text-slate-900">{{ renewals|length }}</b></span>
+  <span>К оплате: <b class="text-slate-900">{{ expected }} ₽</b></span>
+  {% if urgent_count %}
+  <span class="font-bold text-red-600">Срочно: {{ urgent_count }}</span>
+  {% endif %}
 </div>
 <section class="card mb-5 overflow-hidden">
   <div class="border-b p-4">
-    <h2 class="font-extrabold">Ближайшие продления</h2>
+    <h2 class="font-extrabold">Кому скоро оплачивать</h2>
   </div>
   <div class="table-wrap">
     <table class="data-table">
       <thead>
         <tr>
           <th>Спортсмен</th>
-          <th>Продление</th>
-          <th>Осталось</th>
+          <th>Оплатить до</th>
+          <th>Занятия</th>
           <th>К оплате</th>
-          <th>Действия</th>
+          <th>Долг</th>
+          <th>Действие</th>
         </tr>
       </thead>
       <tbody>
@@ -51,21 +44,34 @@
           </td>
           <td>
             <b {% if row.status == "Срочно" %}class="text-red-600" {% endif %}>{{ row.renewal_date|date:"d.m.Y" }}</b>
+            <small class="block {% if row.status == 'Срочно' %}text-red-500{% else %}text-slate-500{% endif %}">{{ row.status }}</small>
           </td>
-          <td>{{ row.sessions_left }} из {{ row.subscription.sessions_total }}</td>
+          <td>
+            <b data-session-usage data-total="{{ row.subscription.sessions_total }}" data-left="{{ row.sessions_left }}">
+              {{ row.sessions_left }} из {{ row.subscription.sessions_total }}
+            </b>
+            <small class="block text-slate-500">использовано / всего</small>
+          </td>
           <td>
             <b>{{ row.amount }} ₽</b>
             {% if row.prepaid_credit > 0 %}
-            <small class="block text-slate-500">Учтена предоплата {{ row.prepaid_credit }} ₽</small>
+            <small class="block text-slate-500">Предоплата учтена: {{ row.prepaid_credit }} ₽</small>
             {% endif %}
           </td>
           <td>
-            <a class="btn btn-soft" href="?edit_subscription={{ row.subscription.pk }}">Изменить</a>
+            {% if row.child.debt > 0 %}
+            <b class="text-red-600">{{ row.child.debt|floatformat:0 }} ₽</b>
+            {% else %}
+            <span class="text-slate-400">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <a class="btn btn-soft" href="{% url 'child_card' row.child.pk %}">Открыть</a>
           </td>
         </tr>
         {% empty %}
         <tr>
-          <td colspan="5" class="py-10 text-center text-slate-500">Продлений нет</td>
+          <td colspan="6" class="py-10 text-center text-slate-500">Ближайших оплат нет</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -73,10 +79,16 @@
   </div>
 </section>
 <div class="grid gap-5 xl:grid-cols-2">
-  <details class="card overflow-hidden">
-    <summary class="p-4 cursor-pointer font-bold">Настройки тарифов</summary><div class="border-b p-4">
-      <h2 class="font-extrabold">Тарифы</h2>
-      <p class="text-xs text-slate-500">Цена, срок и число занятий задаются здесь</p>
+  <details class="card overflow-hidden" {% if editing_tariff or tariff_form.errors or request.GET.new_tariff %}open{% endif %}>
+    <summary class="cursor-pointer p-4 font-bold">Настройки тарифов</summary>
+    <div class="flex flex-wrap items-center justify-between gap-3 border-b p-4">
+      <div>
+        <h2 class="font-extrabold">Тарифы</h2>
+        <p class="text-xs text-slate-500">Цена, срок и число занятий для новых абонементов</p>
+      </div>
+      <a href="?new_tariff=1" class="btn btn-soft">
+        <i data-lucide="plus"></i> Новый тариф
+      </a>
     </div>
     <div class="table-wrap">
       <table class="data-table">
@@ -113,10 +125,10 @@
       </table>
     </div>
   </details>
-  <section class="card overflow-hidden">
-    <div class="border-b p-4">
-      <h2 class="font-extrabold">Все абонементы</h2>
-      <p class="text-xs text-slate-500">Повторное редактирование не удаляет историю оплат</p>
+  <details class="card overflow-hidden">
+    <summary class="cursor-pointer p-4 font-bold">Все абонементы</summary>
+    <div class="border-b px-4 pb-4">
+      <p class="text-xs text-slate-500">История и ручное редактирование оформленных абонементов</p>
     </div>
     <div class="table-wrap">
       <table class="data-table">
@@ -146,7 +158,7 @@
         </tbody>
       </table>
     </div>
-  </section>
+  </details>
 </div>
 {% endblock %}
 {% block modals %}
@@ -181,7 +193,7 @@
     </div>
     <div class="modal-foot">
       <button type="button" data-close class="btn btn-soft">Отмена</button>
-      <button class="btn btn-primary">Сохранить</button>
+      <button class="btn btn-primary">Принять оплату</button>
     </div>
   </form>
 </section>
@@ -219,7 +231,7 @@
     {% endif %}
     <div class="modal-head">
       <b>
-        {% if editing_subscription %}Изменить абонемент{% else %}Назначить абонемент{% endif %}
+        {% if editing_subscription %}Изменить абонемент{% else %}Оформить / продлить абонемент{% endif %}
       </b>
       <button type="button" data-close>
         <i data-lucide="x">
@@ -232,7 +244,7 @@
       <label><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>
       {% endif %}{% endfor %}
       <details class="sm:col-span-2 border rounded-xl p-3" {% if subscription_form.manual_override.value or subscription_form.errors %}open{% endif %}>
-        <summary class="cursor-pointer font-semibold">Изменить вручную</summary>
+        <summary class="cursor-pointer font-semibold">Ручная корректировка</summary>
         <label class="block my-3">{{ subscription_form.manual_override }} {{ subscription_form.manual_override.label }}</label>
         <div class="grid gap-3">{% for field in subscription_form %}{% if field.name == 'end_date' or field.name == 'sessions_total' or field.name == 'price' %}<label><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endif %}{% endfor %}</div>
       </details>
@@ -243,7 +255,7 @@
       {% if editing_subscription %}
       <button name="action" value="cancel_subscription" formnovalidate onclick="return confirm('Отменить абонемент и его начисление? История оплат сохранится.')" class="btn btn-soft text-red-600">Отменить абонемент</button>
       {% endif %}
-      <button class="btn btn-primary">Сохранить</button>
+      <button class="btn btn-primary">{% if editing_subscription %}Сохранить изменения{% else %}Оформить абонемент{% endif %}</button>
     </div>
   </form>
 </section>
@@ -252,6 +264,12 @@
 {{ tariff_preview|json_script:"tariff-preview-data" }}
 {{ child_discounts|json_script:"child-discount-data" }}
 <script>
+document.querySelectorAll('[data-session-usage]').forEach((element) => {
+  const total = Number(element.dataset.total) || 0;
+  const left = Number(element.dataset.left) || 0;
+  element.textContent = `${Math.max(0, total - left)}/${total}`;
+});
+
 (() => {
   const tariffs = JSON.parse(document.getElementById('tariff-preview-data').textContent) || [];
   const discounts = JSON.parse(document.getElementById('child-discount-data').textContent) || [];
