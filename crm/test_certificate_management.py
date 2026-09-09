@@ -1,11 +1,13 @@
 import os
 import shutil
 import tempfile
+from datetime import timedelta
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.utils import timezone
 
 from .forms import ChildForm
 from .models import Child, Group, Trainer
@@ -35,6 +37,7 @@ class CertificateManagementTests(TestCase):
             birth_year=2016,
             group=group,
         )
+        self.valid_until = timezone.localdate() + timedelta(days=180)
 
     def tearDown(self):
         self.override.disable()
@@ -43,10 +46,17 @@ class CertificateManagementTests(TestCase):
     def image(self, name):
         return SimpleUploadedFile(name, GIF_1X1, content_type="image/gif")
 
-    def upload(self, name, note=""):
+    def upload(self, name, note="", valid_until=None):
+        valid_until = valid_until or self.valid_until
         return self.client.post(
             reverse("child_certificate_manage", args=[self.child.pk]),
-            {"action": "upload", "certificate": self.image(name), "certificate_note": note},
+            {
+                "action": "upload",
+                "kind": "certificate",
+                "document": self.image(name),
+                "valid_until": valid_until.isoformat(),
+                "note": note,
+            },
         )
 
     def test_upload_is_visible_from_child_card(self):
@@ -57,6 +67,7 @@ class CertificateManagementTests(TestCase):
         self.assertTrue(self.child.certificate)
         self.assertTrue(self.child.certificate_ok)
         self.assertEqual(self.child.certificate_note, "Действительна до июня")
+        self.assertEqual(self.child.certificate_valid_until, self.valid_until)
         self.assertTrue(os.path.exists(self.child.certificate.path))
 
         photo = self.client.get(reverse("child_certificate", args=[self.child.pk]))
@@ -65,8 +76,11 @@ class CertificateManagementTests(TestCase):
 
         card = self.client.get(reverse("child_card", args=[self.child.pk]))
         self.assertContains(card, 'enctype="multipart/form-data"')
-        self.assertContains(card, "Открыть фото справки")
-        self.assertContains(card, "Удалить фото")
+        self.assertContains(card, 'data-child-document="certificate"')
+        self.assertContains(
+            card,
+            reverse("child_document", args=[self.child.pk, "certificate"]),
+        )
         self.assertNotContains(card, "toggle_certificate")
         self.assertNotContains(card, "нажми, чтобы переключить")
 
@@ -84,13 +98,14 @@ class CertificateManagementTests(TestCase):
 
         response = self.client.post(
             reverse("child_certificate_manage", args=[self.child.pk]),
-            {"action": "delete"},
+            {"action": "delete", "kind": "certificate"},
         )
         self.assertRedirects(response, reverse("child_card", args=[self.child.pk]))
 
         self.child.refresh_from_db()
         self.assertFalse(self.child.certificate)
         self.assertFalse(self.child.certificate_ok)
+        self.assertIsNone(self.child.certificate_valid_until)
         self.assertFalse(os.path.exists(new_path))
 
     def test_child_form_does_not_expose_manual_certificate_switch(self):
@@ -102,20 +117,27 @@ class CertificateManagementTests(TestCase):
         self.child.refresh_from_db()
         old_name = self.child.certificate.name
         old_path = self.child.certificate.path
+        old_valid_until = self.child.certificate_valid_until
+        old_note = self.child.certificate_note
 
         response = self.client.post(
             reverse("child_certificate_manage", args=[self.child.pk]),
             {
                 "action": "upload",
-                "certificate": SimpleUploadedFile(
+                "kind": "certificate",
+                "document": SimpleUploadedFile(
                     "bad.txt", b"not an image", content_type="text/plain"
                 ),
-                "certificate_note": "Не сохранять",
+                "valid_until": (
+                    self.valid_until + timedelta(days=30)
+                ).isoformat(),
+                "note": "Не сохранять",
             },
         )
         self.assertRedirects(response, reverse("child_card", args=[self.child.pk]))
 
         self.child.refresh_from_db()
         self.assertEqual(self.child.certificate.name, old_name)
+        self.assertEqual(self.child.certificate_valid_until, old_valid_until)
+        self.assertEqual(self.child.certificate_note, old_note)
         self.assertTrue(os.path.exists(old_path))
-        self.assertNotEqual(self.child.certificate_note, "Не сохранять")
