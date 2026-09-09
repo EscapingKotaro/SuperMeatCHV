@@ -4272,7 +4272,9 @@ def statistics_view(request):
 
     new_qs = children.filter(created_at__date__gte=month_start, created_at__date__lte=month_end)
     new_count = new_qs.count()
-    new_kept = new_qs.filter(status__in=current_statuses).count()
+    # «Остались из новых» — уже стали полноценными спортсменами.
+    # Пробники ещё находятся в процессе конверсии и сюда не входят.
+    new_kept = new_qs.filter(status=Child.Status.ACTIVE).count()
     left_count = children.filter(
         status__in=[Child.Status.LOST, Child.Status.ARCHIVED],
         archived_at__gte=month_start, archived_at__lte=month_end).count()

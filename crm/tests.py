@@ -2805,6 +2805,223 @@ class CrmWorkflowTests(TestCase):
             200,
         )
 
+    def test_statistics_control_scenario_matches_manual_numbers(self):
+        today = timezone.localdate()
+        month_start = today.replace(day=1)
+        previous_day = month_start - timedelta(days=1)
+
+        previous_created_at = timezone.make_aware(
+            datetime.combine(previous_day, time(12, 0))
+        )
+        current_created_at = timezone.make_aware(
+            datetime.combine(month_start, time(12, 0))
+        )
+
+        # Базовый ребёнок существовал до выбранного месяца.
+        Child.objects.filter(pk=self.child.pk).update(
+            created_at=previous_created_at,
+        )
+
+        active_new = Child.objects.create(
+            last_name="Новая",
+            first_name="Активная",
+            birth_year=2015,
+            group=self.group,
+            status=Child.Status.ACTIVE,
+        )
+        trial_new = Child.objects.create(
+            last_name="Новая",
+            first_name="Пробная",
+            birth_year=2016,
+            group=self.group,
+            status=Child.Status.TRIAL,
+            trial_from=today,
+        )
+        lost_new = Child.objects.create(
+            last_name="Новая",
+            first_name="Ушедшая",
+            birth_year=2014,
+            group=self.group,
+            status=Child.Status.LOST,
+            archived_at=today,
+            departure_group=self.group,
+            departure_trainer=self.trainer,
+        )
+        Child.objects.filter(
+            pk__in=[
+                active_new.pk,
+                trial_new.pk,
+                lost_new.pk,
+            ],
+        ).update(created_at=current_created_at)
+
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
+
+        Attendance.objects.create(
+            child=self.child,
+            date=today,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+            salary_rate_snapshot=Decimal("300"),
+            status=Attendance.Status.PRESENT,
+        )
+        Attendance.objects.create(
+            child=active_new,
+            date=today,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+            salary_rate_snapshot=Decimal("300"),
+            status=Attendance.Status.PRESENT,
+        )
+        Attendance.objects.create(
+            child=trial_new,
+            date=today,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+            salary_rate_snapshot=Decimal("300"),
+            status=Attendance.Status.ABSENT,
+        )
+
+        Payment.objects.create(
+            child=self.child,
+            amount=Decimal("1000"),
+            date=today,
+            created_by=self.admin,
+        )
+        Payment.objects.create(
+            child=active_new,
+            amount=Decimal("2000"),
+            date=today,
+            created_by=self.admin,
+        )
+        Expense.objects.create(
+            title="Контрольный расход",
+            category=Expense.Category.HOUSEHOLD,
+            amount=Decimal("500"),
+            date=today,
+            created_by=self.admin,
+        )
+        target = RevenueTarget.objects.create(
+            month=month_start,
+            amount=Decimal("10000"),
+            set_by=self.boss,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        statistics = self.client.get(
+            reverse("statistics"),
+            {"month": month_start.strftime("%Y-%m")},
+        )
+        self.assertEqual(statistics.status_code, 200)
+
+        # Контрольные цифры считаются вручную из набора выше:
+        # 2 ACTIVE + 1 TRIAL = 3 текущих спортсмена.
+        self.assertEqual(statistics.context["total_children"], 3)
+        self.assertEqual(statistics.context["active_children"], 2)
+
+        # В этом месяце созданы ACTIVE, TRIAL и LOST.
+        self.assertEqual(statistics.context["new_count"], 3)
+        # Остался из новых только ACTIVE; пробник ещё не считается
+        # конвертированным спортсменом.
+        self.assertEqual(statistics.context["new_kept"], 1)
+        self.assertEqual(statistics.context["left_count"], 1)
+
+        self.assertEqual(
+            statistics.context["revenue_to_date"],
+            Decimal("3000"),
+        )
+        self.assertEqual(
+            statistics.context["revenue_month"],
+            Decimal("3000"),
+        )
+        self.assertEqual(
+            statistics.context["expected"],
+            Decimal("0"),
+        )
+        self.assertEqual(
+            statistics.context["potential"],
+            Decimal("3000"),
+        )
+        self.assertEqual(statistics.context["target"], target)
+        self.assertEqual(
+            statistics.context["expenses_month"],
+            Decimal("500"),
+        )
+
+        held_sessions = sum(
+            1
+            for offset in range((today - month_start).days + 1)
+            if (
+                month_start
+                + timedelta(days=offset)
+            ).weekday() == today.weekday()
+        )
+        expected_capacity = 3 * held_sessions
+        expected_attendance = round(
+            2 * 100 / expected_capacity
+        )
+
+        group_row = next(
+            row
+            for row in statistics.context["groups_stats"]
+            if row["group"].pk == self.group.pk
+        )
+        self.assertEqual(group_row["kids"], 3)
+        self.assertEqual(group_row["present"], 2)
+        self.assertEqual(group_row["absent"], 1)
+        self.assertEqual(group_row["sessions"], held_sessions)
+        self.assertEqual(group_row["capacity"], expected_capacity)
+        self.assertEqual(
+            group_row["attendance_pct"],
+            expected_attendance,
+        )
+
+        trainer_row = next(
+            row
+            for row in statistics.context["trainers_stats"]
+            if row["trainer"].pk == self.trainer.pk
+        )
+        self.assertEqual(trainer_row["present"], 2)
+        self.assertEqual(trainer_row["left"], 1)
+        self.assertEqual(
+            trainer_row["attendance_pct"],
+            expected_attendance,
+        )
+
+        # Таблица продлений использует тот же источник прогноза.
+        prepayments = self.client.get(
+            reverse("payments"),
+            {"month": month_start.strftime("%Y-%m")},
+        )
+        self.assertEqual(prepayments.status_code, 200)
+        self.assertEqual(
+            prepayments.context["expected"],
+            Decimal("0"),
+        )
+
+        # ЗП: два фактических посещения по 300 ₽.
+        self.client.logout()
+        self.client.login(
+            username="senior",
+            password="TestPass123!",
+        )
+        salaries = self.client.get(
+            reverse("salaries"),
+            {"month": month_start.strftime("%Y-%m")},
+        )
+        self.assertEqual(salaries.status_code, 200)
+        self.assertEqual(
+            salaries.context["grand_total"],
+            Decimal("600"),
+        )
+
     def test_statistics_revenue_to_date_is_accumulated_for_selected_month(self):
         today = timezone.localdate()
         current_month = today.replace(day=1)
