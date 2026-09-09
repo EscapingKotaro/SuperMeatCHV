@@ -41,13 +41,13 @@ class ProjectCompletionTests(TestCase):
         values.update(extra)
         return Subscription.objects.create(**values)
 
-    def trial(self, age=14):
+    def trial(self, age=30):
         self.child.status = Child.Status.TRIAL
         self.child.trial_from = self.today-timedelta(days=age)
         self.child.save()
 
     def test_trial_before_boundary_is_retained(self):
-        self.trial(13)
+        self.trial(29)
         self.assertEqual(expire_trials(self.today), 0)
         self.child.refresh_from_db()
         self.assertEqual(self.child.status, Child.Status.TRIAL)
