@@ -429,6 +429,28 @@
         button.dataset.state = config.state;
     }
 
+    function updatePresentCounters(button, oldState, newState) {
+        const wasPresent = oldState === STATES.present.state;
+        const isPresent = newState === STATES.present.state;
+        if (wasPresent === isPresent) return;
+
+        const counter = document.querySelector(
+            `[data-attendance-counter-date="${button.dataset.date}"]`
+        );
+        if (!counter) return;
+
+        const delta = isPresent ? 1 : -1;
+        for (const selector of [
+            "[data-group-present-count]",
+            "[data-total-present-count]"
+        ]) {
+            const valueNode = counter.querySelector(selector);
+            if (!valueNode) continue;
+            const current = Number.parseInt(valueNode.textContent, 10) || 0;
+            valueNode.textContent = String(Math.max(0, current + delta));
+        }
+    }
+
     // =========================================================
     // УПРАВЛЕНИЕ МЕНЮ
     // =========================================================
@@ -463,6 +485,7 @@
         const date = button.dataset.date;
         if (!childId || !date) return;
 
+        const oldState = button.dataset.state;
         button.disabled = true;
         button.classList.add("opacity-50");
 
@@ -480,6 +503,7 @@
             const data = await response.json();
             if (!response.ok || data.status !== "ok") throw new Error(data.message || `HTTP ${response.status}`);
             paintButton(button, status);
+            updatePresentCounters(button, oldState, button.dataset.state);
         } catch (error) {
             console.error("Ошибка сохранения:", error);
             alert("Не удалось сохранить отметку: " + error.message);
@@ -492,6 +516,7 @@
     async function clearAttendance(button) {
         const childId = button.dataset.childId;
         const date = button.dataset.date;
+        const oldState = button.dataset.state;
 
         button.disabled = true;
         button.classList.add("opacity-50");
@@ -510,6 +535,7 @@
             const data = await response.json();
             if (!response.ok || data.status !== "ok") throw new Error(data.message || `HTTP ${response.status}`);
             paintButton(button, "clear");
+            updatePresentCounters(button, oldState, button.dataset.state);
         } catch (error) {
             console.error("Ошибка удаления:", error);
             alert("Не удалось убрать отметку: " + error.message);

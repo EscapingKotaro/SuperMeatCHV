@@ -3924,6 +3924,113 @@ class CrmWorkflowTests(TestCase):
         self.assertEqual(trial.departure_group, self.group)
         self.assertEqual(trial.departure_trainer, self.trainer)
 
+    def test_attendance_header_counts_present_children_for_group_and_club(self):
+        today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
+        other_trainer = Trainer.objects.create(
+            full_name="Другой тренер",
+        )
+        other_group = Group.objects.create(
+            name="Другая группа",
+            trainer=other_trainer,
+        )
+        other_slot = ScheduleSlot.objects.create(
+            group=other_group,
+            weekday=today.weekday(),
+            start_time=time(19, 0),
+        )
+        moved_child = Child.objects.create(
+            last_name="Переведённая",
+            first_name="Мария",
+            birth_year=2016,
+            group=other_group,
+        )
+        other_child = Child.objects.create(
+            last_name="Другая",
+            first_name="Анна",
+            birth_year=2015,
+            group=other_group,
+        )
+        absent_child = Child.objects.create(
+            last_name="Пропуск",
+            first_name="Ольга",
+            birth_year=2015,
+            group=self.group,
+        )
+
+        Attendance.objects.create(
+            child=self.child,
+            date=today,
+            status=Attendance.Status.PRESENT,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+        )
+        Attendance.objects.create(
+            child=moved_child,
+            date=today,
+            status=Attendance.Status.PRESENT,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+        )
+        Attendance.objects.create(
+            child=other_child,
+            date=today,
+            status=Attendance.Status.PRESENT,
+            group_snapshot=other_group,
+            trainer_snapshot=other_trainer,
+        )
+        Attendance.objects.create(
+            child=other_child,
+            date=today,
+            slot=other_slot,
+            status=Attendance.Status.PRESENT,
+            group_snapshot=other_group,
+            trainer_snapshot=other_trainer,
+        )
+        Attendance.objects.create(
+            child=absent_child,
+            date=today,
+            status=Attendance.Status.ABSENT,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+        )
+
+        self.client.login(username="admin", password="TestPass123!")
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "period": "day",
+                "ref_date": today.isoformat(),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.context["week_data"]), 1)
+        entry = response.context["week_data"][0]
+        self.assertEqual(entry["group_present_count"], 2)
+        self.assertEqual(entry["total_present_count"], 3)
+        self.assertContains(
+            response,
+            f'data-attendance-counter-date="{today.isoformat()}"',
+        )
+        self.assertContains(
+            response,
+            'data-group-present-count>2</span>',
+        )
+        self.assertContains(
+            response,
+            'data-total-present-count>3</span>',
+        )
+        self.assertContains(
+            response,
+            "updatePresentCounters",
+        )
+
     def test_attendance_period_presets_use_real_class_dates(self):
         reference = timezone.localdate().replace(day=15)
         month_start = reference.replace(day=1)
