@@ -22,6 +22,7 @@ from .models import (
     Expense,
     Group,
     Lead,
+    LessonTrainerAssignment,
     ManagerTask,
     Notification,
     Newcomer,
@@ -2525,6 +2526,219 @@ class CrmWorkflowTests(TestCase):
             response,
             "bg-orange-50 text-[#FF5C35]",
         )
+
+    def test_lesson_trainer_assignment_splits_group_and_updates_history(self):
+        today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
+        other_child = Child.objects.create(
+            last_name="Петрова",
+            first_name="Мария",
+            birth_year=2015,
+            group=self.group,
+        )
+        third_child = Child.objects.create(
+            last_name="Сидорова",
+            first_name="Елена",
+            birth_year=2015,
+            group=self.group,
+        )
+        substitute_a = Trainer.objects.create(
+            full_name="Тренер Замена А",
+        )
+        substitute_b = Trainer.objects.create(
+            full_name="Тренер Замена Б",
+        )
+        existing_mark = Attendance.objects.create(
+            child=self.child,
+            date=today,
+            status=Attendance.Status.ABSENT,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+            salary_rate_snapshot=self.group.salary_rate,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("assign_lesson_trainer"),
+            {
+                "group_id": self.group.pk,
+                "lesson_date": today.isoformat(),
+                "trainer_id": substitute_a.pk,
+                "child_ids": [self.child.pk],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        response = self.client.post(
+            reverse("assign_lesson_trainer"),
+            {
+                "group_id": self.group.pk,
+                "lesson_date": today.isoformat(),
+                "trainer_id": substitute_b.pk,
+                "child_ids": [other_child.pk],
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+
+        self.assertEqual(
+            LessonTrainerAssignment.objects.get(
+                group=self.group,
+                date=today,
+                child=self.child,
+            ).trainer,
+            substitute_a,
+        )
+        self.assertEqual(
+            LessonTrainerAssignment.objects.get(
+                group=self.group,
+                date=today,
+                child=other_child,
+            ).trainer,
+            substitute_b,
+        )
+        self.assertFalse(
+            LessonTrainerAssignment.objects.filter(
+                group=self.group,
+                date=today,
+                child=third_child,
+            ).exists()
+        )
+
+        existing_mark.refresh_from_db()
+        self.assertEqual(
+            existing_mark.trainer_snapshot,
+            substitute_a,
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                actor=self.admin,
+                action="attendance.trainer_assign",
+                object_id=str(self.group.pk),
+            ).exists()
+        )
+
+    def test_lesson_trainer_assignment_is_used_when_marking_attendance(self):
+        today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
+        substitute = Trainer.objects.create(
+            full_name="Фактический тренер",
+        )
+        LessonTrainerAssignment.objects.create(
+            group=self.group,
+            date=today,
+            child=self.child,
+            trainer=substitute,
+            created_by=self.admin,
+        )
+        Subscription.objects.create(
+            child=self.child,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("5000"),
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "date": today.isoformat(),
+                "status": Attendance.Status.PRESENT,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mark = Attendance.objects.get(
+            child=self.child,
+            date=today,
+        )
+        self.assertEqual(mark.trainer_snapshot, substitute)
+
+        page = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": self.group.pk,
+                "period": "day",
+                "ref_date": today.isoformat(),
+            },
+        )
+        row = next(
+            item
+            for item in page.context["children_data"]
+            if item["child"].pk == self.child.pk
+        )
+        entry = row["attendance_entries"][0]
+        self.assertEqual(entry["trainer_id"], substitute.pk)
+        self.assertTrue(entry["is_substitute_trainer"])
+        self.assertContains(page, 'id="lesson-trainer-modal"')
+        self.assertContains(page, 'name="child_ids"')
+        self.assertContains(page, "Тренеры на дату")
+        self.assertContains(page, "Тренер по замене")
+
+    def test_lesson_trainer_assignment_can_reset_selected_children_to_primary(self):
+        today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
+        substitute = Trainer.objects.create(
+            full_name="Временный тренер",
+        )
+        assignment = LessonTrainerAssignment.objects.create(
+            group=self.group,
+            date=today,
+            child=self.child,
+            trainer=substitute,
+            created_by=self.admin,
+        )
+        mark = Attendance.objects.create(
+            child=self.child,
+            date=today,
+            status=Attendance.Status.ABSENT,
+            group_snapshot=self.group,
+            trainer_snapshot=substitute,
+            salary_rate_snapshot=self.group.salary_rate,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.post(
+            reverse("assign_lesson_trainer"),
+            {
+                "group_id": self.group.pk,
+                "lesson_date": today.isoformat(),
+                "trainer_id": "",
+                "child_ids": [self.child.pk],
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            LessonTrainerAssignment.objects.filter(
+                pk=assignment.pk,
+            ).exists()
+        )
+        mark.refresh_from_db()
+        self.assertEqual(mark.trainer_snapshot, self.trainer)
 
     def test_attendance_skips_days_without_classes(self):
         today = timezone.localdate()

@@ -61,6 +61,7 @@ from .models import (
     Expense,
     Group,
     Lead,
+    LessonTrainerAssignment,
     recalculate_competition_places,
     ManagerTask,
     Newcomer,
@@ -548,6 +549,18 @@ def attendance_view(request):
         children_list.sort(key=lambda c: (c.last_name.lower(), c.first_name.lower()))
 
     visible_dates = set(window_dates)
+    trainer_assignment_map = {
+        (assignment.child_id, assignment.date): assignment.trainer
+        for assignment in (
+            LessonTrainerAssignment.objects
+            .filter(
+                group=group,
+                date__in=window_dates,
+                child__in=children_list,
+            )
+            .select_related("trainer")
+        )
+    }
     children_data = []
     for child in children_list:
         active_sub = child.active_subscription()
@@ -635,11 +648,21 @@ def attendance_view(request):
             else:
                 subscription_state = "none"
 
+            actual_trainer = trainer_assignment_map.get(
+                (child.pk, class_date),
+                group.trainer,
+            )
             entries.append({
                 'date': class_date,
                 'status': status,
                 'is_future': wd['is_future'],
                 'subscription_state': subscription_state,
+                'trainer_id': actual_trainer.pk if actual_trainer else None,
+                'trainer_name': actual_trainer.full_name if actual_trainer else "",
+                'is_substitute_trainer': (
+                    actual_trainer is not None
+                    and actual_trainer.pk != group.trainer_id
+                ),
             })
 
         # Календарная дата окончания может приходиться на день без занятия.
@@ -705,6 +728,13 @@ def attendance_view(request):
         child_form=child_form,
         creating_child=creating_child,
         attendance_visual=_attendance_visual_settings(request.user),
+        lesson_trainers=Trainer.objects.filter(
+            is_active=True,
+        ).order_by("full_name"),
+        lesson_trainer_children=Child.objects.filter(
+            group=group,
+            status__in=[Child.Status.ACTIVE, Child.Status.TRIAL],
+        ).order_by("last_name", "first_name"),
     )
 
     return render(request, "crm/attendance.html", context)
@@ -1053,6 +1083,134 @@ def move_class_view(request):
 
 @login_required
 @require_POST
+@transaction.atomic
+def assign_lesson_trainer_view(request):
+    """Назначить фактического тренера выбранным детям на конкретную дату."""
+    group = get_object_or_404(
+        Group.objects.select_related("trainer"),
+        pk=request.POST.get("group_id"),
+        is_active=True,
+    )
+    lesson_date_raw = request.POST.get("lesson_date", "").strip()
+    try:
+        lesson_date = date.fromisoformat(lesson_date_raw)
+    except ValueError:
+        messages.error(request, "Некорректная дата занятия")
+        return redirect(
+            f"{reverse('attendance')}?group_id={group.pk}"
+        )
+
+    if lesson_date not in effective_class_dates(
+        group,
+        lesson_date,
+        lesson_date,
+    ):
+        messages.error(
+            request,
+            "На выбранную дату у группы нет занятия",
+        )
+        return redirect(
+            f"{reverse('attendance')}?group_id={group.pk}"
+        )
+
+    child_ids = {
+        int(value)
+        for value in request.POST.getlist("child_ids")
+        if value.isdigit()
+    }
+    if not child_ids:
+        messages.error(request, "Выберите хотя бы одного спортсмена")
+        return redirect(
+            f"{reverse('attendance')}?group_id={group.pk}"
+            f"&ref_date={lesson_date.isoformat()}"
+        )
+
+    children = list(
+        Child.objects
+        .filter(
+            pk__in=child_ids,
+            group=group,
+            status__in=[Child.Status.ACTIVE, Child.Status.TRIAL],
+        )
+        .order_by("last_name", "first_name")
+    )
+    if len(children) != len(child_ids):
+        messages.error(
+            request,
+            "Часть выбранных спортсменов не относится к этой группе",
+        )
+        return redirect(
+            f"{reverse('attendance')}?group_id={group.pk}"
+            f"&ref_date={lesson_date.isoformat()}"
+        )
+
+    trainer_id = request.POST.get("trainer_id", "").strip()
+    trainer = None
+    if trainer_id:
+        trainer = get_object_or_404(
+            Trainer,
+            pk=trainer_id,
+            is_active=True,
+        )
+
+    if trainer is None or trainer.pk == group.trainer_id:
+        LessonTrainerAssignment.objects.filter(
+            group=group,
+            date=lesson_date,
+            child__in=children,
+        ).delete()
+        actual_trainer = group.trainer
+        action_text = f"Основной тренер {actual_trainer}"
+    else:
+        for child in children:
+            LessonTrainerAssignment.objects.update_or_create(
+                group=group,
+                date=lesson_date,
+                child=child,
+                defaults={
+                    "trainer": trainer,
+                    "created_by": request.user,
+                },
+            )
+        actual_trainer = trainer
+        action_text = f"Тренер по замене {actual_trainer}"
+
+    Attendance.objects.filter(
+        child__in=children,
+        date=lesson_date,
+    ).filter(
+        Q(group_snapshot=group)
+        | Q(group_snapshot__isnull=True, child__group=group)
+    ).update(
+        group_snapshot=group,
+        trainer_snapshot=actual_trainer,
+        salary_rate_snapshot=group.salary_rate,
+    )
+
+    log_action(
+        request,
+        "attendance.trainer_assign",
+        group,
+        (
+            f"{lesson_date:%d.%m.%Y}: {action_text}; "
+            f"спортсменов: {len(children)}"
+        ),
+    )
+    messages.success(
+        request,
+        (
+            f"{actual_trainer} назначен на "
+            f"{lesson_date:%d.%m.%Y} для {len(children)} спортсменов"
+        ),
+    )
+    return redirect(
+        f"{reverse('attendance')}?group_id={group.pk}"
+        f"&ref_date={lesson_date.isoformat()}"
+    )
+
+
+@login_required
+@require_POST
 def cancel_attendance_view(request):
     """Отмена отметки через правый клик"""
     child_id = request.POST.get('child_id')
@@ -1138,6 +1296,23 @@ def mark_attendance_view(request):
         date=mark_date,
         slot=None,
     ).first()
+    trainer_assignment = (
+        LessonTrainerAssignment.objects
+        .filter(
+            group=child.group,
+            child=child,
+            date=mark_date,
+        )
+        .select_related("trainer")
+        .first()
+        if child.group_id
+        else None
+    )
+    actual_trainer = (
+        trainer_assignment.trainer
+        if trainer_assignment
+        else child.trainer
+    )
 
     subscription_on_date = (
         child.subscriptions
@@ -1212,7 +1387,7 @@ def mark_attendance_view(request):
             date=mark_date,
             slot=None,
             group_snapshot=child.group,
-            trainer_snapshot=child.trainer,
+            trainer_snapshot=actual_trainer,
             salary_rate_snapshot=(
                 child.group.salary_rate
                 if child.group
@@ -1229,13 +1404,24 @@ def mark_attendance_view(request):
 
         if attendance.group_snapshot_id is None and child.group:
             attendance.group_snapshot = child.group
-            attendance.trainer_snapshot = child.trainer
+            attendance.trainer_snapshot = actual_trainer
             attendance.salary_rate_snapshot = child.group.salary_rate
             update_fields.extend([
                 "group_snapshot",
                 "trainer_snapshot",
                 "salary_rate_snapshot",
             ])
+        elif (
+            child.group
+            and attendance.group_snapshot_id == child.group_id
+            and attendance.trainer_snapshot_id != (
+                actual_trainer.pk
+                if actual_trainer
+                else None
+            )
+        ):
+            attendance.trainer_snapshot = actual_trainer
+            update_fields.append("trainer_snapshot")
 
         attendance.save(update_fields=update_fields)
 
@@ -1360,9 +1546,25 @@ def attendance_reason_view(request):
     )
 
     status = status_by_kind[kind]
+    assigned_trainers = {
+        assignment.date: assignment.trainer
+        for assignment in (
+            LessonTrainerAssignment.objects
+            .filter(
+                group=child.group,
+                child=child,
+                date__in=class_dates,
+            )
+            .select_related("trainer")
+        )
+    }
     changed = 0
     legacy_comment = comment[:255]
     for class_date in class_dates:
+        actual_trainer = assigned_trainers.get(
+            class_date,
+            child.trainer,
+        )
         attendance = (
             Attendance.objects
             .select_for_update()
@@ -1380,7 +1582,7 @@ def attendance_reason_view(request):
                 date=class_date,
                 slot=None,
                 group_snapshot=child.group,
-                trainer_snapshot=child.trainer,
+                trainer_snapshot=actual_trainer,
                 salary_rate_snapshot=child.group.salary_rate,
                 status=status,
                 comment=legacy_comment,
@@ -1400,13 +1602,23 @@ def attendance_reason_view(request):
             ]
             if attendance.group_snapshot_id is None:
                 attendance.group_snapshot = child.group
-                attendance.trainer_snapshot = child.trainer
+                attendance.trainer_snapshot = actual_trainer
                 attendance.salary_rate_snapshot = child.group.salary_rate
                 update_fields.extend([
                     "group_snapshot",
                     "trainer_snapshot",
                     "salary_rate_snapshot",
                 ])
+            elif (
+                attendance.group_snapshot_id == child.group_id
+                and attendance.trainer_snapshot_id != (
+                    actual_trainer.pk
+                    if actual_trainer
+                    else None
+                )
+            ):
+                attendance.trainer_snapshot = actual_trainer
+                update_fields.append("trainer_snapshot")
             attendance.save(update_fields=update_fields)
         changed += 1
 

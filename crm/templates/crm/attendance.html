@@ -47,6 +47,11 @@
             class="btn btn-soft text-xs">
         <i data-lucide="calendar-range"></i> Перенести занятие
     </button>
+    <button type="button"
+            onclick="document.getElementById('lesson-trainer-modal').classList.remove('hidden')"
+            class="btn btn-soft text-xs">
+        <i data-lucide="users-round"></i> Тренеры на дату
+    </button>
     {% endif %}
 
     <!-- Добавить ребёнка -->
@@ -288,6 +293,12 @@
                                         class="attendance-cell border text-sm {% if entry.is_future %}cursor-not-allowed opacity-50 {% endif %}{% if entry.subscription_state == 'expired' %}bg-red-50 border-red-300{% elif entry.subscription_state == 'renewed' %}bg-emerald-50 border-emerald-300{% else %}bg-white border-slate-200{% endif %} {% if entry.status == 'present' %}text-slate-800{% elif entry.status == 'absent' %}text-slate-500{% elif entry.status == 'frozen' %}text-blue-700{% elif entry.status == 'vacation' %}text-amber-700{% elif entry.status == 'excused' %}text-yellow-700{% elif entry.status == 'sick' %}text-rose-700{% else %}text-slate-300{% endif %}">
                                     {% if entry.status == 'present' %}+{% elif entry.status == 'absent' %}×{% elif entry.status == 'frozen' %}❄{% elif entry.status == 'vacation' %}О{% elif entry.status == 'excused' %}У{% elif entry.status == 'sick' %}Б{% endif %}
                                 </button>
+                                {% if entry.is_substitute_trainer %}
+                                <div class="mt-1 truncate text-[8px] font-bold text-violet-600"
+                                     title="Тренер по замене: {{ entry.trainer_name }}">
+                                    ↔ {{ entry.trainer_name|truncatechars:10 }}
+                                </div>
+                                {% endif %}
                             </td>
                         {% endfor %}
                     </tr>
@@ -436,6 +447,113 @@
         </form>
     </div>
 </div>
+
+{% if selected_group and week_data %}
+<div id="lesson-trainer-modal" class="hidden fixed inset-0 z-[65] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-950/50 backdrop-blur-sm"
+         onclick="document.getElementById('lesson-trainer-modal').classList.add('hidden')"></div>
+
+    <div class="relative w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+        <button type="button"
+                onclick="document.getElementById('lesson-trainer-modal').classList.add('hidden')"
+                class="absolute right-4 top-4 text-slate-400 hover:text-slate-600"
+                aria-label="Закрыть">
+            <i data-lucide="x" class="h-5 w-5"></i>
+        </button>
+
+        <h3 class="text-lg font-extrabold">Тренеры на конкретную дату</h3>
+        <p class="mt-1 text-xs text-slate-500">
+            Выберите занятие, тренера и спортсменов. Для разделения группы сохраните половину детей одному тренеру, затем вторую половину другому.
+        </p>
+
+        <form method="post"
+              action="{% url 'assign_lesson_trainer' %}"
+              class="mt-5 space-y-4">
+            {% csrf_token %}
+            <input type="hidden" name="group_id" value="{{ selected_group.id }}">
+
+            <div class="grid gap-3 sm:grid-cols-2">
+                <div>
+                    <label class="label" for="lesson-trainer-date">Дата занятия</label>
+                    <select id="lesson-trainer-date"
+                            name="lesson_date"
+                            required
+                            class="field">
+                        {% for entry in week_data %}
+                        <option value="{{ entry.date|date:'Y-m-d' }}">
+                            {{ entry.date|date:"d.m.Y" }}
+                            {% if entry.start_time %} · {{ entry.start_time|date:"H:i" }}{% endif %}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="label" for="lesson-trainer-select">Тренер</label>
+                    <select id="lesson-trainer-select"
+                            name="trainer_id"
+                            class="field">
+                        <option value="">Основной · {{ selected_group.trainer.full_name }}</option>
+                        {% for lesson_trainer in lesson_trainers %}
+                            {% if lesson_trainer.id != selected_group.trainer_id %}
+                            <option value="{{ lesson_trainer.id }}">
+                                {{ lesson_trainer.full_name }}
+                            </option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div>
+                <div class="mb-2 flex items-center justify-between gap-2">
+                    <span class="label mb-0">Каких спортсменов забирает тренер</span>
+                    <div class="flex gap-2 text-xs">
+                        <button type="button"
+                                data-trainer-select-all
+                                class="font-bold text-slate-600 hover:text-slate-900">
+                            Все
+                        </button>
+                        <button type="button"
+                                data-trainer-clear-all
+                                class="font-bold text-slate-400 hover:text-slate-700">
+                            Снять
+                        </button>
+                    </div>
+                </div>
+                <div class="grid max-h-72 gap-2 overflow-y-auto rounded-xl border border-slate-200 p-3 sm:grid-cols-2">
+                    {% for lesson_child in lesson_trainer_children %}
+                    <label class="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
+                        <input type="checkbox"
+                               name="child_ids"
+                               value="{{ lesson_child.id }}"
+                               class="h-4 w-4"
+                               data-trainer-child>
+                        <span class="min-w-0 truncate text-sm">
+                            {{ lesson_child.last_name }} {{ lesson_child.first_name }}
+                        </span>
+                    </label>
+                    {% empty %}
+                    <span class="text-sm text-slate-500">В группе нет активных спортсменов.</span>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
+                Выбор «Основной» снимает замену у отмеченных детей. Уже сохранённая история Attendance при переназначении этой даты обновит фактического тренера.
+            </div>
+
+            <div class="flex gap-2 pt-1">
+                <button type="submit" class="btn btn-primary flex-1">Назначить</button>
+                <button type="button"
+                        onclick="document.getElementById('lesson-trainer-modal').classList.add('hidden')"
+                        class="btn btn-soft flex-1">
+                    Отмена
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
 
 {% if selected_group and week_data %}
 <div id="move-class-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center p-4">
@@ -609,6 +727,24 @@
 
     const menu = document.getElementById("attendance-menu");
     let activeButton = null;
+
+    const trainerModal = document.getElementById("lesson-trainer-modal");
+    trainerModal?.querySelector("[data-trainer-select-all]")?.addEventListener(
+        "click",
+        () => {
+            trainerModal.querySelectorAll("[data-trainer-child]").forEach(
+                (checkbox) => { checkbox.checked = true; }
+            );
+        }
+    );
+    trainerModal?.querySelector("[data-trainer-clear-all]")?.addEventListener(
+        "click",
+        () => {
+            trainerModal.querySelectorAll("[data-trainer-child]").forEach(
+                (checkbox) => { checkbox.checked = false; }
+            );
+        }
+    );
 
     // =========================================================
     // СОСТОЯНИЯ
@@ -970,6 +1106,7 @@
             closeMenu();
             closeReasonModal();
             document.getElementById("move-class-modal")?.classList.add("hidden");
+            document.getElementById("lesson-trainer-modal")?.classList.add("hidden");
             document.getElementById("trial-modal")?.classList.add("hidden");
         }
         if (event.altKey && ['ArrowLeft','ArrowRight'].includes(event.key)) {

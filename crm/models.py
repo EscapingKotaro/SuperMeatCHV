@@ -251,6 +251,57 @@ class ScheduleOverride(models.Model):
         )
 
 
+class LessonTrainerAssignment(models.Model):
+    """Фактический тренер конкретного ребёнка на конкретном занятии."""
+
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.CASCADE,
+        related_name="lesson_trainer_assignments",
+        verbose_name="группа",
+    )
+    date = models.DateField("Дата занятия")
+    child = models.ForeignKey(
+        "Child",
+        on_delete=models.CASCADE,
+        related_name="lesson_trainer_assignments",
+        verbose_name="ребёнок",
+    )
+    trainer = models.ForeignKey(
+        Trainer,
+        on_delete=models.PROTECT,
+        related_name="lesson_assignments",
+        verbose_name="тренер по факту",
+    )
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="lesson_trainer_assignments_created",
+        verbose_name="назначил",
+    )
+    created_at = models.DateTimeField("Создано", auto_now_add=True)
+    updated_at = models.DateTimeField("Обновлено", auto_now=True)
+
+    class Meta:
+        verbose_name = "Назначение тренера на занятие"
+        verbose_name_plural = "Назначения тренеров на занятия"
+        ordering = ("date", "child_id")
+        constraints = [
+            models.UniqueConstraint(
+                fields=("group", "date", "child"),
+                name="unique_lesson_trainer_child_assignment",
+            ),
+        ]
+
+    def __str__(self):
+        return (
+            f"{self.group} · {self.date:%d.%m.%Y} · "
+            f"{self.child} → {self.trainer}"
+        )
+
+
 def effective_class_dates(group, start_date, end_date):
     """Фактические даты занятий группы с учётом разовых переносов."""
     if not group or start_date > end_date:

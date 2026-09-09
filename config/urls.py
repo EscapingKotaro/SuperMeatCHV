@@ -23,6 +23,7 @@ urlpatterns = [
     path("attendance/cancel/", views.cancel_attendance_view, name="cancel_attendance"),
     path("attendance/reason/", views.attendance_reason_view, name="attendance_reason"),
     path("attendance/move-class/", views.move_class_view, name="move_class"),
+    path("attendance/assign-trainer/", views.assign_lesson_trainer_view, name="assign_lesson_trainer"),
 
     # Дети / спортсмены
     path("children/create/", views.child_create_view, name="child_create"),
