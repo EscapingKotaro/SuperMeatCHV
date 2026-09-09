@@ -41,6 +41,14 @@
         <i data-lucide="user-plus"></i> Пробное
     </button>
 
+    {% if selected_group and week_data %}
+    <button type="button"
+            onclick="document.getElementById('move-class-modal').classList.remove('hidden')"
+            class="btn btn-soft text-xs">
+        <i data-lucide="calendar-range"></i> Перенести занятие
+    </button>
+    {% endif %}
+
     <!-- Добавить ребёнка -->
     {% if selected_group %}
     <button type="button" data-modal="child-create-modal" class="btn btn-primary text-xs">
@@ -158,6 +166,12 @@
                             </b>
                             {% if entry.start_time %}
                                 <div class="text-[10px] font-normal text-slate-400">{{ entry.start_time|date:"H:i" }}</div>
+                            {% endif %}
+                            {% if entry.is_moved %}
+                                <div class="mt-0.5 text-[9px] font-bold text-orange-600"
+                                     title="Занятие перенесено с {{ entry.moved_from|date:'d.m.Y' }}">
+                                    ↪ с {{ entry.moved_from|date:"d.m" }}
+                                </div>
                             {% endif %}
                             <div class="mt-1 flex items-center justify-center gap-1 text-[9px] font-bold"
                                  data-attendance-counter-date="{{ entry.date|date:'Y-m-d' }}">
@@ -306,6 +320,86 @@
     <button type="button" data-cancel-subscription class="btn text-red-600 w-full">Отменить абонемент</button>
 </div>
 
+{% if selected_group and week_data %}
+<div id="move-class-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-slate-950/50 backdrop-blur-sm"
+         onclick="document.getElementById('move-class-modal').classList.add('hidden')"></div>
+
+    <div class="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl">
+        <button type="button"
+                onclick="document.getElementById('move-class-modal').classList.add('hidden')"
+                class="absolute right-4 top-4 text-slate-400 hover:text-slate-600"
+                aria-label="Закрыть">
+            <i data-lucide="x" class="h-5 w-5"></i>
+        </button>
+
+        <h3 class="text-lg font-extrabold">Перенести занятие</h3>
+        <p class="mt-1 text-xs text-slate-500">
+            Можно перенести любое фактическое занятие группы на любую свободную дату.
+        </p>
+
+        <form method="post" action="{% url 'move_class' %}" class="mt-5 space-y-4">
+            {% csrf_token %}
+            <input type="hidden" name="group_id" value="{{ selected_group.id }}">
+
+            <div>
+                <label class="label" for="move-class-original">Какое занятие переносим</label>
+                <select id="move-class-original" name="original_date" required class="field">
+                    {% for entry in week_data %}
+                    <option value="{{ entry.date|date:'Y-m-d' }}"
+                            data-start-time="{{ entry.start_time|date:'H:i' }}">
+                        {{ entry.date|date:"d.m.Y" }}
+                        {% if entry.start_time %} · {{ entry.start_time|date:"H:i" }}{% endif %}
+                        {% if entry.is_moved %} · ранее перенесено с {{ entry.moved_from|date:"d.m" }}{% endif %}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="grid gap-3 sm:grid-cols-2">
+                <div>
+                    <label class="label" for="move-class-date">Новая дата</label>
+                    <input id="move-class-date"
+                           type="date"
+                           name="replacement_date"
+                           required
+                           class="field">
+                </div>
+                <div>
+                    <label class="label" for="move-class-time">Новое время</label>
+                    <input id="move-class-time"
+                           type="time"
+                           name="replacement_time"
+                           class="field">
+                </div>
+            </div>
+
+            <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                <input type="checkbox"
+                       name="extend_subscriptions"
+                       value="1"
+                       class="mt-1 h-4 w-4">
+                <span>
+                    <b class="block text-sm text-slate-800">Продлить абонементы</b>
+                    <span class="block text-xs text-slate-500">
+                        Если занятие переносится вперёд, даты окончания действующих абонементов группы сдвинутся на такое же количество дней.
+                    </span>
+                </span>
+            </label>
+
+            <div class="flex gap-2 pt-1">
+                <button type="submit" class="btn btn-primary flex-1">Перенести</button>
+                <button type="button"
+                        onclick="document.getElementById('move-class-modal').classList.add('hidden')"
+                        class="btn btn-soft flex-1">
+                    Отмена
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endif %}
+
 <!-- МОДАЛКА ПРОБНОГО (Исправленная, по центру экрана) -->
 <div id="trial-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
     <!-- Затемнение фона -->
@@ -382,6 +476,19 @@
 
     const MARK_URL = "{% url 'mark_attendance' %}";
     const CANCEL_URL = "{% url 'cancel_attendance' %}";
+
+    const moveOriginal = document.getElementById("move-class-original");
+    const moveTime = document.getElementById("move-class-time");
+
+    function syncMoveClassTime() {
+        if (!moveOriginal || !moveTime) return;
+        const selected = moveOriginal.options[moveOriginal.selectedIndex];
+        if (!selected) return;
+        moveTime.value = selected.dataset.startTime || "";
+    }
+
+    moveOriginal?.addEventListener("change", syncMoveClassTime);
+    syncMoveClassTime();
 
     const menu = document.getElementById("attendance-menu");
     let activeButton = null;
@@ -621,7 +728,11 @@
     // 4. ЗАКРЫТИЕ ПО ESC И СКРОЛЛУ
     // =========================================================
     document.addEventListener("keydown", function(event) {
-        if (event.key === "Escape") closeMenu();
+        if (event.key === "Escape") {
+            closeMenu();
+            document.getElementById("move-class-modal")?.classList.add("hidden");
+            document.getElementById("trial-modal")?.classList.add("hidden");
+        }
         if (event.altKey && ['ArrowLeft','ArrowRight'].includes(event.key)) {
             event.preventDefault();
             document.querySelector(event.key === 'ArrowLeft' ? '[data-attendance-prev]' : '[data-attendance-next]')?.click();
