@@ -231,7 +231,9 @@ def _save_active_child(request, form):
 
 
 def attendance_view(request):
-    group_id = request.GET.get('group_id')
+    inline_child_form = getattr(request, "_child_create_form", None)
+    inline_child_group_id = getattr(request, "_child_create_group_id", None)
+    group_id = inline_child_group_id or request.GET.get('group_id')
     ref_date_str = request.GET.get('ref_date')
     sort_by = request.GET.get('sort', 'name')
     show_archived = request.GET.get('show_archived') == '1'
@@ -261,10 +263,11 @@ def attendance_view(request):
         and request.POST.get("action") == "create_child"
     )
     creating_child = (
-        create_child_post
+        inline_child_form is not None
+        or create_child_post
         or request.GET.get("create_child") == "1"
     )
-    child_form = _child_create_form(
+    child_form = inline_child_form or _child_create_form(
         request.POST if create_child_post else None,
         request.FILES if create_child_post else None,
         group=group,
@@ -3683,7 +3686,7 @@ def child_card_view(request, child_id):
         'rank_form': rank_form,
         'camp_form': camp_form,
         'child_form': getattr(request, '_child_form', None) or ChildForm(instance=child),
-        'editing_child_inline': hasattr(request, '_child_form'),
+        'editing_child_inline': hasattr(request, '_child_form') or request.GET.get("edit") == "1",
         'page': 'child_card'
     }
     return render(request, 'crm/child_card.html', context)
@@ -3711,6 +3714,11 @@ def child_edit_view(request, child_id):
         Child,
         id=child_id,
     )
+
+    if request.method != "POST":
+        return redirect(
+            f"{reverse('child_card', args=[child.pk])}?edit=1"
+        )
 
     if request.method == "POST":
         old_status = child.status
@@ -3782,24 +3790,8 @@ def child_edit_view(request, child_id):
             "Проверьте заполнение карточки",
         )
 
-    else:
-        form = ChildForm(
-            instance=child,
-        )
-
-    if request.POST.get("inline") == "1":
-        request._child_form = form
-        return child_card_view(request, child_id)
-
-    return render(
-        request,
-        "crm/child_edit.html",
-        {
-            "form": form,
-            "child": child,
-            "page": "child_edit",
-        },
-    )
+    request._child_form = form
+    return child_card_view(request, child_id)
 
 
 @login_required
@@ -3829,14 +3821,14 @@ def child_create_view(request):
             child_id=child.id,
         )
 
-    return render(
-        request,
-        "crm/child_edit.html",
-        {
-            "form": form,
-            "page": "child_create",
-        },
+    request._child_create_form = form
+    selected_group = form.cleaned_data.get("group")
+    request._child_create_group_id = (
+        selected_group.pk
+        if selected_group
+        else None
     )
+    return attendance_view(request)
 
 @login_required
 def child_delete_view(request, child_id):
@@ -3861,7 +3853,10 @@ def add_subscription_view(request, child_id):
         sub = form.save()
         messages.success(request, "Абонемент добавлен")
         return redirect("child_card", child_id=child.pk)
-    return render(request, "crm/add_subscription.html", {"form": form, "child": child, "page": "add_subscription"})
+    messages.error(request, "Проверьте данные абонемента")
+    return redirect(
+        f"{reverse('payments')}?child={child.pk}&new_subscription=1"
+    )
 
 
 from django.shortcuts import render, get_object_or_404, redirect
@@ -3890,6 +3885,9 @@ def trainer_list_view(request):
 @login_required
 def trainer_create_view(request):
     """Создание тренера"""
+    if request.method != 'POST' and not getattr(request, "_inline_trainer", False):
+        return redirect(f"{reverse('trainer_list')}?create=1")
+
     if request.method == 'POST':
         form = TrainerForm(request.POST)
         if form.is_valid():
@@ -3904,17 +3902,18 @@ def trainer_create_view(request):
         'title': 'Новый тренер',
         'page': 'trainers'
     }
-    if getattr(request, "_inline_trainer", False):
-        context["form_title"] = context["title"]
-        context["title"] = "Тренеры"
-        context["trainers"] = Trainer.objects.prefetch_related("groups").order_by("full_name")
-        return render(request, "crm/trainers.html", context)
-    return render(request, 'crm/trainer_edit.html', context)
+    context["form_title"] = context["title"]
+    context["title"] = "Тренеры"
+    context["trainers"] = Trainer.objects.prefetch_related("groups").order_by("full_name")
+    return render(request, "crm/trainers.html", context)
 
 @login_required
 def trainer_edit_view(request, pk):
     """Редактирование тренера"""
     trainer = get_object_or_404(Trainer, pk=pk)
+    if request.method != 'POST' and not getattr(request, "_inline_trainer", False):
+        return redirect(f"{reverse('trainer_list')}?edit={trainer.pk}")
+
     if request.method == 'POST':
         form = TrainerForm(request.POST, instance=trainer)
         if form.is_valid():
@@ -3930,12 +3929,10 @@ def trainer_edit_view(request, pk):
         'title': f'Редактирование: {trainer.full_name}',
         'page': 'trainers'
     }
-    if getattr(request, "_inline_trainer", False):
-        context["form_title"] = context["title"]
-        context["title"] = "Тренеры"
-        context["trainers"] = Trainer.objects.prefetch_related("groups").order_by("full_name")
-        return render(request, "crm/trainers.html", context)
-    return render(request, 'crm/trainer_edit.html', context)
+    context["form_title"] = context["title"]
+    context["title"] = "Тренеры"
+    context["trainers"] = Trainer.objects.prefetch_related("groups").order_by("full_name")
+    return render(request, "crm/trainers.html", context)
 
 @login_required
 def trainer_delete_view(request, pk):
@@ -3978,6 +3975,9 @@ def group_list_view(request):
 @login_required
 def group_create_view(request):
     """Создание группы с расписанием"""
+    if request.method != 'POST' and not getattr(request, "_inline_group", False):
+        return redirect(f"{reverse('group_list')}?create=1")
+
     if request.method == 'POST':
         group_form = GroupForm(request.POST)
         slot_formset = ScheduleSlotFormSet(request.POST)
@@ -3998,17 +3998,18 @@ def group_create_view(request):
         'title': 'Новая группа',
         'page': 'groups'
     }
-    if getattr(request, "_inline_group", False):
-        context["form_title"] = context["title"]
-        context["title"] = "Группы"
-        context["groups"] = Group.objects.select_related("trainer").prefetch_related("schedule", "children").order_by("trainer__full_name", "trainer_id", "name")
-        return render(request, "crm/groups.html", context)
-    return render(request, 'crm/group_edit.html', context)
+    context["form_title"] = context["title"]
+    context["title"] = "Группы"
+    context["groups"] = Group.objects.select_related("trainer").prefetch_related("schedule", "children").order_by("trainer__full_name", "trainer_id", "name")
+    return render(request, "crm/groups.html", context)
 
 @login_required
 def group_edit_view(request, pk):
     """Редактирование группы с расписанием"""
     group = get_object_or_404(Group, pk=pk)
+    if request.method != 'POST' and not getattr(request, "_inline_group", False):
+        return redirect(f"{reverse('group_list')}?edit={group.pk}")
+
     if request.method == 'POST':
         # До изменения тренера/ставки фиксируем старые посещения.
         for child in group.children.select_related("group__trainer"):
@@ -4033,12 +4034,10 @@ def group_edit_view(request, pk):
         'title': f'Редактирование: {group.name}',
         'page': 'groups'
     }
-    if getattr(request, "_inline_group", False):
-        context["form_title"] = context["title"]
-        context["title"] = "Группы"
-        context["groups"] = Group.objects.select_related("trainer").prefetch_related("schedule", "children").order_by("trainer__full_name", "trainer_id", "name")
-        return render(request, "crm/groups.html", context)
-    return render(request, 'crm/group_edit.html', context)
+    context["form_title"] = context["title"]
+    context["title"] = "Группы"
+    context["groups"] = Group.objects.select_related("trainer").prefetch_related("schedule", "children").order_by("trainer__full_name", "trainer_id", "name")
+    return render(request, "crm/groups.html", context)
 
 @login_required
 def group_delete_view(request, pk):

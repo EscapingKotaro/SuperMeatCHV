@@ -166,6 +166,162 @@ class CrmWorkflowTests(TestCase):
             ),
         )
 
+    def test_legacy_child_create_invalid_post_stays_in_attendance_modal(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("child_create"),
+            {
+                "last_name": "Петрова",
+                "first_name": "",
+                "birth_year": "2016",
+                "group": str(self.group.pk),
+                "discount_percent": "0",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'id="child-create-modal" class="modal open"',
+        )
+        self.assertIn(
+            "first_name",
+            response.context["child_form"].errors,
+        )
+        self.assertTemplateUsed(response, "crm/attendance.html")
+
+    def test_legacy_child_edit_get_redirects_to_card_modal(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        target = (
+            f"{reverse('child_card', args=[self.child.pk])}?edit=1"
+        )
+        response = self.client.get(
+            reverse(
+                "child_edit",
+                args=[self.child.pk],
+            ),
+        )
+
+        self.assertRedirects(response, target)
+        modal = self.client.get(target)
+        self.assertContains(
+            modal,
+            'id="child-edit-modal" class="modal open"',
+        )
+
+    def test_legacy_subscription_get_redirects_to_payments_modal(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        target = (
+            f"{reverse('payments')}?child={self.child.pk}"
+            "&new_subscription=1"
+        )
+        response = self.client.get(
+            reverse(
+                "add_subscription",
+                args=[self.child.pk],
+            ),
+        )
+
+        self.assertRedirects(response, target)
+
+    def test_legacy_subscription_invalid_post_redirects_to_payments_modal(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        target = (
+            f"{reverse('payments')}?child={self.child.pk}"
+            "&new_subscription=1"
+        )
+        response = self.client.post(
+            reverse(
+                "add_subscription",
+                args=[self.child.pk],
+            ),
+            {},
+        )
+
+        self.assertRedirects(response, target)
+
+    def test_legacy_trainer_form_gets_redirect_to_list_modals(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        create_target = f"{reverse('trainer_list')}?create=1"
+        edit_target = (
+            f"{reverse('trainer_list')}?edit={self.trainer.pk}"
+        )
+
+        self.assertRedirects(
+            self.client.get(reverse("trainer_create")),
+            create_target,
+        )
+        self.assertRedirects(
+            self.client.get(
+                reverse(
+                    "trainer_edit",
+                    args=[self.trainer.pk],
+                ),
+            ),
+            edit_target,
+        )
+
+        self.assertContains(
+            self.client.get(create_target),
+            'id="trainer-modal" class="modal open"',
+        )
+        self.assertContains(
+            self.client.get(edit_target),
+            'id="trainer-modal" class="modal open"',
+        )
+
+    def test_legacy_group_form_gets_redirect_to_list_modals(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        create_target = f"{reverse('group_list')}?create=1"
+        edit_target = (
+            f"{reverse('group_list')}?edit={self.group.pk}"
+        )
+
+        self.assertRedirects(
+            self.client.get(reverse("group_create")),
+            create_target,
+        )
+        self.assertRedirects(
+            self.client.get(
+                reverse(
+                    "group_edit",
+                    args=[self.group.pk],
+                ),
+            ),
+            edit_target,
+        )
+
+        create_page = self.client.get(create_target)
+        edit_page = self.client.get(edit_target)
+        self.assertContains(create_page, 'id="group-modal"')
+        self.assertContains(create_page, 'class="modal open"')
+        self.assertContains(edit_page, 'id="group-modal"')
+        self.assertContains(edit_page, 'class="modal open"')
+
     def test_private_pages_require_login(self):
         response = self.client.get(reverse("expenses"))
         self.assertRedirects(response, f"{reverse('login')}?next={reverse('expenses')}")
