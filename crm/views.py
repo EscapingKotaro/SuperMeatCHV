@@ -2193,9 +2193,15 @@ def applications_page(request):
         if action == "import_raw":
             raw = request.POST.get("raw_application", "")
             parsed = parse_application(raw)
+            submitted_at = parsed.pop("submitted_at", None)
             if parsed.get("full_name"):
                 parsed.setdefault("source", "Реклама")
                 lead = Lead.objects.create(imported_from_ad=True, **parsed)
+                if submitted_at is not None:
+                    Lead.objects.filter(pk=lead.pk).update(
+                        created_at=submitted_at,
+                    )
+                    lead.created_at = submitted_at
 
                 notify_admins(
                     request.user,

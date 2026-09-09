@@ -8,6 +8,7 @@ from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
 
+from .intake_parser import parse_application
 from .models import (
     Apparatus,
     ApparatusScore,
@@ -1191,6 +1192,107 @@ class CrmWorkflowTests(TestCase):
         newcomer = Newcomer.objects.get(lead=lead)
         self.assertEqual(newcomer.phone, "123")
         self.assertEqual(newcomer.full_name, "Петрова Ева")
+
+    def test_parser_matches_vk_sample_from_spec(self):
+        raw = (
+            "Новая заявка по форме: Спартак дети 13.03 об вопросы\n"
+            "Дата отправки: 2026-08-31 10:16:47 (МСК)\n"
+            "Имя: Дмитрий\n"
+            "Телефон: +79067849503\n"
+            "Вопрос: Имя и возраст ребёнка?\n"
+            "Ответ: Возраст 10 лет\n"
+            "Вопрос: Удобное время для звонка?\n"
+            "Ответ: Пользователь предпочел не отвечать на данный вопрос\n"
+            "Переход с рекламного объявления: "
+            "https://ads.vk.ru/hq/dashboard/stats/ad/overview/233830557\n"
+            "Кампания: ЛФ 01.07(24115836)\n"
+            "Группа: гео список м. 30-40 км т5. крео.13(151328340)\n"
+            "Объявление: т5 крео 13(233830557)"
+        )
+
+        parsed = parse_application(raw)
+
+        self.assertEqual(parsed["full_name"], "Дмитрий")
+        self.assertEqual(parsed["phone"], "+79067849503")
+        self.assertEqual(parsed["age_text"], "10")
+        self.assertEqual(parsed["source"], "VK Реклама")
+        self.assertEqual(
+            timezone.localtime(parsed["submitted_at"]).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+            "2026-08-31 10:16:47",
+        )
+        self.assertIn(
+            "Удобное время для звонка: Пользователь предпочел не отвечать",
+            parsed["comment"],
+        )
+        self.assertIn("Кампания: ЛФ 01.07(24115836)", parsed["comment"])
+        self.assertIn(
+            "Группа объявлений: гео список м. 30-40 км",
+            parsed["comment"],
+        )
+        self.assertIn("Объявление: т5 крео 13(233830557)", parsed["comment"])
+        self.assertIn("Исходная заявка:", parsed["comment"])
+
+    def test_imported_application_uses_original_submission_time(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        raw = (
+            "Дата отправки: 2026-08-31 10:16:47 (МСК)\n"
+            "Имя: Дмитрий\n"
+            "Телефон: +79067849503\n"
+            "Переход с рекламного объявления: "
+            "https://ads.vk.ru/hq/dashboard/stats/ad/overview/233830557\n"
+            "Кампания: ЛФ 01.07(24115836)"
+        )
+
+        response = self.client.post(
+            reverse("applications"),
+            {
+                "action": "import_raw",
+                "raw_application": raw,
+            },
+        )
+
+        self.assertRedirects(response, reverse("applications"))
+        lead = Lead.objects.get(full_name="Дмитрий")
+
+        self.assertTrue(lead.imported_from_ad)
+        self.assertEqual(lead.source, "VK Реклама")
+        self.assertEqual(
+            timezone.localtime(lead.created_at).strftime(
+                "%Y-%m-%d %H:%M:%S"
+            ),
+            "2026-08-31 10:16:47",
+        )
+        self.assertIn("Кампания: ЛФ 01.07(24115836)", lead.comment)
+
+    def test_parser_maps_website_birth_date_and_trial_datetime(self):
+        parsed = parse_application(
+            "Имя: Анна Петрова\n"
+            "Телефон: 8 (999) 123-45-67\n"
+            "Возраст: 7 лет\n"
+            "Источник: Сайт\n"
+            "Дата рождения: 2019-03-14\n"
+            "Дата и время пробного занятия: 2026-09-12 18:30"
+        )
+
+        self.assertEqual(parsed["full_name"], "Анна Петрова")
+        self.assertEqual(parsed["phone"], "+79991234567")
+        self.assertEqual(parsed["age_text"], "7")
+        self.assertEqual(parsed["source"], "Сайт")
+        self.assertEqual(
+            parsed["birth_date"].isoformat(),
+            "2019-03-14",
+        )
+        self.assertEqual(
+            timezone.localtime(parsed["trial_at"]).strftime(
+                "%Y-%m-%d %H:%M"
+            ),
+            "2026-09-12 18:30",
+        )
 
     def test_calendar_creates_manager_task(self):
         self.client.login(
