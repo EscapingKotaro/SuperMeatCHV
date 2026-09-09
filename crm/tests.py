@@ -827,6 +827,14 @@ class CrmWorkflowTests(TestCase):
         )
 
     def test_attendance_mark_is_saved(self):
+        today = timezone.localdate()
+        Subscription.objects.create(
+            child=self.child,
+            start_date=today - timedelta(days=1),
+            end_date=today + timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("5000"),
+        )
         self.client.login(
             username="admin",
             password="TestPass123!",
@@ -859,6 +867,127 @@ class CrmWorkflowTests(TestCase):
             ).exists()
         )
         
+    def test_attendance_present_requires_explicit_debt_formalization(self):
+        today = timezone.localdate()
+        self.group.single_session_price = Decimal("750")
+        self.group.save(update_fields=["single_session_price"])
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        blocked = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "date": today.isoformat(),
+                "status": Attendance.Status.PRESENT,
+            },
+        )
+
+        self.assertEqual(blocked.status_code, 409)
+        self.assertEqual(
+            blocked.json()["code"],
+            "debt_required",
+        )
+        self.assertFalse(
+            Attendance.objects.filter(
+                child=self.child,
+                date=today,
+            ).exists()
+        )
+
+        allowed = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "date": today.isoformat(),
+                "status": Attendance.Status.PRESENT,
+                "allow_debt": "1",
+            },
+        )
+
+        self.assertEqual(allowed.status_code, 200)
+        self.assertTrue(allowed.json()["debt_formalized"])
+        attendance = Attendance.objects.get(
+            child=self.child,
+            date=today,
+        )
+        self.assertEqual(
+            attendance.status,
+            Attendance.Status.PRESENT,
+        )
+        self.assertEqual(
+            attendance.charge_amount,
+            Decimal("750"),
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                actor=self.admin,
+                action="attendance.debt",
+                object_id=str(attendance.pk),
+            ).exists()
+        )
+
+    def test_attendance_debt_requires_configured_price(self):
+        today = timezone.localdate()
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "date": today.isoformat(),
+                "status": Attendance.Status.PRESENT,
+                "allow_debt": "1",
+            },
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(
+            response.json()["code"],
+            "debt_price_required",
+        )
+        self.assertFalse(
+            Attendance.objects.filter(
+                child=self.child,
+                date=today,
+            ).exists()
+        )
+
+    def test_attendance_absence_without_subscription_remains_allowed(self):
+        today = timezone.localdate()
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "date": today.isoformat(),
+                "status": Attendance.Status.ABSENT,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        attendance = Attendance.objects.get(
+            child=self.child,
+            date=today,
+        )
+        self.assertEqual(
+            attendance.status,
+            Attendance.Status.ABSENT,
+        )
+        self.assertEqual(
+            attendance.charge_amount,
+            Decimal("0"),
+        )
+
     def test_competition_scores_places_and_export(self):
         competition = Competition.objects.create(name="Кубок", date=timezone.localdate())
         apparatus = Apparatus.objects.create(competition=competition, name="Прыжок")
@@ -3637,6 +3766,14 @@ class CrmWorkflowTests(TestCase):
         )
 
     def test_audit_middleware_records_unlogged_successful_actions(self):
+        today = timezone.localdate()
+        Subscription.objects.create(
+            child=self.child,
+            start_date=today - timedelta(days=1),
+            end_date=today + timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("5000"),
+        )
         self.client.login(
             username="admin",
             password="TestPass123!",
@@ -4175,6 +4312,12 @@ class CrmWorkflowTests(TestCase):
             "bg-emerald-100 text-emerald-700",
         )
         self.assertContains(response, "subscriptionStateClasses")
+        self.assertContains(
+            response,
+            'data-attendance-choice="debt_present"',
+        )
+        self.assertContains(response, "requiresDebt")
+        self.assertContains(response, "allow_debt")
 
     def test_move_class_to_any_free_day_updates_calendar_and_ui(self):
         source_date = timezone.localdate() + timedelta(days=14)
