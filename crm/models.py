@@ -216,7 +216,7 @@ class Child(models.Model):
     certificate_ok = models.BooleanField("Справка есть", default=False)
     certificate_note = models.CharField("Комментарий к справке", max_length=255, blank=True)
 
-    group = models.ForeignKey(Group, on_delete=models.SET_NULL, blank=False, null=True,
+    group = models.ForeignKey(Group, on_delete=models.PROTECT, blank=False,
                               related_name="children", verbose_name="группа")
     schedule = models.ManyToManyField(ScheduleSlot, blank=True, verbose_name="личный график",
                                       help_text="Пусто — ребёнок ходит по графику группы")

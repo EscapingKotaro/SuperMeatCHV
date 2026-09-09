@@ -8,7 +8,7 @@ from django.test import TestCase, override_settings
 from django.urls import reverse
 
 from .forms import ChildForm
-from .models import Child
+from .models import Child, Group, Trainer
 
 
 GIF_1X1 = (
@@ -27,8 +27,13 @@ class CertificateManagementTests(TestCase):
             "certificate-admin", password="TestPass123!", is_staff=True
         )
         self.client.login(username="certificate-admin", password="TestPass123!")
+        trainer = Trainer.objects.create(full_name="Тренер справок")
+        group = Group.objects.create(name="Группа справок", trainer=trainer)
         self.child = Child.objects.create(
-            last_name="Петрова", first_name="Анна", birth_year=2016
+            last_name="Петрова",
+            first_name="Анна",
+            birth_year=2016,
+            group=group,
         )
 
     def tearDown(self):

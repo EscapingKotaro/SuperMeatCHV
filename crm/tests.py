@@ -2,6 +2,8 @@ from datetime import datetime, time, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
+from django.db.models.deletion import ProtectedError
 from django.test import TestCase
 from django.urls import reverse
 from django.utils import timezone
@@ -2632,6 +2634,7 @@ class CrmWorkflowTests(TestCase):
             last_name="Ушедшая",
             first_name="Спортсменка",
             birth_year=2014,
+            group=self.group,
             status=Child.Status.LOST,
             archived_at=today,
             departure_trainer=inactive_trainer,
@@ -2739,40 +2742,26 @@ class CrmWorkflowTests(TestCase):
             Decimal("3000"),
         )
 
-    def test_statistics_accounts_for_children_without_active_group(self):
-        Child.objects.create(
-            last_name="Безгруппный",
-            first_name="Иван",
-            birth_year=2015,
-            group=None,
-            status=Child.Status.ACTIVE,
-        )
+    def test_child_group_is_required_at_database_level(self):
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Child.objects.create(
+                    last_name="Безгруппный",
+                    first_name="Иван",
+                    birth_year=2015,
+                    group=None,
+                    status=Child.Status.ACTIVE,
+                )
 
-        today = timezone.localdate()
+    def test_group_with_children_is_protected_from_delete(self):
+        with self.assertRaises(ProtectedError):
+            self.group.delete()
 
-        self.client.login(
-            username="admin",
-            password="TestPass123!",
+        self.assertTrue(
+            Group.objects.filter(pk=self.group.pk).exists()
         )
-
-        response = self.client.get(
-            reverse("statistics"),
-            {"month": today.strftime("%Y-%m")},
-        )
-        self.assertEqual(response.status_code, 200)
-
-        grouped = sum(
-            row["kids"]
-            for row in response.context["groups_stats"]
-        )
-
-        self.assertEqual(
-            response.context["unassigned_children"],
-            1,
-        )
-        self.assertEqual(
-            grouped + response.context["unassigned_children"],
-            response.context["total_children"],
+        self.assertTrue(
+            Child.objects.filter(pk=self.child.pk).exists()
         )
 
     def test_partial_prepayment_reduces_expected_renewal(self):

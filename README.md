@@ -38,3 +38,35 @@ manage.py test crm --keepdb
 | Профиль пользователя | `http://127.0.0.1:8000/profile/` |
 | Стандартная Django-админка | `http://127.0.0.1:8000/admin/` |
 
+
+команда для запуска таймера
+sudo tee /etc/systemd/system/expire-trials.service >/dev/null <<'EOF'
+[Unit]
+Description=Spartak CRM trial expiration
+After=network.target
+
+[Service]
+Type=oneshot
+User=juli
+WorkingDirectory=/opt/crm
+ExecStart=/home/juli/juli_dev_app/venv/bin/python manage.py expire_trials
+EOF
+
+sudo tee /etc/systemd/system/expire-trials.timer >/dev/null <<'EOF'
+[Unit]
+Description=Check unpaid Spartak CRM trials every hour
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+Unit=expire-trials.service
+
+[Install]
+WantedBy=timers.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now expire-trials.timer
+sudo systemctl start expire-trials.service
+sudo systemctl status expire-trials.timer --no-pager
+sudo journalctl -u expire-trials.service -n 20 --no-pager
