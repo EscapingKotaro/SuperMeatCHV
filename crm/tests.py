@@ -1,5 +1,6 @@
 from datetime import datetime, time, timedelta
 from decimal import Decimal
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
@@ -478,6 +479,53 @@ class CrmWorkflowTests(TestCase):
     def test_private_pages_require_login(self):
         response = self.client.get(reverse("expenses"))
         self.assertRedirects(response, f"{reverse('login')}?next={reverse('expenses')}")
+
+    def test_base_uses_single_explicit_dropdown_and_modal_controller(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.get(reverse("attendance"))
+        self.assertEqual(response.status_code, 200)
+
+        for target in (
+            "dropdown-clients",
+            "dropdown-team",
+            "dropdown-finance",
+            "dropdown-stats",
+            "dropdown-events",
+            "dropdown-user",
+        ):
+            self.assertContains(
+                response,
+                f'data-dropdown-target="{target}"',
+                count=1,
+            )
+
+        self.assertContains(response, 'id="dropdown-user"', count=1)
+        self.assertNotContains(response, "btnText.includes")
+        self.assertNotContains(
+            response,
+            "wrapper.querySelector('[data-dropdown-menu]')",
+        )
+
+        app_js = (
+            Path(__file__).resolve().parent
+            / "static"
+            / "crm"
+            / "app.js"
+        ).read_text(encoding="utf-8")
+        self.assertIn('event.key !== "Escape"', app_js)
+        self.assertIn(
+            'window.addEventListener("scroll", closeAllDropdowns, true)',
+            app_js,
+        )
+        self.assertIn(
+            'window.addEventListener("resize", closeAllDropdowns)',
+            app_js,
+        )
+        self.assertIn('toggle.dataset.dropdownTarget', app_js)
 
     def test_certificate_presence_uses_file_not_legacy_flag(self):
         self.child.certificate = ""
