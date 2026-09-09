@@ -78,11 +78,12 @@
         </button>
     </div>
 
-    <a class="nav-pill {% if page == 'camps' %}active{% endif %}" href="{% url 'camps' %}"><i data-lucide="tent"></i> Лагеря и сборы</a>
-
-    <a class="nav-pill {% if page == 'competitions' %}active{% endif %}" href="{% url 'competitions' %}">
-        <i data-lucide="trophy"></i> Соревнования
-    </a>
+    <div class="relative" data-dropdown>
+        <button type="button" data-dropdown-toggle class="nav-pill cursor-pointer {% if page in 'camps,competitions' %}active{% endif %}">
+            <i data-lucide="medal"></i> События
+            <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
+        </button>
+    </div>
 
     {% if is_boss %}
     <a class="nav-pill {% if page == 'boss' %}active{% endif %}" href="{% url 'boss' %}">
@@ -156,7 +157,6 @@
     <main class="mx-auto max-w-[1500px] px-4 py-7 lg:px-7">
         <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
             <div>
-                <p class="eyebrow">{% now "j E Y · l" %}</p>
                 {% if title %}
                 <h1 class="text-2xl font-extrabold tracking-tight md:text-3xl">{{ title }}</h1>
                 {% endif %}
@@ -229,6 +229,15 @@
         <i data-lucide="banknote" class="h-4 w-4"></i> ЗП тренеров
     </a>
     {% endif %}
+</div>
+
+<div id="dropdown-events" class="fixed z-[100] hidden min-w-[210px] flex-col gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+    <a href="{% url 'camps' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'camps' %}bg-slate-100 font-semibold{% endif %}">
+        <i data-lucide="tent" class="h-4 w-4"></i> Лагеря и сборы
+    </a>
+    <a href="{% url 'competitions' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'competitions' %}bg-slate-100 font-semibold{% endif %}">
+        <i data-lucide="trophy" class="h-4 w-4"></i> Соревнования
+    </a>
 </div>
 
 <div id="dropdown-user" class="fixed z-[100] hidden w-60 rounded-2xl border border-slate-200 bg-white p-2 shadow-xl">
@@ -370,6 +379,7 @@ document.addEventListener('click', function(e) {
         else if (btnText.includes('команда')) menuId = 'dropdown-team';
         else if (btnText.includes('финанс')) menuId = 'dropdown-finance';
         else if (btnText.includes('статистик')) menuId = 'dropdown-stats';
+        else if (btnText.includes('событ')) menuId = 'dropdown-events';
         else if (toggleBtn.closest('.flex.shrink-0')) menuId = 'dropdown-user'; // Меню пользователя
         
         if (menuId) {
