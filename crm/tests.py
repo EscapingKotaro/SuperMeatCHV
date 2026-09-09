@@ -4031,6 +4031,39 @@ class CrmWorkflowTests(TestCase):
             "updatePresentCounters",
         )
 
+    def test_attendance_grid_is_dense_and_uses_dynamic_equal_columns(self):
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=timezone.localdate().weekday(),
+            start_time=time(18, 0),
+        )
+        self.client.login(username="admin", password="TestPass123!")
+        response = self.client.get(
+            reverse("attendance"),
+            {"group_id": self.group.pk},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(
+            response,
+            'class="data-table attendance-grid"',
+        )
+        self.assertContains(
+            response,
+            f'style="--attendance-days: {len(response.context["week_data"])};"',
+        )
+        self.assertContains(response, "attendance-person-cell")
+        self.assertContains(response, "attendance-date-cell")
+        self.assertContains(response, "attendance-mark-cell")
+        self.assertNotContains(
+            response,
+            'class="data-table min-w-[1280px]"',
+        )
+        self.assertNotContains(
+            response,
+            'style="width:44px;height:44px"',
+        )
+
     def test_attendance_period_presets_use_real_class_dates(self):
         reference = timezone.localdate().replace(day=15)
         month_start = reference.replace(day=1)
