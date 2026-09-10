@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 from django.db import models, transaction
-from django.core.validators import MaxValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db.models import Sum
 from django.utils import timezone
 
@@ -161,6 +161,12 @@ class Branch(models.Model):
 
 class Group(models.Model):
     name = models.CharField("Название", max_length=100)
+    capacity = models.PositiveSmallIntegerField(
+        "Вместимость, чел.",
+        blank=True,
+        null=True,
+        validators=[MinValueValidator(1)],
+    )
     trainer = models.ForeignKey(Trainer, on_delete=models.PROTECT,
                                related_name="groups", verbose_name="тренер")
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, blank=True, null=True,
@@ -176,6 +182,22 @@ class Group(models.Model):
 
     def __str__(self):
         return self.name
+
+    def current_children(self):
+        """Действующие спортсмены группы, включая дополнительные членства."""
+        return (
+            Child.objects
+            .filter(
+                models.Q(group=self)
+                | models.Q(
+                    group_memberships__group=self,
+                    group_memberships__archived_at__isnull=True,
+                ),
+                status__in=(Child.Status.ACTIVE, Child.Status.TRIAL),
+            )
+            .distinct()
+            .order_by("last_name", "first_name", "pk")
+        )
 
 
 class ChildGroupMembership(models.Model):
@@ -443,6 +465,10 @@ class SalaryAdjustment(models.Model):
 
 
 class Child(models.Model):
+    class Sex(models.TextChoices):
+        FEMALE = "female", "Девочка"
+        MALE = "male", "Мальчик"
+
     class DispensaryRegion(models.TextChoices):
         MOSCOW = "moscow", "Москва"
         MOSCOW_REGION = "moscow_region", "Московская область"
@@ -459,6 +485,12 @@ class Child(models.Model):
     patronymic = models.CharField("Отчество", max_length=100, blank=True)
     birth_year = models.PositiveSmallIntegerField("Год рождения")
     birth_date = models.DateField("Дата рождения", blank=True, null=True)
+    sex = models.CharField(
+        "Пол",
+        max_length=10,
+        choices=Sex.choices,
+        blank=True,
+    )
     address    = models.CharField("Адрес проживания", max_length=255, blank=True)
     parent_name  = models.CharField("Родитель", max_length=200, blank=True)
     parent_phone = models.CharField("Телефон родителя", max_length=20, blank=True)

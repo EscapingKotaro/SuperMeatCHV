@@ -111,6 +111,7 @@ class ChildAdmin(admin.ModelAdmin):
 
     list_filter = (
         "status",
+        "sex",
         "group",
         "group__trainer",
         "trial_from",
@@ -154,6 +155,7 @@ class ChildAdmin(admin.ModelAdmin):
                     "patronymic",
                     "birth_date",
                     "birth_year",
+                    "sex",
                     "status",
                     "group",
                 )
@@ -260,7 +262,7 @@ class ChildAdmin(admin.ModelAdmin):
 
 @admin.register(Group)
 class GroupAdmin(admin.ModelAdmin):
-    list_display = ("name", "branch", "trainer", "single_session_price", "children_count", "is_active")
+    list_display = ("name", "branch", "trainer", "capacity", "single_session_price", "children_count", "is_active")
     list_filter = ("branch", "trainer", "is_active")
     search_fields = ("name",)
     inlines = (ScheduleSlotInline := type("ScheduleSlotInline", (admin.TabularInline,),
@@ -268,7 +270,7 @@ class GroupAdmin(admin.ModelAdmin):
 
     @admin.display(description="Детей")
     def children_count(self, obj):
-        return obj.children.filter(status__in=("active", "trial")).count()
+        return obj.current_children().count()
 
 
 @admin.register(Trainer)

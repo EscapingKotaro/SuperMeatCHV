@@ -248,7 +248,7 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = Child
         fields = (
-            "last_name", "first_name", "patronymic", "birth_date", "birth_year",
+            "last_name", "first_name", "patronymic", "birth_date", "birth_year", "sex",
             "parent_name", "parent_phone", "second_parent_name", "second_parent_phone",
             "address", "dispensary_region",
             "certificate_note", "group", "status", "trial_from",
@@ -269,6 +269,10 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
         self.fields["second_parent_name"].label = "Родитель 2"
         self.fields["second_parent_phone"].label = "Телефон родителя 2"
         self.fields["address"].label = "Адрес прописки"
+        self.fields["sex"].choices = [
+            ("", "— Не указан —"),
+            *Child.Sex.choices,
+        ]
         self.fields["dispensary_region"].choices = [
             ("", "— Не указано —"),
             *Child.DispensaryRegion.choices,
@@ -540,6 +544,7 @@ class GroupForm(StyledFormMixin, forms.ModelForm):
         fields = (
             "name",
             "trainer",
+            "capacity",
             "is_active",
         )
 

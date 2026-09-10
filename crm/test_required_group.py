@@ -2,8 +2,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from .forms import ChildForm
-from .models import Child, Group, Newcomer, Trainer
+from .forms import ChildForm, GroupForm
+from .models import Child, ChildGroupMembership, Group, Newcomer, Trainer
 
 
 class RequiredChildGroupTests(TestCase):
@@ -33,6 +33,7 @@ class RequiredChildGroupTests(TestCase):
             "patronymic": "",
             "birth_date": "",
             "birth_year": "2016",
+            "sex": "",
             "address": "",
             "parent_name": "",
             "parent_phone": "",
@@ -162,4 +163,90 @@ class RequiredChildGroupTests(TestCase):
         self.assertContains(
             response,
             "section.querySelector('[data-group-row]:not([hidden])')",
+        )
+
+    def test_child_form_saves_optional_sex(self):
+        data = self.child_form_data(str(self.group.pk))
+        data["sex"] = Child.Sex.FEMALE
+        form = ChildForm(data=data)
+
+        self.assertTrue(form.is_valid(), form.errors)
+        child = form.save()
+        self.assertEqual(child.sex, Child.Sex.FEMALE)
+
+    def test_group_form_saves_optional_capacity(self):
+        form = GroupForm(data={
+            "name": "Группа на 15",
+            "trainer": str(self.trainer.pk),
+            "capacity": "15",
+            "is_active": "on",
+        })
+
+        self.assertTrue(form.is_valid(), form.errors)
+        group = form.save()
+        self.assertEqual(group.capacity, 15)
+
+        invalid = GroupForm(data={
+            "name": "Нулевая вместимость",
+            "trainer": str(self.trainer.pk),
+            "capacity": "0",
+            "is_active": "on",
+        })
+        self.assertFalse(invalid.is_valid())
+        self.assertIn("capacity", invalid.errors)
+
+    def test_group_roster_count_capacity_and_sex_include_additional_memberships(self):
+        self.group.capacity = 15
+        self.group.save(update_fields=["capacity"])
+        other_group = Group.objects.create(
+            name="Дополнительная группа",
+            trainer=self.trainer,
+            capacity=12,
+        )
+        girl = Child.objects.create(
+            last_name="Альфа",
+            first_name="Анна",
+            birth_year=2015,
+            sex=Child.Sex.FEMALE,
+            group=self.group,
+        )
+        boy = Child.objects.create(
+            last_name="Бета",
+            first_name="Борис",
+            birth_year=2014,
+            sex=Child.Sex.MALE,
+            group=other_group,
+        )
+        ChildGroupMembership.objects.create(
+            child=girl,
+            group=other_group,
+            is_primary=False,
+        )
+        Child.objects.create(
+            last_name="Архив",
+            first_name="Елена",
+            birth_year=2013,
+            sex=Child.Sex.FEMALE,
+            group=other_group,
+            status=Child.Status.ARCHIVED,
+        )
+
+        self.assertEqual(
+            list(other_group.current_children().values_list("pk", flat=True)),
+            [girl.pk, boy.pk],
+        )
+
+        response = self.client.get(reverse("group_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-group-filter="sex"')
+        self.assertContains(response, 'data-group-capacity="15"')
+        self.assertContains(response, 'data-group-capacity="12"')
+        self.assertContains(response, 'data-child-count="2"')
+        self.assertContains(response, 'data-child-sex-values="female,male"')
+        self.assertContains(response, "1/15")
+        self.assertContains(response, "2/12")
+        self.assertContains(
+            response,
+            "row.dataset.childSexValues || ''",
         )
