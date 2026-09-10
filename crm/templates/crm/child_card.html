@@ -115,10 +115,15 @@
                     <div class="text-[11px] {% if document.state == 'valid' %}text-emerald-700{% elif document.state == 'expired' %}text-red-700{% else %}text-amber-700{% endif %}">
                         {% if document.state == 'missing' %}
                             Не загружен
+                        {% elif document.state == 'not_started' %}
+                            Начнёт действовать {{ document.valid_from|date:"d.m.Y" }}
+                            {% if document.valid_until %}· до {{ document.valid_until|date:"d.m.Y" }}{% endif %}
                         {% elif document.state == 'no_expiry' %}
                             Срок действия не указан
                         {% elif document.state == 'expired' %}
                             Просрочен · до {{ document.valid_until|date:"d.m.Y" }}
+                        {% elif document.valid_from %}
+                            {{ document.valid_from|date:"d.m.Y" }} — {{ document.valid_until|date:"d.m.Y" }}
                         {% else %}
                             Действует до {{ document.valid_until|date:"d.m.Y" }}
                         {% endif %}
@@ -146,11 +151,26 @@
                        {% if document.key == 'certificate' %}accept="image/*"{% else %}accept="image/*,.pdf,.doc,.docx"{% endif %}
                        required
                        class="field">
-                <input type="date"
-                       name="valid_until"
-                       value="{{ document.valid_until|date:'Y-m-d' }}"
-                       required
-                       class="field">
+                <div class="grid grid-cols-2 gap-2" data-document-period>
+                    <label>
+                        <span class="text-[10px] font-bold uppercase text-slate-400">Действует с</span>
+                        <input type="date"
+                               name="valid_from"
+                               value="{% if document.valid_from %}{{ document.valid_from|date:'Y-m-d' }}{% else %}{{ today|date:'Y-m-d' }}{% endif %}"
+                               required
+                               class="field mt-1">
+                    </label>
+                    <label>
+                        <span class="text-[10px] font-bold uppercase text-slate-400">Действует до</span>
+                        <input type="date"
+                               name="valid_until"
+                               value="{{ document.valid_until|date:'Y-m-d' }}"
+                               class="field mt-1">
+                    </label>
+                </div>
+                <p class="text-[10px] text-slate-400">
+                    По умолчанию срок — 6 месяцев от даты начала. Дату окончания можно изменить вручную.
+                </p>
                 {% if document.key == 'certificate' %}
                 <input type="text"
                        name="note"
@@ -674,4 +694,34 @@
 <div class="modal-foot"><button type="button" data-close class="btn btn-soft">Отмена</button><button class="btn btn-primary">Сохранить</button></div>
 </form></section>
 {% endblock %}
-{% block scripts %}{% if editing_child_inline %}<script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>{% endif %}{% endblock %}
+{% block scripts %}
+{% if editing_child_inline %}<script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>{% endif %}
+<script>
+(() => {
+    function addCalendarMonths(value, months) {
+        if (!value) return '';
+        const [year, month, day] = value.split('-').map(Number);
+        if (!year || !month || !day) return '';
+        const monthIndex = month - 1 + months;
+        const targetYear = year + Math.floor(monthIndex / 12);
+        const targetMonthIndex = ((monthIndex % 12) + 12) % 12;
+        const lastDay = new Date(targetYear, targetMonthIndex + 1, 0).getDate();
+        const targetDay = Math.min(day, lastDay);
+        const pad = number => String(number).padStart(2, '0');
+        return `${targetYear}-${pad(targetMonthIndex + 1)}-${pad(targetDay)}`;
+    }
+
+    document.querySelectorAll('[data-document-period]').forEach(period => {
+        const validFrom = period.querySelector('[name="valid_from"]');
+        const validUntil = period.querySelector('[name="valid_until"]');
+        if (!validFrom || !validUntil) return;
+
+        const applyDefaultExpiry = () => {
+            validUntil.value = addCalendarMonths(validFrom.value, 6);
+        };
+        validFrom.addEventListener('change', applyDefaultExpiry);
+        if (validFrom.value && !validUntil.value) applyDefaultExpiry();
+    });
+})();
+</script>
+{% endblock %}

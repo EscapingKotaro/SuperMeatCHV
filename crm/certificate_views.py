@@ -1,3 +1,4 @@
+import calendar
 import mimetypes
 
 from django import forms
@@ -5,6 +6,7 @@ from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, Http404, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect
+from django.utils import timezone
 from django.views.decorators.http import require_POST
 
 from .models import Child
@@ -13,25 +15,37 @@ from .models import Child
 DOCUMENTS = {
     "certificate": {
         "file_field": "certificate",
+        "start_field": "certificate_valid_from",
         "expiry_field": "certificate_valid_until",
         "label": "Справка",
     },
     "insurance": {
         "file_field": "insurance",
+        "start_field": "insurance_valid_from",
         "expiry_field": "insurance_valid_until",
         "label": "Страховка",
     },
     "permission": {
         "file_field": "permission",
+        "start_field": "permission_valid_from",
         "expiry_field": "permission_valid_until",
         "label": "Разрешение",
     },
 }
 
 
+def _add_calendar_months(value, months):
+    month_index = value.month - 1 + months
+    year = value.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return value.replace(year=year, month=month, day=day)
+
+
 class ChildDocumentUploadForm(forms.Form):
     document = forms.FileField(required=True)
-    valid_until = forms.DateField(required=True, input_formats=["%Y-%m-%d"])
+    valid_from = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
+    valid_until = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
     note = forms.CharField(max_length=255, required=False)
 
     def __init__(self, *args, document_kind="certificate", **kwargs):
@@ -50,6 +64,23 @@ class ChildDocumentUploadForm(forms.Form):
             raise forms.ValidationError("Справка должна быть изображением")
         return uploaded
 
+    def clean(self):
+        cleaned_data = super().clean()
+        valid_from = cleaned_data.get("valid_from") or timezone.localdate()
+        valid_until = cleaned_data.get("valid_until")
+
+        if valid_until is None:
+            valid_until = _add_calendar_months(valid_from, 6)
+        elif valid_until < valid_from:
+            self.add_error(
+                "valid_until",
+                "Дата окончания не может быть раньше даты начала",
+            )
+
+        cleaned_data["valid_from"] = valid_from
+        cleaned_data["valid_until"] = valid_until
+        return cleaned_data
+
 
 def _document_config(kind):
     return DOCUMENTS.get(kind)
@@ -66,6 +97,7 @@ def child_certificate_manage_view(request, child_id):
         return HttpResponseBadRequest("Неизвестный тип документа")
 
     file_field = config["file_field"]
+    start_field = config["start_field"]
     expiry_field = config["expiry_field"]
     label = config["label"]
 
@@ -78,7 +110,7 @@ def child_certificate_manage_view(request, child_id):
         if not form.is_valid():
             messages.error(
                 request,
-                f"Не удалось сохранить {label.lower()}. Проверьте файл и срок действия.",
+                f"Не удалось сохранить {label.lower()}. Проверьте файл и период действия.",
             )
             return redirect("child_card", child_id=child.pk)
 
@@ -87,8 +119,9 @@ def child_certificate_manage_view(request, child_id):
         old_storage = current_file.storage if old_name else None
 
         setattr(child, file_field, form.cleaned_data["document"])
+        setattr(child, start_field, form.cleaned_data["valid_from"])
         setattr(child, expiry_field, form.cleaned_data["valid_until"])
-        update_fields = [file_field, expiry_field]
+        update_fields = [file_field, start_field, expiry_field]
 
         if kind == "certificate":
             child.certificate_note = form.cleaned_data["note"].strip()
@@ -113,7 +146,8 @@ def child_certificate_manage_view(request, child_id):
             child,
             (
                 f"{label} для {child}: "
-                f"действует до {form.cleaned_data['valid_until']:%d.%m.%Y}"
+                f"{form.cleaned_data['valid_from']:%d.%m.%Y}–"
+                f"{form.cleaned_data['valid_until']:%d.%m.%Y}"
             ),
         )
         messages.success(request, f"{label} сохранён")
@@ -125,8 +159,9 @@ def child_certificate_manage_view(request, child_id):
             file_name = current_file.name
             storage = current_file.storage
             setattr(child, file_field, "")
+            setattr(child, start_field, None)
             setattr(child, expiry_field, None)
-            update_fields = [file_field, expiry_field]
+            update_fields = [file_field, start_field, expiry_field]
 
             if kind == "certificate":
                 child.certificate_ok = False

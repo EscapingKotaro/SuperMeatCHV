@@ -755,6 +755,7 @@ class CrmWorkflowTests(TestCase):
         )
         self.child.refresh_from_db()
         self.assertTrue(self.child.insurance)
+        self.assertEqual(self.child.insurance_valid_from, today)
         self.assertEqual(
             self.child.insurance_valid_until,
             valid_until,
@@ -791,7 +792,115 @@ class CrmWorkflowTests(TestCase):
         )
         self.child.refresh_from_db()
         self.assertFalse(self.child.insurance)
+        self.assertIsNone(self.child.insurance_valid_from)
         self.assertIsNone(self.child.insurance_valid_until)
+
+    def test_document_period_defaults_to_six_months_and_allows_manual_end(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        start = datetime(2026, 8, 31).date()
+
+        response = self.client.post(
+            reverse("child_certificate_manage", args=[self.child.pk]),
+            {
+                "action": "upload",
+                "kind": "permission",
+                "valid_from": start.isoformat(),
+                "valid_until": "",
+                "document": SimpleUploadedFile(
+                    "permission.pdf",
+                    b"%PDF-test-permission",
+                    content_type="application/pdf",
+                ),
+            },
+        )
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.permission_valid_from, start)
+        self.assertEqual(
+            self.child.permission_valid_until,
+            datetime(2027, 2, 28).date(),
+        )
+
+        manual_end = datetime(2027, 4, 15).date()
+        response = self.client.post(
+            reverse("child_certificate_manage", args=[self.child.pk]),
+            {
+                "action": "upload",
+                "kind": "permission",
+                "valid_from": start.isoformat(),
+                "valid_until": manual_end.isoformat(),
+                "document": SimpleUploadedFile(
+                    "permission-manual.pdf",
+                    b"%PDF-test-permission-manual",
+                    content_type="application/pdf",
+                ),
+            },
+        )
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.permission_valid_until, manual_end)
+
+        card = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertContains(card, 'name="valid_from"')
+        self.assertContains(card, 'data-document-period')
+        self.assertContains(card, "6 месяцев от даты начала")
+
+    def test_document_period_rejects_end_before_start(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        start = datetime(2026, 9, 10).date()
+        end = datetime(2026, 9, 9).date()
+
+        response = self.client.post(
+            reverse("child_certificate_manage", args=[self.child.pk]),
+            {
+                "action": "upload",
+                "kind": "insurance",
+                "valid_from": start.isoformat(),
+                "valid_until": end.isoformat(),
+                "document": SimpleUploadedFile(
+                    "bad-period.pdf",
+                    b"%PDF-bad-period",
+                    content_type="application/pdf",
+                ),
+            },
+        )
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.child.refresh_from_db()
+        self.assertFalse(self.child.insurance)
+        self.assertIsNone(self.child.insurance_valid_from)
+        self.assertIsNone(self.child.insurance_valid_until)
+
+        future_start = timezone.localdate() + timedelta(days=1)
+        self.child.insurance = "child_documents/insurance/future.pdf"
+        self.child.insurance_valid_from = future_start
+        self.child.insurance_valid_until = future_start + timedelta(days=30)
+        self.child.save(update_fields=[
+            "insurance",
+            "insurance_valid_from",
+            "insurance_valid_until",
+        ])
+        status = {
+            item["key"]: item
+            for item in self.child.required_document_statuses(timezone.localdate())
+        }["insurance"]
+        self.assertEqual(status["state"], "not_started")
 
     def test_child_card_and_attendance_use_document_alert(self):
         today = timezone.localdate()
