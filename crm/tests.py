@@ -570,6 +570,114 @@ class CrmWorkflowTests(TestCase):
             ).exists()
         )
 
+    def test_child_card_shows_subscription_state_and_groups_primary_trainer_first(self):
+        today = timezone.localdate()
+        other_trainer = Trainer.objects.create(
+            full_name="Другой тренер карточки",
+        )
+        paid_without_subscription = Group.objects.create(
+            name="Платная группа без абонемента",
+            trainer=other_trainer,
+        )
+        personal_group = Group.objects.create(
+            name="Персональная группа",
+            trainer=other_trainer,
+        )
+        primary_available = Group.objects.create(
+            name="Свободная группа основного тренера",
+            trainer=self.trainer,
+        )
+        other_available = Group.objects.create(
+            name="Свободная группа другого тренера",
+            trainer=other_trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=paid_without_subscription,
+            requires_subscription=True,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=personal_group,
+            requires_subscription=False,
+        )
+        Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=today - timedelta(days=1),
+            end_date=today + timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("5000"),
+            is_active=True,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        rendered_memberships = {
+            membership.group_id: membership
+            for membership in response.context["memberships"]
+        }
+        self.assertTrue(
+            rendered_memberships[self.group.pk].has_active_subscription,
+        )
+        self.assertFalse(
+            rendered_memberships[
+                paid_without_subscription.pk
+            ].has_active_subscription,
+        )
+        self.assertFalse(
+            rendered_memberships[personal_group.pk].has_active_subscription,
+        )
+        self.assertContains(
+            response,
+            'data-membership-subscription-state="active"',
+            count=1,
+        )
+        self.assertContains(
+            response,
+            'data-membership-subscription-state="missing"',
+            count=1,
+        )
+        self.assertContains(
+            response,
+            'data-membership-subscription-state="not-required"',
+            count=1,
+        )
+        self.assertContains(response, "Активный абонемент")
+        self.assertContains(response, "Нет активного абонемента")
+        self.assertContains(response, "Абонемент не требуется")
+        self.assertContains(response, "data-primary-trainer-groups")
+        self.assertContains(response, "data-other-trainer-groups")
+        self.assertContains(response, primary_available.name)
+        self.assertContains(response, other_available.name)
+
+        html = response.content.decode()
+        self.assertLess(
+            html.index("data-primary-trainer-groups"),
+            html.index("data-other-trainer-groups"),
+        )
+
+        membership_count = self.child.group_memberships.count()
+        invalid = self.client.post(
+            reverse("child_card", args=[self.child.pk]),
+            {"action": "add_group_membership"},
+        )
+        self.assertRedirects(
+            invalid,
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertEqual(
+            self.child.group_memberships.count(),
+            membership_count,
+        )
+
     def test_group_subscription_tariffs_keep_subscription_and_debt_prices_separate(self):
         from .forms import GroupForm
 

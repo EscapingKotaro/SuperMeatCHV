@@ -387,6 +387,29 @@
                                 · персональные / разовые
                                 {% endif %}
                             </div>
+                            {% if not membership.archived_at %}
+                            <div class="mt-2">
+                                {% if not membership.requires_subscription %}
+                                <span class="badge bg-slate-100 text-slate-600"
+                                      data-membership-subscription-state="not-required"
+                                      data-group-id="{{ membership.group_id }}">
+                                    Абонемент не требуется
+                                </span>
+                                {% elif membership.has_active_subscription %}
+                                <span class="badge bg-emerald-50 text-emerald-700"
+                                      data-membership-subscription-state="active"
+                                      data-group-id="{{ membership.group_id }}">
+                                    Активный абонемент
+                                </span>
+                                {% else %}
+                                <span class="badge bg-red-50 text-red-700"
+                                      data-membership-subscription-state="missing"
+                                      data-group-id="{{ membership.group_id }}">
+                                    Нет активного абонемента
+                                </span>
+                                {% endif %}
+                            </div>
+                            {% endif %}
                         </div>
 
                         {% if not membership.archived_at %}
@@ -439,24 +462,54 @@
             <form method="post" class="mt-4 rounded-xl border border-dashed border-slate-300 p-3">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="add_group_membership">
-                <label class="label" for="membership-group">Добавить ещё группу</label>
-                <div class="flex gap-2">
-                    <select id="membership-group" name="group_id" required class="field flex-1 text-sm">
-                        <option value="">— Выберите группу —</option>
-                        {% for trainer_group in trainer_groups %}
-                        <optgroup label="{{ trainer_group.grouper.full_name }}">
+                <div class="label">Добавить ещё группу</div>
+                <div class="mt-2 space-y-2" data-membership-group-picker>
+                    {% for trainer_group in trainer_groups %}
+                    {% if trainer_group.grouper.pk == child.group.trainer_id %}
+                    <div class="rounded-xl border border-violet-200 bg-violet-50 p-2"
+                         data-primary-trainer-groups>
+                        <div class="mb-2 text-xs font-bold text-violet-800">
+                            Основной тренер · {{ trainer_group.grouper.full_name }}
+                        </div>
+                        <div class="grid gap-1 sm:grid-cols-2">
                             {% for group_option in trainer_group.list %}
-                            <option value="{{ group_option.id }}">{{ group_option.name }}</option>
+                            <label class="flex cursor-pointer items-center gap-2 rounded-lg bg-white px-2 py-2 text-xs text-slate-700 hover:bg-violet-100">
+                                <input type="radio" name="group_id" value="{{ group_option.id }}" required class="h-4 w-4">
+                                <span>{{ group_option.name }}</span>
+                            </label>
                             {% endfor %}
-                        </optgroup>
-                        {% endfor %}
-                    </select>
-                    <button type="submit" class="btn btn-soft text-xs">Добавить</button>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+
+                    {% for trainer_group in trainer_groups %}
+                    {% if trainer_group.grouper.pk != child.group.trainer_id %}
+                    <details class="rounded-xl border border-slate-200 bg-white"
+                             data-other-trainer-groups>
+                        <summary class="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-xs font-bold text-slate-700">
+                            <span>{{ trainer_group.grouper.full_name }}</span>
+                            <span class="text-[10px] font-semibold text-slate-400">раскрыть</span>
+                        </summary>
+                        <div class="grid gap-1 border-t border-slate-100 p-2 sm:grid-cols-2">
+                            {% for group_option in trainer_group.list %}
+                            <label class="flex cursor-pointer items-center gap-2 rounded-lg bg-slate-50 px-2 py-2 text-xs text-slate-700 hover:bg-slate-100">
+                                <input type="radio" name="group_id" value="{{ group_option.id }}" required class="h-4 w-4">
+                                <span>{{ group_option.name }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </details>
+                    {% endif %}
+                    {% endfor %}
                 </div>
-                <label class="mt-2 flex items-center gap-2 text-xs text-slate-500">
-                    <input type="checkbox" name="requires_subscription" checked class="h-4 w-4">
-                    Показывать состояние абонемента
-                </label>
+                <div class="mt-3 flex flex-wrap items-center gap-3">
+                    <button type="submit" class="btn btn-soft text-xs">Добавить выбранную группу</button>
+                    <label class="flex items-center gap-2 text-xs text-slate-500">
+                        <input type="checkbox" name="requires_subscription" checked class="h-4 w-4">
+                        Показывать состояние абонемента
+                    </label>
+                </div>
                 <p class="mt-1 text-[10px] text-slate-400">
                     Для персональных и разовых занятий снимите эту галочку.
                 </p>

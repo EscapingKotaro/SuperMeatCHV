@@ -4884,6 +4884,23 @@ def child_card_view(request, child_id):
         .select_related("group__trainer")
         .order_by("-is_primary", "archived_at", "joined_at", "pk")
     )
+    for membership in memberships:
+        membership.has_active_subscription = (
+            membership.archived_at is None
+            and membership.requires_subscription
+            and any(
+                subscription.pk in active_subscription_ids
+                and (
+                    subscription.group_id == membership.group_id
+                    or (
+                        subscription.group_id is None
+                        and child.group_id == membership.group_id
+                    )
+                )
+                for subscription in subscriptions
+            )
+        )
+
     active_membership_group_ids = {
         membership.group_id
         for membership in memberships
@@ -4960,9 +4977,14 @@ def child_card_view(request, child_id):
             return redirect("child_card", child_id=child.pk)
 
         elif action == "add_group_membership":
+            new_group_id = _optional_pk(request.POST.get("group_id"))
+            if new_group_id is None:
+                messages.error(request, "Выберите группу для добавления")
+                return redirect("child_card", child_id=child.pk)
+
             new_group = get_object_or_404(
                 Group,
-                pk=request.POST.get("group_id"),
+                pk=new_group_id,
                 is_active=True,
             )
             membership, created = ChildGroupMembership.objects.get_or_create(
