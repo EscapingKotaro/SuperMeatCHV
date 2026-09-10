@@ -211,7 +211,9 @@ class CrmWorkflowTests(TestCase):
         self.assertContains(response, "15%")
         self.assertNotContains(response, ">Осталось<")
         self.assertNotContains(response, ">Пропуски<")
-        self.assertNotContains(response, ">Баланс<")
+        self.assertContains(response, "data-finance-summary")
+        self.assertContains(response, 'data-finance-balance="zero"')
+        self.assertContains(response, "Баланс")
         self.assertNotContains(response, "Ближайшее окончание")
         self.assertNotIn("sessions_left", response.context)
         self.assertNotIn("balance", response.context)
@@ -228,6 +230,79 @@ class CrmWorkflowTests(TestCase):
             html.index("Позвонить родителю после занятия"),
             html.index("Посещения за 3 месяца"),
         )
+
+    def test_child_financial_summary_uses_one_source_for_balance(self):
+        today = timezone.localdate()
+        active_subscription = Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=today - timedelta(days=1),
+            end_date=today + timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("5000"),
+            is_active=True,
+        )
+        Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=today - timedelta(days=60),
+            end_date=today - timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("9000"),
+            is_active=False,
+            cancelled_at=timezone.now(),
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=today,
+            status=Attendance.Status.PRESENT,
+            group_snapshot=self.group,
+            charge_amount=Decimal("750"),
+        )
+        payment = Payment.objects.create(
+            child=self.child,
+            subscription=active_subscription,
+            amount=Decimal("7000"),
+            date=today,
+            created_by=self.admin,
+        )
+
+        summary = self.child.financial_summary()
+        self.assertEqual(summary["paid"], Decimal("7000"))
+        self.assertEqual(summary["subscription_charges"], Decimal("5000"))
+        self.assertEqual(summary["attendance_charges"], Decimal("750"))
+        self.assertEqual(summary["charged"], Decimal("5750"))
+        self.assertEqual(summary["balance"], Decimal("1250"))
+        self.assertEqual(summary["credit"], Decimal("1250"))
+        self.assertEqual(summary["debt"], Decimal("0"))
+        self.assertEqual(summary["balance_state"], "credit")
+        self.assertEqual(self.child.balance(), Decimal("1250"))
+        self.assertEqual(self.child.debt(), Decimal("0"))
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "data-finance-summary")
+        self.assertContains(response, 'data-finance-balance="credit"')
+        self.assertContains(response, "+1250 ₽")
+        self.assertContains(response, "Начислено")
+        self.assertContains(response, "Разовые / долг: 750 ₽")
+
+        payment.amount = Decimal("4000")
+        payment.save(update_fields=["amount"])
+        self.child.refresh_from_db()
+
+        summary = self.child.financial_summary()
+        self.assertEqual(summary["balance"], Decimal("-1750"))
+        self.assertEqual(summary["credit"], Decimal("0"))
+        self.assertEqual(summary["debt"], Decimal("1750"))
+        self.assertEqual(summary["balance_state"], "debt")
+        self.assertEqual(self.child.debt(), Decimal("1750"))
 
     def test_child_card_shows_trial_history_after_payment(self):
         trial_at = (

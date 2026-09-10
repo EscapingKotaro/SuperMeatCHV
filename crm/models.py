@@ -1005,8 +1005,8 @@ class Child(models.Model):
         return max(0, used.count() - paid_sessions)
 
     def debt(self):
-        """Денежный долг: неотменённые начисления минус реальные оплаты."""
-        return max(Decimal(0), -self.balance())
+        """Денежный долг из единого финансового расчёта ребёнка."""
+        return self.financial_summary()["debt"]
 
     def related_total(self, relation, field, exclude_cancelled=False):
         cached = getattr(self, "_prefetched_objects_cache", {}).get(relation)
@@ -1095,8 +1095,37 @@ class Child(models.Model):
     def total_spent(self):
         return self.related_total("subscriptions", "price", exclude_cancelled=True)
 
+    def financial_summary(self):
+        """Единый денежный итог: оплаты, начисления, баланс, долг и аванс."""
+        paid = self.total_paid()
+        subscription_charges = self.total_spent()
+        attendance_charges = self.related_total(
+            "attendances",
+            "charge_amount",
+        )
+        charged = subscription_charges + attendance_charges
+        balance = paid - charged
+
+        return {
+            "paid": paid,
+            "subscription_charges": subscription_charges,
+            "attendance_charges": attendance_charges,
+            "charged": charged,
+            "balance": balance,
+            "balance_abs": abs(balance),
+            "balance_state": (
+                "credit"
+                if balance > 0
+                else "debt"
+                if balance < 0
+                else "zero"
+            ),
+            "credit": max(Decimal("0"), balance),
+            "debt": max(Decimal("0"), -balance),
+        }
+
     def balance(self):
-        return self.total_paid() - self.total_spent() - self.related_total("attendances", "charge_amount")
+        return self.financial_summary()["balance"]
 
     def is_trial_expired(self):
         """Проверяем, истёк ли месяц после пробного без оплаты."""
