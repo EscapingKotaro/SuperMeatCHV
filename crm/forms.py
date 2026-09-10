@@ -249,7 +249,8 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
         model = Child
         fields = (
             "last_name", "first_name", "patronymic", "birth_date", "birth_year",
-            "address", "parent_name", "parent_phone",
+            "parent_name", "parent_phone", "second_parent_name", "second_parent_phone",
+            "address", "dispensary_region",
             "certificate_note", "group", "status", "trial_from",
             "discount_percent", "note",
         )
@@ -263,7 +264,15 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["birth_date"].input_formats = ["%Y-%m-%d"]
         self.fields["trial_from"].input_formats = ["%Y-%m-%d"]
+        self.fields["parent_name"].label = "Родитель 1"
+        self.fields["parent_phone"].label = "Телефон родителя 1"
+        self.fields["second_parent_name"].label = "Родитель 2"
+        self.fields["second_parent_phone"].label = "Телефон родителя 2"
         self.fields["address"].label = "Адрес прописки"
+        self.fields["dispensary_region"].choices = [
+            ("", "— Не указано —"),
+            *Child.DispensaryRegion.choices,
+        ]
         self.fields["group"].required = True
         self.fields["group"].empty_label = "— Выберите группу —"
         self.apply_styles()

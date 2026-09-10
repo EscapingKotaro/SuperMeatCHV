@@ -66,24 +66,38 @@
             <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
                 <i data-lucide="user" class="h-4 w-4 text-slate-400"></i>Контактная информация
             </h3>
-            <div class="space-y-3 text-sm">
-                <div>
-                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Родитель</div>
-                    <div class="font-semibold">{{ child.parent_name|default:"—" }}</div>
-                </div>
-                <div>
-                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Телефон родителя</div>
-                    {% if child.parent_phone %}
-                    <a href="tel:{{ child.parent_phone }}" class="font-semibold text-[#FF5C35] hover:underline">
-                        {{ child.parent_phone }}
-                    </a>
-                    {% else %}
-                    <div class="font-semibold text-slate-400">—</div>
-                    {% endif %}
+            <div class="space-y-3 text-sm" data-child-contacts>
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <div class="rounded-xl bg-slate-50 p-3" data-parent-contact="primary">
+                        <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Родитель 1</div>
+                        <div class="font-semibold">{{ child.parent_name|default:"—" }}</div>
+                        {% if child.parent_phone %}
+                        <a href="tel:{{ child.parent_phone }}" class="mt-1 inline-block font-semibold text-[#FF5C35] hover:underline">
+                            {{ child.parent_phone }}
+                        </a>
+                        {% else %}
+                        <div class="mt-1 font-semibold text-slate-400">—</div>
+                        {% endif %}
+                    </div>
+                    <div class="rounded-xl bg-slate-50 p-3" data-parent-contact="secondary">
+                        <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Родитель 2</div>
+                        <div class="font-semibold">{{ child.second_parent_name|default:"—" }}</div>
+                        {% if child.second_parent_phone %}
+                        <a href="tel:{{ child.second_parent_phone }}" class="mt-1 inline-block font-semibold text-[#FF5C35] hover:underline">
+                            {{ child.second_parent_phone }}
+                        </a>
+                        {% else %}
+                        <div class="mt-1 font-semibold text-slate-400">—</div>
+                        {% endif %}
+                    </div>
                 </div>
                 <div>
                     <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Адрес прописки</div>
                     <div class="text-slate-700">{{ child.address|default:"—" }}</div>
+                </div>
+                <div data-dispensary-region>
+                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Прикрепление для диспансеризации</div>
+                    <div class="font-semibold text-slate-700">{{ child.get_dispensary_region_display|default:"—" }}</div>
                 </div>
             </div>
         </div>

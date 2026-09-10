@@ -228,6 +228,87 @@ class CrmWorkflowTests(TestCase):
             html.index("Посещения за 3 месяца"),
         )
 
+    def test_child_card_supports_two_parent_contacts_and_dispensary_region(self):
+        self.child.parent_name = "Иванова Ольга"
+        self.child.parent_phone = "+79990000001"
+        self.child.second_parent_name = "Иванов Сергей"
+        self.child.second_parent_phone = "+79990000002"
+        self.child.dispensary_region = Child.DispensaryRegion.MOSCOW_REGION
+        self.child.save(update_fields=[
+            "parent_name",
+            "parent_phone",
+            "second_parent_name",
+            "second_parent_phone",
+            "dispensary_region",
+        ])
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-child-contacts')
+        self.assertContains(response, 'data-parent-contact="primary"')
+        self.assertContains(response, 'data-parent-contact="secondary"')
+        self.assertContains(response, "Иванова Ольга")
+        self.assertContains(response, "Иванов Сергей")
+        self.assertContains(response, 'href="tel:+79990000001"')
+        self.assertContains(response, 'href="tel:+79990000002"')
+        self.assertContains(response, "Прикрепление для диспансеризации")
+        self.assertContains(response, "Московская область")
+
+        form = response.context["child_form"]
+        self.assertIn("second_parent_name", form.fields)
+        self.assertIn("second_parent_phone", form.fields)
+        self.assertIn("dispensary_region", form.fields)
+
+    def test_child_edit_saves_second_parent_and_dispensary_region(self):
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        response = self.client.post(
+            reverse("child_edit", args=[self.child.pk]),
+            {
+                "last_name": self.child.last_name,
+                "first_name": self.child.first_name,
+                "patronymic": "",
+                "birth_date": "",
+                "birth_year": str(self.child.birth_year),
+                "parent_name": "Иванова Ольга",
+                "parent_phone": "+79990000001",
+                "second_parent_name": "Иванов Сергей",
+                "second_parent_phone": "+79990000002",
+                "address": "Москва, ул. Спортивная, 1",
+                "dispensary_region": Child.DispensaryRegion.MOSCOW,
+                "certificate_note": "",
+                "group": str(self.group.pk),
+                "status": Child.Status.ACTIVE,
+                "trial_from": "",
+                "discount_percent": "0",
+                "note": "",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.parent_name, "Иванова Ольга")
+        self.assertEqual(self.child.parent_phone, "+79990000001")
+        self.assertEqual(self.child.second_parent_name, "Иванов Сергей")
+        self.assertEqual(self.child.second_parent_phone, "+79990000002")
+        self.assertEqual(
+            self.child.dispensary_region,
+            Child.DispensaryRegion.MOSCOW,
+        )
+
     def test_child_card_creates_primary_group_membership_for_legacy_child(self):
         self.client.login(
             username="admin",

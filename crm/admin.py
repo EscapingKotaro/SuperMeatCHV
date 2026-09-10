@@ -122,6 +122,8 @@ class ChildAdmin(admin.ModelAdmin):
         "patronymic",
         "parent_name",
         "parent_phone",
+        "second_parent_name",
+        "second_parent_phone",
     )
 
     autocomplete_fields = ["group"]
@@ -163,7 +165,10 @@ class ChildAdmin(admin.ModelAdmin):
                 "fields": (
                     "parent_name",
                     "parent_phone",
+                    "second_parent_name",
+                    "second_parent_phone",
                     "address",
+                    "dispensary_region",
                 )
             },
         ),

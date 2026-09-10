@@ -443,6 +443,11 @@ class SalaryAdjustment(models.Model):
 
 
 class Child(models.Model):
+    class DispensaryRegion(models.TextChoices):
+        MOSCOW = "moscow", "Москва"
+        MOSCOW_REGION = "moscow_region", "Московская область"
+        OTHER = "other", "Другое"
+
     class Status(models.TextChoices):
         ACTIVE   = "active",   "Активный"
         TRIAL    = "trial",    "Пробное (1 месяц)"
@@ -457,6 +462,22 @@ class Child(models.Model):
     address    = models.CharField("Адрес проживания", max_length=255, blank=True)
     parent_name  = models.CharField("Родитель", max_length=200, blank=True)
     parent_phone = models.CharField("Телефон родителя", max_length=20, blank=True)
+    second_parent_name = models.CharField(
+        "Второй родитель",
+        max_length=200,
+        blank=True,
+    )
+    second_parent_phone = models.CharField(
+        "Телефон второго родителя",
+        max_length=20,
+        blank=True,
+    )
+    dispensary_region = models.CharField(
+        "Прикрепление для диспансеризации",
+        max_length=20,
+        choices=DispensaryRegion.choices,
+        blank=True,
+    )
     certificate = models.ImageField("Справка (фото)", upload_to="certificates/", blank=True)
     certificate_ok = models.BooleanField("Справка есть", default=False)
     certificate_note = models.CharField("Комментарий к справке", max_length=255, blank=True)
