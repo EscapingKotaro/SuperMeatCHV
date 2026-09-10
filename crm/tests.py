@@ -228,7 +228,7 @@ class CrmWorkflowTests(TestCase):
         html = response.content.decode()
         self.assertLess(
             html.index("Позвонить родителю после занятия"),
-            html.index("Посещения за 3 месяца"),
+            html.index("data-child-attendance-period"),
         )
 
     def test_child_financial_summary_uses_one_source_for_balance(self):
@@ -242,7 +242,7 @@ class CrmWorkflowTests(TestCase):
             price=Decimal("5000"),
             is_active=True,
         )
-        Subscription.objects.create(
+        cancelled_subscription = Subscription.objects.create(
             child=self.child,
             group=self.group,
             start_date=today - timedelta(days=60),
@@ -279,6 +279,47 @@ class CrmWorkflowTests(TestCase):
         self.assertEqual(self.child.balance(), Decimal("1250"))
         self.assertEqual(self.child.debt(), Decimal("0"))
 
+        movements = self.child.financial_movements()
+        self.assertEqual(len(movements), 5)
+        self.assertEqual(
+            sum(
+                (movement["amount"] for movement in movements),
+                Decimal("0"),
+            ),
+            summary["balance"],
+        )
+        amounts_by_kind = {}
+        for movement in movements:
+            amounts_by_kind.setdefault(
+                movement["kind"],
+                [],
+            ).append(movement["amount"])
+        self.assertCountEqual(
+            amounts_by_kind["subscription"],
+            [Decimal("-5000"), Decimal("-9000")],
+        )
+        self.assertEqual(
+            amounts_by_kind["subscription_cancel"],
+            [Decimal("9000")],
+        )
+        self.assertEqual(
+            amounts_by_kind["attendance_charge"],
+            [Decimal("-750")],
+        )
+        self.assertEqual(
+            amounts_by_kind["payment"],
+            [Decimal("7000")],
+        )
+        cancel_movement = next(
+            movement
+            for movement in movements
+            if (
+                movement["kind"] == "subscription_cancel"
+                and movement["object_id"] == cancelled_subscription.pk
+            )
+        )
+        self.assertEqual(cancel_movement["direction"], "credit")
+
         self.client.login(
             username="admin",
             password="TestPass123!",
@@ -292,6 +333,31 @@ class CrmWorkflowTests(TestCase):
         self.assertContains(response, "+1250 ₽")
         self.assertContains(response, "Начислено")
         self.assertContains(response, "Разовые / долг: 750 ₽")
+        self.assertContains(response, "data-finance-journal")
+        self.assertContains(
+            response,
+            'data-finance-kind="subscription"',
+            count=2,
+        )
+        self.assertContains(
+            response,
+            'data-finance-kind="subscription_cancel"',
+            count=1,
+        )
+        self.assertContains(
+            response,
+            'data-finance-kind="attendance_charge"',
+            count=1,
+        )
+        self.assertContains(
+            response,
+            'data-finance-kind="payment"',
+            count=1,
+        )
+        self.assertContains(response, "История списаний и оплат")
+        self.assertContains(response, "Начислен абонемент")
+        self.assertContains(response, "Отмена абонемента")
+        self.assertContains(response, "Занятие в долг")
 
         payment.amount = Decimal("4000")
         payment.save(update_fields=["amount"])
@@ -303,6 +369,16 @@ class CrmWorkflowTests(TestCase):
         self.assertEqual(summary["debt"], Decimal("1750"))
         self.assertEqual(summary["balance_state"], "debt")
         self.assertEqual(self.child.debt(), Decimal("1750"))
+        self.assertEqual(
+            sum(
+                (
+                    movement["amount"]
+                    for movement in self.child.financial_movements()
+                ),
+                Decimal("0"),
+            ),
+            summary["balance"],
+        )
 
     def test_child_card_shows_trial_history_after_payment(self):
         trial_at = (
@@ -8222,6 +8298,168 @@ class CrmWorkflowTests(TestCase):
         self.assertContains(
             response,
             "border-r-2 border-red-500",
+        )
+
+    def test_child_card_counts_absences_for_month_year_and_custom_period(self):
+        selected_year = timezone.localdate().year - 1
+        june_start = datetime(selected_year, 6, 1).date()
+        june_second = datetime(selected_year, 6, 2).date()
+        june_third = datetime(selected_year, 6, 3).date()
+        july_start = datetime(selected_year, 7, 1).date()
+        june_end = july_start - timedelta(days=1)
+
+        for mark_date, status in (
+            (june_start, Attendance.Status.ABSENT),
+            (june_second, Attendance.Status.ABSENT),
+            (june_third, Attendance.Status.SICK),
+            (july_start, Attendance.Status.ABSENT),
+        ):
+            Attendance.objects.create(
+                child=self.child,
+                date=mark_date,
+                group_snapshot=self.group,
+                trainer_snapshot=self.trainer,
+                status=status,
+            )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        month_page = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+            {
+                "attendance_period": "month",
+                "attendance_month": f"{selected_year}-06",
+            },
+        )
+        self.assertEqual(month_page.status_code, 200)
+        self.assertEqual(
+            month_page.context["attendance_period_start"],
+            june_start,
+        )
+        self.assertEqual(
+            month_page.context["attendance_period_end"],
+            june_end,
+        )
+        self.assertEqual(
+            month_page.context["period_stats"]["absent"],
+            2,
+        )
+        self.assertEqual(
+            month_page.context["period_stats"]["sick"],
+            1,
+        )
+        self.assertEqual(
+            len(month_page.context["attendances"]),
+            3,
+        )
+        self.assertContains(
+            month_page,
+            "data-child-attendance-period",
+        )
+        self.assertContains(
+            month_page,
+            'name="attendance_period"',
+        )
+        self.assertContains(
+            month_page,
+            'name="attendance_month"',
+        )
+        self.assertContains(
+            month_page,
+            'data-period-absences="2"',
+        )
+        self.assertContains(
+            month_page,
+            (
+                f"{june_start:%d.%m.%Y} — "
+                f"{june_end:%d.%m.%Y}"
+            ),
+        )
+        self.assertContains(
+            month_page,
+            "Пропуски за период",
+        )
+
+        year_page = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+            {
+                "attendance_period": "year",
+                "attendance_year": str(selected_year),
+            },
+        )
+        self.assertEqual(year_page.status_code, 200)
+        self.assertEqual(
+            year_page.context["attendance_period_start"],
+            datetime(selected_year, 1, 1).date(),
+        )
+        self.assertEqual(
+            year_page.context["attendance_period_end"],
+            datetime(selected_year, 12, 31).date(),
+        )
+        self.assertEqual(
+            year_page.context["period_stats"]["absent"],
+            3,
+        )
+        self.assertEqual(
+            year_page.context["period_stats"]["sick"],
+            1,
+        )
+        self.assertEqual(
+            len(year_page.context["attendances"]),
+            4,
+        )
+        self.assertContains(
+            year_page,
+            'name="attendance_year"',
+        )
+        self.assertContains(
+            year_page,
+            'data-period-absences="3"',
+        )
+
+        custom_page = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+            {
+                "attendance_period": "custom",
+                "attendance_from": june_third.isoformat(),
+                "attendance_to": june_second.isoformat(),
+            },
+        )
+        self.assertEqual(custom_page.status_code, 200)
+        self.assertEqual(
+            custom_page.context["attendance_period_start"],
+            june_second,
+        )
+        self.assertEqual(
+            custom_page.context["attendance_period_end"],
+            june_third,
+        )
+        self.assertEqual(
+            custom_page.context["period_stats"]["absent"],
+            1,
+        )
+        self.assertEqual(
+            custom_page.context["period_stats"]["sick"],
+            1,
+        )
+        self.assertEqual(
+            len(custom_page.context["attendances"]),
+            2,
+        )
+        self.assertContains(
+            custom_page,
+            'name="attendance_from"',
+        )
+        self.assertContains(
+            custom_page,
+            'name="attendance_to"',
+        )
+        self.assertContains(
+            custom_page,
+            'data-period-absences="1"',
         )
 
     def test_subscription_end_marker_stays_on_today_when_sessions_are_exhausted(self):

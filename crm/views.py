@@ -5175,15 +5175,104 @@ def child_card_view(request, child_id):
                 )
                 return redirect("child_card", child_id=child.id)
 
-    # === HEAT-MAP: последние 90 дней ===
-    days_back = 90
-    year_ago = today - timedelta(days=days_back - 1)
+    attendance_period = request.GET.get("attendance_period", "month")
+    if attendance_period not in {"month", "year", "custom"}:
+        attendance_period = "month"
 
+    default_period_start = today.replace(day=1)
+    attendance_month = today.strftime("%Y-%m")
+    attendance_year = str(today.year)
+    attendance_from = default_period_start
+    attendance_to = today
+
+    if attendance_period == "month":
+        try:
+            month_anchor = datetime.strptime(
+                request.GET.get("attendance_month", ""),
+                "%Y-%m",
+            ).date()
+        except (TypeError, ValueError):
+            month_anchor = today
+
+        if month_anchor > today:
+            month_anchor = today
+
+        (
+            attendance_period_start,
+            attendance_period_end,
+        ) = _attendance_period_bounds(
+            "month",
+            month_anchor,
+        )
+        attendance_month = attendance_period_start.strftime("%Y-%m")
+
+    elif attendance_period == "year":
+        try:
+            selected_year = int(
+                request.GET.get("attendance_year", "")
+            )
+        except (TypeError, ValueError):
+            selected_year = today.year
+
+        if selected_year < 1900 or selected_year > today.year:
+            selected_year = today.year
+
+        (
+            attendance_period_start,
+            attendance_period_end,
+        ) = _attendance_period_bounds(
+            "year",
+            date(selected_year, 1, 1),
+        )
+        attendance_year = str(selected_year)
+
+    else:
+        attendance_from = _parse_attendance_date(
+            request.GET.get("attendance_from"),
+            default_period_start,
+        )
+        attendance_to = _parse_attendance_date(
+            request.GET.get("attendance_to"),
+            today,
+        )
+        attendance_from = min(attendance_from, today)
+        attendance_to = min(attendance_to, today)
+
+        (
+            attendance_period_start,
+            attendance_period_end,
+        ) = _attendance_period_bounds(
+            "custom",
+            today,
+            attendance_from.isoformat(),
+            attendance_to.isoformat(),
+        )
+        attendance_from = attendance_period_start
+        attendance_to = attendance_period_end
+
+    attendance_period_end = min(
+        attendance_period_end,
+        today,
+    )
+    attendance_period_label = (
+        f"{attendance_period_start:%d.%m.%Y} — "
+        f"{attendance_period_end:%d.%m.%Y}"
+    )
+
+    attendances = attendances.filter(
+        date__gte=attendance_period_start,
+        date__lte=attendance_period_end,
+    )
+
+    # === HEAT-MAP: выбранный период ===
     # В нескольких группах у ребёнка может быть несколько отметок в один день.
     # Heat-map не должен терять вторую отметку при сведении по дате.
     period_marks = list(
         child.attendances
-        .filter(date__gte=year_ago, date__lte=today)
+        .filter(
+            date__gte=attendance_period_start,
+            date__lte=attendance_period_end,
+        )
         .select_related("group_snapshot", "slot__group")
         .order_by("date", "id")
     )
@@ -5193,8 +5282,10 @@ def child_card_view(request, child_id):
         period_attendances[mark.date].append(mark)
 
     # Начинаем с понедельника (weekday() возвращает 0=Пн, 6=Вс)
-    start_date = year_ago - timedelta(days=year_ago.weekday())
-    end_date = today
+    start_date = attendance_period_start - timedelta(
+        days=attendance_period_start.weekday()
+    )
+    end_date = attendance_period_end
 
     weeks = []
     current = start_date
@@ -5204,7 +5295,10 @@ def child_card_view(request, child_id):
         week_start_date = current  # Понедельник этой недели
         for day_in_week in range(7):  # 0=Пн ... 6=Вс
             date = current + timedelta(days=day_in_week)
-            if date > end_date or date < year_ago:
+            if (
+                date > end_date
+                or date < attendance_period_start
+            ):
                 week.append(None)
             else:
                 day_marks = period_attendances.get(date, [])
@@ -5259,6 +5353,14 @@ def child_card_view(request, child_id):
         'groups_list': groups_list,
         'weeks': weeks,
         'period_stats': period_stats,
+        'attendance_period': attendance_period,
+        'attendance_period_start': attendance_period_start,
+        'attendance_period_end': attendance_period_end,
+        'attendance_period_label': attendance_period_label,
+        'attendance_month': attendance_month,
+        'attendance_year': attendance_year,
+        'attendance_from': attendance_from,
+        'attendance_to': attendance_to,
         'today': today,
         'rank_form': rank_form,
         'camp_form': camp_form,

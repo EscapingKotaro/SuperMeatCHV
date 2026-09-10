@@ -1124,6 +1124,135 @@ class Child(models.Model):
             "debt": max(Decimal("0"), -balance),
         }
 
+    def financial_movements(self):
+        """Единый журнал операций, из которых складывается баланс ребёнка."""
+        movements = []
+
+        def append_movement(*, date, kind, title, detail, amount, object_id):
+            amount = Decimal(amount)
+            if amount == 0:
+                return
+            movements.append({
+                "date": date,
+                "kind": kind,
+                "title": title,
+                "detail": detail,
+                "amount": amount,
+                "amount_abs": abs(amount),
+                "direction": "credit" if amount > 0 else "debit",
+                "object_id": object_id,
+            })
+
+        subscriptions = (
+            self.subscriptions
+            .select_related("group", "tariff")
+            .all()
+        )
+        for subscription in subscriptions:
+            group = subscription.group or self.group
+            detail_parts = [
+                group.name if group else "Группа не указана",
+            ]
+            if subscription.tariff_id:
+                detail_parts.append(subscription.tariff.name)
+            detail = " · ".join(detail_parts)
+
+            append_movement(
+                date=subscription.start_date,
+                kind="subscription",
+                title="Начислен абонемент",
+                detail=detail,
+                amount=-subscription.price,
+                object_id=subscription.pk,
+            )
+
+            if subscription.cancelled_at:
+                cancelled_at = subscription.cancelled_at
+                cancelled_date = (
+                    timezone.localtime(cancelled_at).date()
+                    if timezone.is_aware(cancelled_at)
+                    else cancelled_at.date()
+                )
+                append_movement(
+                    date=cancelled_date,
+                    kind="subscription_cancel",
+                    title="Отмена абонемента",
+                    detail=detail,
+                    amount=subscription.price,
+                    object_id=subscription.pk,
+                )
+
+        attendances = (
+            self.attendances
+            .exclude(charge_amount=0)
+            .select_related("group_snapshot", "slot__group")
+        )
+        for attendance in attendances:
+            group = (
+                attendance.group_snapshot
+                or (attendance.slot.group if attendance.slot_id else None)
+                or self.group
+            )
+            detail = (
+                group.name
+                if group
+                else "Группа не указана"
+            )
+            append_movement(
+                date=attendance.date,
+                kind="attendance_charge",
+                title="Занятие в долг",
+                detail=detail,
+                amount=-attendance.charge_amount,
+                object_id=attendance.pk,
+            )
+
+        payments = (
+            self.payments
+            .select_related(
+                "subscription__group",
+                "created_by",
+            )
+            .all()
+        )
+        for payment in payments:
+            if payment.subscription_id:
+                group = payment.subscription.group or self.group
+                detail = (
+                    f"Абонемент · {group.name}"
+                    if group
+                    else "Абонемент"
+                )
+            else:
+                detail = "Без привязки к абонементу"
+
+            if payment.created_by_id:
+                detail += f" · принял {payment.created_by}"
+
+            append_movement(
+                date=payment.date,
+                kind="payment",
+                title="Оплата",
+                detail=detail,
+                amount=payment.amount,
+                object_id=payment.pk,
+            )
+
+        kind_order = {
+            "subscription": 0,
+            "attendance_charge": 1,
+            "payment": 2,
+            "subscription_cancel": 3,
+        }
+        movements.sort(
+            key=lambda movement: (
+                movement["date"],
+                kind_order[movement["kind"]],
+                movement["object_id"],
+            )
+        )
+        return list(reversed(movements))
+
     def balance(self):
         return self.financial_summary()["balance"]
 
