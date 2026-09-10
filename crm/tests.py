@@ -310,7 +310,97 @@ class CrmWorkflowTests(TestCase):
             Child.DispensaryRegion.MOSCOW,
         )
 
-    def test_child_card_creates_primary_group_membership_for_legacy_child(self):
+    def test_invalid_child_edit_does_not_freeze_attendance_history(self):
+        mark = Attendance.objects.create(
+            child=self.child,
+            date=timezone.localdate() - timedelta(days=1),
+            status=Attendance.Status.ABSENT,
+        )
+        self.client.login(username="admin", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("child_edit", args=[self.child.pk]),
+            {
+                "last_name": self.child.last_name,
+                "first_name": "",
+                "patronymic": "",
+                "birth_date": "",
+                "birth_year": str(self.child.birth_year),
+                "parent_name": "",
+                "parent_phone": "",
+                "second_parent_name": "",
+                "second_parent_phone": "",
+                "address": "",
+                "dispensary_region": "",
+                "certificate_note": "",
+                "group": str(self.group.pk),
+                "status": Child.Status.ACTIVE,
+                "trial_from": "",
+                "discount_percent": "0",
+                "note": "",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        mark.refresh_from_db()
+        self.assertIsNone(mark.group_snapshot_id)
+        self.assertIsNone(mark.trainer_snapshot_id)
+        self.assertIsNone(mark.salary_rate_snapshot)
+
+    def test_child_edit_group_change_archives_old_primary_membership(self):
+        second_group = Group.objects.create(
+            name="Группа после перевода",
+            trainer=self.trainer,
+        )
+        old_membership = self.child.group_memberships.get(group=self.group)
+        self.client.login(username="admin", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("child_edit", args=[self.child.pk]),
+            {
+                "last_name": self.child.last_name,
+                "first_name": self.child.first_name,
+                "patronymic": "",
+                "birth_date": "",
+                "birth_year": str(self.child.birth_year),
+                "parent_name": "",
+                "parent_phone": "",
+                "second_parent_name": "",
+                "second_parent_phone": "",
+                "address": "",
+                "dispensary_region": "",
+                "certificate_note": "",
+                "group": str(second_group.pk),
+                "status": Child.Status.ACTIVE,
+                "trial_from": "",
+                "discount_percent": "0",
+                "note": "",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.child.refresh_from_db()
+        old_membership.refresh_from_db()
+        new_membership = self.child.group_memberships.get(group=second_group)
+        self.assertEqual(self.child.group, second_group)
+        self.assertFalse(old_membership.is_primary)
+        self.assertIsNotNone(old_membership.archived_at)
+        self.assertTrue(new_membership.is_primary)
+        self.assertIsNone(new_membership.archived_at)
+
+    def test_child_save_creates_primary_group_membership(self):
+        membership = ChildGroupMembership.objects.get(
+            child=self.child,
+            group=self.group,
+        )
+        self.assertTrue(membership.is_primary)
+        self.assertIsNone(membership.archived_at)
+
+    def test_child_card_repairs_primary_membership_for_legacy_child(self):
+        self.child.group_memberships.all().delete()
         self.client.login(
             username="admin",
             password="TestPass123!",
@@ -794,6 +884,39 @@ class CrmWorkflowTests(TestCase):
         self.assertEqual(mark.trainer_snapshot, old_trainer)
         self.assertEqual(mark.salary_rate_snapshot, second_group.salary_rate)
 
+    def test_invalid_group_edit_does_not_freeze_attendance_history(self):
+        new_trainer = Trainer.objects.create(full_name="Не сохранённый тренер")
+        mark = Attendance.objects.create(
+            child=self.child,
+            date=timezone.localdate() - timedelta(days=1),
+            group_snapshot=self.group,
+            status=Attendance.Status.PRESENT,
+        )
+        self.client.login(username="admin", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("group_edit", args=[self.group.pk]),
+            {
+                "name": "",
+                "trainer": new_trainer.pk,
+                "capacity": "",
+                "subscription_tariffs": [],
+                "single_session_price": "0",
+                "is_active": "on",
+                "schedule-TOTAL_FORMS": "0",
+                "schedule-INITIAL_FORMS": "0",
+                "schedule-MIN_NUM_FORMS": "0",
+                "schedule-MAX_NUM_FORMS": "1000",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.group.refresh_from_db()
+        mark.refresh_from_db()
+        self.assertEqual(self.group.trainer, self.trainer)
+        self.assertIsNone(mark.trainer_snapshot_id)
+        self.assertIsNone(mark.salary_rate_snapshot)
+
     def test_statistics_count_additional_group_membership_and_its_marks(self):
         today = timezone.localdate()
         second_group = Group.objects.create(
@@ -941,10 +1064,8 @@ class CrmWorkflowTests(TestCase):
             name="Дополнительная группа",
             trainer=second_trainer,
         )
-        primary = ChildGroupMembership.objects.create(
-            child=self.child,
+        primary = self.child.group_memberships.get(
             group=self.group,
-            is_primary=True,
         )
         additional = ChildGroupMembership.objects.create(
             child=self.child,

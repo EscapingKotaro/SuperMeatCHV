@@ -4947,7 +4947,10 @@ def child_card_view(request, child_id):
                 membership.is_primary = True
                 membership.save(update_fields=["is_primary"])
                 child.group = membership.group
-                child.save(update_fields=["group"])
+                child.save(
+                    update_fields=["group"],
+                    preserve_previous_group_membership=True,
+                )
                 child.schedule.clear()
                 log_action(
                     request,
@@ -5187,9 +5190,6 @@ def child_edit_view(request, child_id):
         old_group = child.group
         old_trainer = child.trainer
 
-        # Фиксируем историю до возможной смены группы/статуса.
-        child.freeze_current_history()
-
         form = ChildForm(
             request.POST,
             request.FILES,
@@ -5197,17 +5197,34 @@ def child_edit_view(request, child_id):
         )
 
         if form.is_valid():
+            new_group = form.cleaned_data["group"]
+            new_status = form.cleaned_data["status"]
+            departed_statuses = (
+                Child.Status.LOST,
+                Child.Status.ARCHIVED,
+            )
+            if (
+                old_group
+                and (
+                    new_group.pk != old_group.pk
+                    or (
+                        new_status in departed_statuses
+                        and old_status not in departed_statuses
+                    )
+                )
+            ):
+                child.freeze_current_history(
+                    group=old_group,
+                    trainer=old_trainer,
+                    salary_rate=old_group.salary_rate,
+                )
+
             child = form.save(commit=False)
 
             # Если ребёнок больше не на пробном,
             # дата начала пробного периода больше не нужна.
             if child.status != Child.Status.TRIAL:
                 child.trial_from = None
-
-            departed_statuses = (
-                Child.Status.LOST,
-                Child.Status.ARCHIVED,
-            )
 
             if child.status in departed_statuses:
                 if old_status not in departed_statuses:
@@ -5545,14 +5562,18 @@ def group_edit_view(request, pk):
         return redirect(f"{reverse('group_list')}?edit={group.pk}")
 
     if request.method == 'POST':
-        # До изменения тренера/ставки фиксируем историю всей группы,
-        # включая спортсменов из дополнительных членств.
-        group.freeze_current_history()
-
+        old_trainer = group.trainer
+        old_salary_rate = group.salary_rate
         group_form = GroupForm(request.POST, instance=group)
         slot_formset = ScheduleSlotFormSet(request.POST, instance=group)
 
         if group_form.is_valid() and slot_formset.is_valid():
+            # ModelForm уже перенёс cleaned_data в instance. Для истории
+            # используем реквизиты, которые были сохранены до валидации.
+            group.freeze_current_history(
+                trainer=old_trainer,
+                salary_rate=old_salary_rate,
+            )
             group_form.save()
             slot_formset.save()
             messages.success(request, f'Группа "{group.name}" обновлена')

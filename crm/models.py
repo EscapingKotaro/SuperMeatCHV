@@ -206,25 +206,29 @@ class Group(models.Model):
             .order_by("last_name", "first_name", "pk")
         )
 
-    def freeze_current_history(self):
-        """Фиксирует старые реквизиты группы до изменения её тренера/ставки."""
+    def freeze_current_history(self, *, trainer=None, salary_rate=None):
+        """Фиксирует старые реквизиты группы до изменения тренера/ставки."""
+        trainer = trainer or self.trainer
+        if salary_rate is None:
+            salary_rate = self.salary_rate
+
         legacy_marks = Attendance.objects.filter(
             group_snapshot__isnull=True,
             child__group=self,
         )
         legacy_marks.update(
             group_snapshot=self,
-            trainer_snapshot=self.trainer,
-            salary_rate_snapshot=self.salary_rate,
+            trainer_snapshot=trainer,
+            salary_rate_snapshot=salary_rate,
         )
         Attendance.objects.filter(
             group_snapshot=self,
             trainer_snapshot__isnull=True,
-        ).update(trainer_snapshot=self.trainer)
+        ).update(trainer_snapshot=trainer)
         Attendance.objects.filter(
             group_snapshot=self,
             salary_rate_snapshot__isnull=True,
-        ).update(salary_rate_snapshot=self.salary_rate)
+        ).update(salary_rate_snapshot=salary_rate)
 
 
 class ChildGroupMembership(models.Model):
@@ -609,6 +613,93 @@ class Child(models.Model):
     def __str__(self):
         return f"{self.last_name} {self.first_name}"
 
+    def _sync_primary_group_membership(
+        self,
+        *,
+        previous_group_id=None,
+        archive_previous=True,
+    ):
+        """Синхронизирует legacy Child.group с историей членств."""
+        if not self.pk or not self.group_id:
+            return
+
+        today = timezone.localdate()
+        membership, _ = ChildGroupMembership.objects.get_or_create(
+            child_id=self.pk,
+            group_id=self.group_id,
+            defaults={"is_primary": False},
+        )
+
+        if (
+            archive_previous
+            and previous_group_id
+            and previous_group_id != self.group_id
+        ):
+            self.group_memberships.filter(
+                group_id=previous_group_id,
+                archived_at__isnull=True,
+            ).update(
+                is_primary=False,
+                archived_at=today,
+            )
+
+        self.group_memberships.filter(
+            is_primary=True,
+            archived_at__isnull=True,
+        ).exclude(pk=membership.pk).update(is_primary=False)
+
+        changed_fields = []
+        if membership.archived_at is not None:
+            membership.archived_at = None
+            changed_fields.append("archived_at")
+        if not membership.is_primary:
+            membership.is_primary = True
+            changed_fields.append("is_primary")
+        if changed_fields:
+            membership.save(update_fields=changed_fields)
+
+    def save(
+        self,
+        *args,
+        preserve_previous_group_membership=False,
+        **kwargs,
+    ):
+        update_fields = kwargs.get("update_fields")
+        writes_group = (
+            self._state.adding
+            or update_fields is None
+            or "group" in update_fields
+        )
+
+        with transaction.atomic():
+            previous_group_id = None
+            if writes_group and not self._state.adding and self.pk:
+                previous_group_id = (
+                    type(self).objects
+                    .select_for_update()
+                    .filter(pk=self.pk)
+                    .values_list("group_id", flat=True)
+                    .first()
+                )
+
+            group_changed = (
+                self._state.adding
+                or (
+                    writes_group
+                    and previous_group_id != self.group_id
+                )
+            )
+
+            super().save(*args, **kwargs)
+
+            if group_changed:
+                self._sync_primary_group_membership(
+                    previous_group_id=previous_group_id,
+                    archive_previous=(
+                        not preserve_previous_group_membership
+                    ),
+                )
+
 
     # ---- вычисляемые поля карточки ----
     @property
@@ -928,17 +1019,28 @@ class Child(models.Model):
             return None
         return (end - timezone.localdate()).days
 
-    def freeze_current_history(self):
+    def freeze_current_history(
+        self,
+        *,
+        group=None,
+        trainer=None,
+        salary_rate=None,
+    ):
         """Фиксирует группу, тренера и ставку в старых отметках."""
-        if not self.group_id:
+        group = group or self.group
+        if not group:
             return
+
+        trainer = trainer or group.trainer
+        if salary_rate is None:
+            salary_rate = group.salary_rate
 
         self.attendances.filter(
             group_snapshot__isnull=True,
         ).update(
-            group_snapshot=self.group,
-            trainer_snapshot=self.group.trainer,
-            salary_rate_snapshot=self.group.salary_rate,
+            group_snapshot=group,
+            trainer_snapshot=trainer,
+            salary_rate_snapshot=salary_rate,
         )
 
     def archive(self):
