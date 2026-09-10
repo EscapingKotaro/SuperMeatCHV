@@ -85,7 +85,7 @@ class ProjectCompletionTests(TestCase):
     def test_subscription_without_payment_keeps_trial(self):
         self.trial(2)
         tariff = Tariff.objects.create(name='Стандарт', sessions_total=8, duration_days=30, price=5000)
-        self.client.post(reverse('payments'), {'action':'save_subscription', 'subscription-child':self.child.pk, 'subscription-tariff':tariff.pk, 'subscription-start_date':self.today.isoformat(), 'subscription-is_active':'on'})
+        self.client.post(reverse('payments'), {'action':'save_subscription', 'subscription-child':self.child.pk, 'subscription-group':self.group.pk, 'subscription-tariff':tariff.pk, 'subscription-start_date':self.today.isoformat(), 'subscription-is_active':'on'})
         self.child.refresh_from_db()
         self.assertEqual(self.child.status, Child.Status.TRIAL)
         self.assertEqual(self.child.subscriptions.count(), 1)
@@ -189,7 +189,7 @@ class ProjectCompletionTests(TestCase):
     def test_tariff_snapshot_and_sequential_discounts(self):
         self.child.discount_percent = 10; self.child.save()
         tariff = Tariff.objects.create(name='8 занятий', sessions_total=8, price=5000, duration_days=30)
-        data={'child':self.child.pk,'tariff':tariff.pk,'start_date':self.today,'promo':'Сентябрь','promo_percent':'20','promo_end_date':self.today+timedelta(days=10),'is_active':'on'}
+        data={'child':self.child.pk,'group':self.group.pk,'tariff':tariff.pk,'start_date':self.today,'promo':'Сентябрь','promo_percent':'20','promo_end_date':self.today+timedelta(days=10),'is_active':'on'}
         form=SubscriptionForm(data)
         self.assertTrue(form.is_valid(), form.errors)
         sub=form.save()
@@ -203,7 +203,7 @@ class ProjectCompletionTests(TestCase):
 
     def test_manual_values_are_preserved_and_invalid_percent_rejected(self):
         tariff=Tariff.objects.create(name='8',sessions_total=8,price=5000,duration_days=30)
-        data={'child':self.child.pk,'tariff':tariff.pk,'start_date':self.today,'manual_override':'on','end_date':self.today+timedelta(days=7),'sessions_total':3,'price':'1234','is_active':'on'}
+        data={'child':self.child.pk,'group':self.group.pk,'tariff':tariff.pk,'start_date':self.today,'manual_override':'on','end_date':self.today+timedelta(days=7),'sessions_total':3,'price':'1234','is_active':'on'}
         form=SubscriptionForm(data)
         self.assertTrue(form.is_valid(),form.errors)
         self.assertEqual(form.save().price,Decimal('1234'))
@@ -326,10 +326,11 @@ class ProjectCompletionTests(TestCase):
     def test_future_subscription_does_not_disable_current(self):
         current=self.subscription()
         tariff=Tariff.objects.create(name='Следующий',price=5000,sessions_total=8,duration_days=30)
-        self.client.post(reverse('payments'), {'action':'save_subscription','subscription-child':self.child.pk,'subscription-tariff':tariff.pk,'subscription-start_date':current.end_date+timedelta(days=1),'subscription-is_active':'on'})
+        self.client.post(reverse('payments'), {'action':'save_subscription','subscription-child':self.child.pk,'subscription-group':self.group.pk,'subscription-tariff':tariff.pk,'subscription-start_date':current.end_date+timedelta(days=1),'subscription-is_active':'on'})
         current.refresh_from_db()
         self.assertTrue(current.is_active)
         self.assertEqual(self.child.active_subscription().pk,current.pk)
+        self.assertTrue(Subscription.objects.filter(child=self.child, group=self.group, tariff=tariff).exists())
 
     def test_bad_payment_is_rejected_without_crashing_or_writing(self):
         for amount,day in [('NaN',self.today),('Infinity',self.today),('123','not-a-date'),('-1',self.today)]:

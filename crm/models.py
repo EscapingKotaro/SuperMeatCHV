@@ -9,7 +9,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 
-TRIAL_EXPIRY_DAYS = 14
+TRIAL_EXPIRY_DAYS = 30
 
 
 def age_label(birth_date=None, birth_year=None, age_text="", today=None):
@@ -507,7 +507,7 @@ class Child(models.Model):
 
     class Status(models.TextChoices):
         ACTIVE   = "active",   "Активный"
-        TRIAL    = "trial",    "Пробное (2 недели)"
+        TRIAL    = "trial",    "Пробное (1 месяц)"
         ARCHIVED = "archived", "Архив"
         LOST     = "lost",     "Потерянный"
 
@@ -1082,7 +1082,7 @@ class Child(models.Model):
         return self.total_paid() - self.total_spent() - self.related_total("attendances", "charge_amount")
 
     def is_trial_expired(self):
-        """Проверяем, истекли ли две недели после пробного без оплаты."""
+        """Проверяем, истёк ли месяц после пробного без оплаты."""
         if self.status != self.Status.TRIAL or not self.trial_from:
             return False
         today = timezone.localdate()

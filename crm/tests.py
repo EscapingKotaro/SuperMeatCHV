@@ -6818,7 +6818,16 @@ class CrmWorkflowTests(TestCase):
             reverse("child_card", args=[self.child.pk]),
         )
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Активный", count=2)
+        active_subscriptions = [
+            subscription
+            for subscription in response.context["subscriptions"]
+            if subscription.pk in response.context["active_subscription_ids"]
+        ]
+        self.assertEqual(len(active_subscriptions), 2)
+        self.assertEqual(
+            {subscription.group_id for subscription in active_subscriptions},
+            {self.group.pk, other_group.pk},
+        )
         self.assertContains(response, self.group.name)
         self.assertContains(response, other_group.name)
 
@@ -7074,15 +7083,15 @@ class CrmWorkflowTests(TestCase):
             (18, 30),
         )
 
-    def test_trial_expires_after_two_weeks_without_payment(self):
+    def test_trial_expires_after_thirty_days_without_payment(self):
         today = timezone.localdate()
         trial = Child.objects.create(
-            last_name="Двухнедельная",
+            last_name="Месячная",
             first_name="Проба",
             birth_year=2016,
             group=self.group,
             status=Child.Status.TRIAL,
-            trial_from=today - timedelta(days=13),
+            trial_from=today - timedelta(days=29),
         )
 
         self.assertFalse(trial.is_trial_expired())
@@ -7091,7 +7100,7 @@ class CrmWorkflowTests(TestCase):
         trial.refresh_from_db()
         self.assertEqual(trial.status, Child.Status.TRIAL)
 
-        trial.trial_from = today - timedelta(days=14)
+        trial.trial_from = today - timedelta(days=30)
         trial.save(update_fields=["trial_from"])
 
         self.assertTrue(trial.is_trial_expired())
