@@ -446,7 +446,8 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
         model = Subscription
         fields = (
             "child", "group", "tariff", "start_date", "end_date", "sessions_total",
-            "price", "promo", "promo_percent", "promo_end_date", "is_active",
+            "price", "promo", "promo_percent", "promo_start_date", "promo_end_date",
+            "is_active",
         )
         widgets = {
             "child": SubscriptionChildSelect(),
@@ -454,6 +455,7 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
             "tariff": SubscriptionTariffSelect(),
             "start_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "end_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
+            "promo_start_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "promo_end_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
         }
 
@@ -461,6 +463,7 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["start_date"].input_formats = ["%Y-%m-%d"]
         self.fields["end_date"].input_formats = ["%Y-%m-%d"]
+        self.fields["promo_start_date"].input_formats = ["%Y-%m-%d"]
         self.fields["promo_end_date"].input_formats = ["%Y-%m-%d"]
         current_child_id = self.instance.child_id if self.instance.pk else None
         current_group_id = self.instance.group_id if self.instance.pk else None
@@ -630,24 +633,33 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
             self.add_error("end_date", "Дата окончания не может быть раньше начала")
 
         promo = (cleaned.get("promo") or "").strip()
+        promo_start_date = cleaned.get("promo_start_date")
         promo_end_date = cleaned.get("promo_end_date")
         start_date = cleaned.get("start_date")
+
+        if promo and not promo_start_date and start_date:
+            promo_start_date = start_date
+            cleaned["promo_start_date"] = promo_start_date
 
         if promo and not promo_end_date:
             self.add_error(
                 "promo_end_date",
                 "Для акции укажите дату окончания",
             )
-        elif promo_end_date and not promo:
+        elif (promo_start_date or promo_end_date) and not promo:
             self.add_error(
                 "promo",
                 "Укажите название акции",
             )
 
-        if promo_end_date and start_date and promo_end_date < start_date:
+        if (
+            promo_start_date
+            and promo_end_date
+            and promo_end_date < promo_start_date
+        ):
             self.add_error(
                 "promo_end_date",
-                "Дата окончания акции не может быть раньше начала абонемента",
+                "Дата окончания акции не может быть раньше даты начала акции",
             )
 
         return cleaned

@@ -5402,7 +5402,20 @@ class CrmWorkflowTests(TestCase):
         ).exists())
         
     def test_cancelled_subscription_does_not_affect_current_state(self):
+        from .forms import SubscriptionForm
+
         today = timezone.localdate()
+        promo_start = today - timedelta(days=4)
+        promo_end = today + timedelta(days=4)
+        other_group = Group.objects.create(
+            name="Другая группа акции",
+            trainer=self.trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=other_group,
+            requires_subscription=True,
+        )
 
         subscription = Subscription.objects.create(
             child=self.child,
@@ -5411,12 +5424,34 @@ class CrmWorkflowTests(TestCase):
             sessions_total=8,
             price=Decimal("5600"),
             promo="Скидка 10%",
+            promo_percent=10,
+            promo_start_date=promo_start,
+            promo_end_date=promo_end,
             is_active=True,
         )
+        Attendance.objects.create(
+            child=self.child,
+            date=today - timedelta(days=3),
+            status=Attendance.Status.PRESENT,
+            group_snapshot=self.group,
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=today - timedelta(days=2),
+            status=Attendance.Status.ABSENT,
+            group_snapshot=self.group,
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=today - timedelta(days=1),
+            status=Attendance.Status.PRESENT,
+            group_snapshot=other_group,
+        )
 
+        self.assertEqual(subscription.sessions_used(), 2)
         self.assertEqual(
             self.child.sessions_left(),
-            8,
+            6,
         )
 
         self.assertEqual(
@@ -5424,19 +5459,70 @@ class CrmWorkflowTests(TestCase):
             subscription.end_date,
         )
 
-        self.assertEqual(
-            list(self.child.active_promos()),
-            [
-                (
-                    "Скидка 10%",
-                    subscription.end_date,
-                )
-            ],
+        promo = self.child.active_promos()[0]
+        self.assertEqual(promo["name"], "Скидка 10%")
+        self.assertEqual(promo["percent"], 10)
+        self.assertEqual(promo["start_date"], promo_start)
+        self.assertEqual(promo["end_date"], promo_end)
+        self.assertEqual(promo["sessions_used"], 2)
+        self.assertEqual(promo["sessions_total"], 8)
+
+        form_data = {
+            "child": self.child.pk,
+            "group": self.group.pk,
+            "tariff": "",
+            "start_date": today.isoformat(),
+            "end_date": (today + timedelta(days=30)).isoformat(),
+            "sessions_total": "8",
+            "price": "5600",
+            "promo": "Акция без ручного начала",
+            "promo_percent": "10",
+            "promo_start_date": "",
+            "promo_end_date": (today + timedelta(days=10)).isoformat(),
+            "is_active": "on",
+            "manual_override": "on",
+        }
+        form = SubscriptionForm(data=form_data)
+        self.assertTrue(form.is_valid(), form.errors.as_text())
+        self.assertEqual(form.cleaned_data["promo_start_date"], today)
+
+        invalid_form = SubscriptionForm(
+            data={
+                **form_data,
+                "promo_start_date": (
+                    today + timedelta(days=2)
+                ).isoformat(),
+                "promo_end_date": (
+                    today + timedelta(days=1)
+                ).isoformat(),
+            }
         )
+        self.assertFalse(invalid_form.is_valid())
+        self.assertIn("promo_end_date", invalid_form.errors)
 
         self.client.login(
             username="admin",
             password="TestPass123!",
+        )
+
+        card = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertEqual(card.status_code, 200)
+        self.assertContains(card, "Скидка 10%")
+        self.assertContains(
+            card,
+            f"{promo_start:%d.%m.%Y} — {promo_end:%d.%m.%Y}",
+        )
+        self.assertContains(card, "data-child-promo")
+        self.assertContains(card, 'data-used="2"')
+        self.assertContains(card, 'data-total="8"')
+        self.assertContains(card, "2/8")
+
+        payments = self.client.get(reverse("payments"))
+        self.assertContains(
+            payments,
+            'name="subscription-promo_start_date"',
         )
 
         response = self.client.post(

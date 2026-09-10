@@ -66,7 +66,7 @@ class SubscriptionInline(admin.TabularInline):
     readonly_fields = ("cancelled_at",)
     model = Subscription
     extra = 0
-    fields = ("start_date", "end_date", "sessions_total", "price", "promo", "promo_percent", "promo_end_date", "is_active", "cancelled_at")
+    fields = ("start_date", "end_date", "sessions_total", "price", "promo", "promo_percent", "promo_start_date", "promo_end_date", "is_active", "cancelled_at")
 
 class PaymentInline(admin.TabularInline):
     model = Payment

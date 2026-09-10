@@ -1047,29 +1047,46 @@ class Child(models.Model):
         )
 
     def active_promos(self):
-        """Акции текущих действующих абонементов."""
+        """Детали текущих акций по действующим абонементам."""
         today = timezone.localdate()
-
         promos = []
 
         subscriptions = (
             self.subscriptions
             .filter(
                 is_active=True,
+                cancelled_at__isnull=True,
                 start_date__lte=today,
                 end_date__gte=today,
             )
             .exclude(promo="")
-            .order_by("promo_end_date", "end_date")
+            .select_related("group")
+            .order_by("end_date", "pk")
         )
 
         for sub in subscriptions:
-            # Старые акции без отдельной даты продолжают работать:
-            # для них временно используем окончание абонемента.
+            # До появления отдельных границ акции её период совпадал
+            # с периодом абонемента — сохраняем совместимость старых записей.
+            promo_start = sub.promo_start_date or sub.start_date
             promo_end = sub.promo_end_date or sub.end_date
-            if promo_end >= today:
-                promos.append((sub.promo, promo_end))
+            if promo_start <= today <= promo_end:
+                promos.append({
+                    "name": sub.promo,
+                    "percent": sub.promo_percent,
+                    "start_date": promo_start,
+                    "end_date": promo_end,
+                    "sessions_used": sub.sessions_used(today),
+                    "sessions_total": sub.sessions_total,
+                    "group": sub.group or self.group,
+                })
 
+        promos.sort(
+            key=lambda promo: (
+                promo["end_date"],
+                promo["start_date"],
+                promo["name"],
+            )
+        )
         return promos
 
     def total_paid(self):
@@ -1216,6 +1233,7 @@ class Subscription(models.Model):
     discount_percent = models.PositiveSmallIntegerField("Индивидуальная скидка на момент покупки, %", default=0, validators=[MaxValueValidator(100)])
     cancelled_at = models.DateTimeField("Отменён", null=True, blank=True)
     promo = models.CharField("Акция / промо", max_length=100, blank=True)
+    promo_start_date = models.DateField("Дата начала акции", blank=True, null=True)
     promo_end_date = models.DateField("Дата окончания акции", blank=True, null=True)
     is_active = models.BooleanField("Действует", default=True)
 
@@ -1235,6 +1253,48 @@ class Subscription(models.Model):
     def effective_group_id(self):
         """Группа абонемента с fallback для исторических строк."""
         return self.group_id or self.child.group_id
+
+    def sessions_used(self, through_date=None):
+        """Число израсходованных занятий именно этого абонемента."""
+        group = self.group or self.child.group
+        if group is None:
+            return 0
+
+        through_date = min(
+            through_date or timezone.localdate(),
+            self.end_date,
+        )
+        if through_date < self.start_date:
+            return 0
+
+        cached = getattr(
+            self.child,
+            "_prefetched_objects_cache",
+            {},
+        ).get("attendances")
+        if cached is not None:
+            used = sum(
+                mark.status in ("present", "absent")
+                and self.start_date <= mark.date <= through_date
+                and self.child._attendance_matches_group(mark, group)
+                for mark in cached
+            )
+        else:
+            group_scope = models.Q(group_snapshot=group)
+            if self.child.group_id == group.pk:
+                group_scope |= models.Q(group_snapshot__isnull=True)
+            used = (
+                self.child.attendances
+                .filter(
+                    status__in=("present", "absent"),
+                    date__gte=self.start_date,
+                    date__lte=through_date,
+                )
+                .filter(group_scope)
+                .count()
+            )
+
+        return min(self.sessions_total, used)
 
     def save(self, *args, **kwargs):
         if self._state.adding and self.group_id is None and self.child_id:
