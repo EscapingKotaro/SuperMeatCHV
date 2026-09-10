@@ -23,11 +23,43 @@
             Все <span class="badge ml-1" data-lead-filter-count="all">0</span>
         </button>
     </div>
+    <div class="grid gap-2 border-b bg-slate-50/50 px-4 py-3 sm:grid-cols-2 xl:grid-cols-5" data-lead-detail-filters>
+        <label>
+            <span class="label">Статус</span>
+            <select class="field" data-lead-status-filter>
+                <option value="">Все статусы</option>
+                <option value="new">Новая заявка</option>
+                <option value="contacted">Связались</option>
+                <option value="qualified">Подходит</option>
+                <option value="lost">Закрыта</option>
+            </select>
+        </label>
+        <label>
+            <span class="label">Тренер</span>
+            <select class="field" data-lead-trainer-filter>
+                <option value="">Все тренеры</option>
+            </select>
+        </label>
+        <label>
+            <span class="label">Дата заявки с</span>
+            <input type="date" class="field" data-lead-date-from>
+        </label>
+        <label>
+            <span class="label">Дата заявки по</span>
+            <input type="date" class="field" data-lead-date-to>
+        </label>
+        <label>
+            <span class="label">Год рождения / возраст</span>
+            <input type="number" min="0" max="2100" inputmode="numeric" class="field"
+                   placeholder="Например 2016 или 10" data-lead-age-filter>
+        </label>
+    </div>
     <div class="table-wrap">
         <table class="data-table">
             <thead>
                 <tr>
                     <th>Заявка</th>
+                    <th>Дата заявки</th>
                     <th>Контакт</th>
                     <th>Источник</th>
                     <th>Тренер / группа</th><th>Пробное</th><th>Приход / оплата</th><th>Комментарий</th>
@@ -37,11 +69,19 @@
             </thead>
             <tbody data-lead-rows>
                 {% for lead in leads %}
-                <tr data-lead-row data-lead-state="{% if lead.status == 'qualified' or lead.status == 'lost' %}closed{% else %}open{% endif %}">
+                <tr data-lead-row
+                    data-lead-state="{% if lead.status == 'qualified' or lead.status == 'lost' %}closed{% else %}open{% endif %}"
+                    data-lead-status="{{ lead.status }}"
+                    data-lead-date="{{ lead.created_at|date:'Y-m-d' }}"
+                    data-lead-trainer-id="{{ lead.current_trial.trainer_id|default:'' }}"
+                    data-lead-trainer-name="{{ lead.current_trial.trainer.full_name|default:'' }}"
+                    data-lead-birth-year="{{ lead.birth_date|date:'Y' }}"
+                    data-lead-age="{{ lead.age_display }}">
                     <td>
                         <b>{{ lead.full_name }}</b>
-                        <small class="block text-slate-500">{{ lead.age_display }} · {{ lead.created_at|date:"d.m.Y" }}</small>
+                        <small class="block text-slate-500">{{ lead.age_display }}</small>
                     </td>
+                    <td class="whitespace-nowrap">{{ lead.created_at|date:"d.m.Y" }}</td>
                     <td>{{ lead.phone|default:"—" }}</td>
                     <td>{{ lead.source|default:"Не указан" }}{% if lead.imported_from_ad %}
                         <span class="badge ml-1 bg-slate-100 text-slate-600">из рекламы</span>
@@ -52,7 +92,13 @@
                     <td>{% if lead.current_newcomer %}{% if lead.current_newcomer.lesson_cancelled %}Отменено{% elif lead.current_newcomer.attended %}Пришёл{% else %}Не подтверждён{% endif %}<small class="block">{% if lead.current_newcomer.has_paid %}Оплачено{% else %}Нет оплаты{% endif %}</small>{% else %}—{% endif %}</td>
                     <td class="max-w-xs whitespace-pre-line">{{ lead.current_trial.comment|default:"—" }}</td>
                     <td>
-                        <span class="font-semibold">{{ lead.get_status_display }}</span>
+                        <span class="inline-flex rounded-lg px-2 py-1 text-xs font-bold
+                            {% if lead.status == 'new' %}bg-slate-100 text-slate-700
+                            {% elif lead.status == 'contacted' %}bg-amber-100 text-amber-800
+                            {% elif lead.status == 'qualified' %}bg-emerald-100 text-emerald-800
+                            {% else %}bg-red-100 text-red-700{% endif %}">
+                            {{ lead.get_status_display }}
+                        </span>
                         {% if lead.child %}
                         <small class="block text-emerald-700">Спортсмен создан</small>
                         {% elif lead.current_newcomer %}
@@ -87,12 +133,12 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="9" class="py-12 text-center text-slate-500">Заявок пока нет</td>
+                    <td colspan="10" class="py-12 text-center text-slate-500">Заявок пока нет</td>
                 </tr>
                 {% endfor %}
                 {% if leads %}
                 <tr data-lead-filter-empty hidden>
-                    <td colspan="9" class="py-12 text-center text-slate-500">В этом разделе заявок нет</td>
+                    <td colspan="10" class="py-12 text-center text-slate-500">В этом разделе заявок нет</td>
                 </tr>
                 {% endif %}
             </tbody>
@@ -159,6 +205,11 @@
     const rows = [...document.querySelectorAll('[data-lead-row]')];
     const buttons = [...document.querySelectorAll('[data-lead-filter]')];
     const emptyRow = document.querySelector('[data-lead-filter-empty]');
+    const statusFilter = document.querySelector('[data-lead-status-filter]');
+    const trainerFilter = document.querySelector('[data-lead-trainer-filter]');
+    const dateFromFilter = document.querySelector('[data-lead-date-from]');
+    const dateToFilter = document.querySelector('[data-lead-date-to]');
+    const ageFilter = document.querySelector('[data-lead-age-filter]');
     if (!buttons.length) return;
 
     const counts = {
@@ -171,17 +222,92 @@
         if (target) target.textContent = count;
     });
 
-    const requestedState = new URLSearchParams(window.location.search).get('state');
+    if (trainerFilter) {
+        const trainers = new Map();
+        rows.forEach(row => {
+            const id = row.dataset.leadTrainerId;
+            const name = row.dataset.leadTrainerName;
+            if (id && name) trainers.set(id, name);
+        });
+        [...trainers.entries()]
+            .sort((a, b) => a[1].localeCompare(b[1], 'ru'))
+            .forEach(([id, name]) => {
+                trainerFilter.add(new Option(name, id));
+            });
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const requestedState = params.get('state');
     const defaultLeadState = 'open';
     let state = ['open', 'closed', 'all'].includes(requestedState)
         ? requestedState
         : defaultLeadState;
 
+    if (statusFilter) {
+        const requested = params.get('status') || '';
+        statusFilter.value = [...statusFilter.options].some(option => option.value === requested)
+            ? requested
+            : '';
+    }
+    if (trainerFilter) {
+        const requested = params.get('trainer') || '';
+        trainerFilter.value = [...trainerFilter.options].some(option => option.value === requested)
+            ? requested
+            : '';
+    }
+    if (dateFromFilter) dateFromFilter.value = params.get('date_from') || '';
+    if (dateToFilter) dateToFilter.value = params.get('date_to') || '';
+    if (ageFilter) ageFilter.value = params.get('age') || '';
+
+    function matchesAge(row, rawValue) {
+        if (!rawValue) return true;
+        const value = Number(rawValue);
+        if (!Number.isFinite(value)) return true;
+        if (value >= 1900) {
+            return Number(row.dataset.leadBirthYear || 0) === value;
+        }
+        const match = (row.dataset.leadAge || '').match(/\d+/);
+        return Boolean(match) && Number(match[0]) === value;
+    }
+
+    function matchesDetailedFilters(row) {
+        const status = statusFilter?.value || '';
+        const trainer = trainerFilter?.value || '';
+        const dateFrom = dateFromFilter?.value || '';
+        const dateTo = dateToFilter?.value || '';
+        const age = ageFilter?.value || '';
+        return (!status || row.dataset.leadStatus === status)
+            && (!trainer || row.dataset.leadTrainerId === trainer)
+            && (!dateFrom || row.dataset.leadDate >= dateFrom)
+            && (!dateTo || row.dataset.leadDate <= dateTo)
+            && matchesAge(row, age);
+    }
+
+    function syncUrl() {
+        const url = new URL(window.location.href);
+        const filters = {
+            state,
+            status: statusFilter?.value || '',
+            trainer: trainerFilter?.value || '',
+            date_from: dateFromFilter?.value || '',
+            date_to: dateToFilter?.value || '',
+            age: ageFilter?.value || '',
+        };
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value) url.searchParams.set(key, value);
+            else url.searchParams.delete(key);
+        });
+        url.searchParams.delete('edit');
+        url.searchParams.delete('create');
+        window.history.replaceState({}, '', url);
+    }
+
     function applyLeadFilter(nextState, updateUrl = false) {
         state = nextState;
         let visible = 0;
         rows.forEach(row => {
-            const show = state === 'all' || row.dataset.leadState === state;
+            const matchesState = state === 'all' || row.dataset.leadState === state;
+            const show = matchesState && matchesDetailedFilters(row);
             row.hidden = !show;
             if (show) visible += 1;
         });
@@ -194,13 +320,7 @@
             button.setAttribute('aria-pressed', active ? 'true' : 'false');
         });
 
-        if (updateUrl) {
-            const url = new URL(window.location.href);
-            url.searchParams.set('state', state);
-            url.searchParams.delete('edit');
-            url.searchParams.delete('create');
-            window.history.replaceState({}, '', url);
-        }
+        if (updateUrl) syncUrl();
     }
 
     buttons.forEach(button => {
@@ -208,6 +328,11 @@
             applyLeadFilter(button.dataset.leadFilter, true);
         });
     });
+    [statusFilter, trainerFilter, dateFromFilter, dateToFilter, ageFilter]
+        .filter(Boolean)
+        .forEach(control => {
+            control.addEventListener('change', () => applyLeadFilter(state, true));
+        });
     applyLeadFilter(state);
 })();
 </script>

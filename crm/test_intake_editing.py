@@ -1,8 +1,10 @@
+from datetime import date
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Lead, Newcomer
+from .models import Lead, Newcomer, Trainer
 
 
 class IntakeEditRegressionTests(TestCase):
@@ -255,3 +257,36 @@ class IntakeEditRegressionTests(TestCase):
             "state === 'all' || row.dataset.leadState === state",
         )
         self.assertContains(response, "Назначить пробное")
+
+    def test_applications_have_detailed_filters_and_application_date(self):
+        trainer = Trainer.objects.create(
+            full_name="Тренер фильтра",
+        )
+        Lead.objects.create(
+            full_name="Фильтруемая заявка",
+            birth_date=date(2015, 4, 10),
+            trainer=trainer,
+            status=Lead.Status.CONTACTED,
+        )
+
+        response = self.client.get(reverse("applications"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "<th>Дата заявки</th>", html=True)
+        self.assertContains(response, 'data-lead-status-filter')
+        self.assertContains(response, 'data-lead-trainer-filter')
+        self.assertContains(response, 'data-lead-date-from')
+        self.assertContains(response, 'data-lead-date-to')
+        self.assertContains(response, 'data-lead-age-filter')
+        self.assertContains(response, 'data-lead-status="contacted"')
+        self.assertContains(
+            response,
+            f'data-lead-trainer-id="{trainer.pk}"',
+        )
+        self.assertContains(response, 'data-lead-birth-year="2015"')
+        self.assertContains(response, 'data-lead-date="')
+        self.assertContains(response, "matchesDetailedFilters")
+        self.assertContains(response, "row.dataset.leadDate >= dateFrom")
+        self.assertContains(response, "row.dataset.leadDate <= dateTo")
+        self.assertContains(response, "matchesAge(row, age)")
+        self.assertContains(response, 'colspan="10"')
