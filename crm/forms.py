@@ -434,19 +434,40 @@ class ApparatusForm(StyledFormMixin, forms.ModelForm):
         self.apply_styles()
 
 
+class LeadGroupSelect(forms.Select):
+    """Добавляет группе ID тренера для зависимого выбора в форме заявки."""
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(
+            name,
+            value,
+            label,
+            selected,
+            index,
+            subindex=subindex,
+            attrs=attrs,
+        )
+        instance = getattr(value, "instance", None)
+        if instance is not None:
+            option["attrs"]["data-trainer-id"] = str(instance.trainer_id)
+        return option
+
+
 class LeadForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = Lead
-        fields = ("full_name", "birth_date", "age_text", "source", "phone", "trial_at", "trainer", "group", "status", "comment")
+        fields = ("full_name", "birth_date", "source", "phone", "trial_at", "trainer", "group", "status", "comment")
         widgets = {
             "birth_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "trial_at": forms.DateTimeInput(format="%Y-%m-%dT%H:%M", attrs={"type": "datetime-local"}),
+            "group": LeadGroupSelect(),
             "comment": forms.Textarea(attrs={"rows": 3}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields["birth_date"].input_formats = ["%Y-%m-%d"]
+        self.fields["birth_date"].help_text = "Возраст рассчитывается автоматически"
         self.fields["trial_at"].input_formats = ["%Y-%m-%dT%H:%M"]
         if self.instance.pk and self.instance.newcomers.exists():
             for name in ("trial_at", "trainer", "group", "comment"):
@@ -454,6 +475,16 @@ class LeadForm(StyledFormMixin, forms.ModelForm):
                 self.fields[name].disabled = True
                 self.fields[name].help_text = "Пробное изменяется в разделе «Новички»"
         self.apply_styles()
+
+    def clean(self):
+        cleaned = super().clean()
+        trainer = cleaned.get("trainer")
+        group = cleaned.get("group")
+        if group and not trainer:
+            self.add_error("group", "Сначала выберите тренера")
+        elif group and group.trainer_id != trainer.pk:
+            self.add_error("group", "Выберите группу выбранного тренера")
+        return cleaned
 
 
 class NewcomerForm(StyledFormMixin, forms.ModelForm):

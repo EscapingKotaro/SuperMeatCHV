@@ -165,7 +165,9 @@
         <div class="modal-body grid max-h-[70vh] gap-4 overflow-y-auto sm:grid-cols-2">
             {% for field in form %}
             <label class="{% if field.name == 'comment' %}sm:col-span-2{% endif %}">
-                <span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}<small>{{ field.help_text }}</small></label>
+                <span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}<small>{{ field.help_text }}</small>
+                {% if field.name == 'birth_date' %}<small class="block text-slate-500" data-lead-age-preview>{% if editing and editing.birth_date %}Сейчас: {{ editing.age_display }}{% else %}Укажите дату рождения{% endif %}</small>{% endif %}
+            </label>
             {% endfor %}
         </div>
         <div class="modal-foot">
@@ -334,6 +336,71 @@
             control.addEventListener('change', () => applyLeadFilter(state, true));
         });
     applyLeadFilter(state);
+})();
+</script>
+<script>
+(() => {
+    const modal = document.querySelector('#lead-modal');
+    const birthDate = modal?.querySelector('[name="birth_date"]');
+    const agePreview = modal?.querySelector('[data-lead-age-preview]');
+    const trainer = modal?.querySelector('[name="trainer"]');
+    const group = modal?.querySelector('[name="group"]');
+
+    function plural(value, one, few, many) {
+        const mod100 = value % 100;
+        const mod10 = value % 10;
+        if (mod100 >= 11 && mod100 <= 14) return many;
+        if (mod10 === 1) return one;
+        if (mod10 >= 2 && mod10 <= 4) return few;
+        return many;
+    }
+
+    function updateAgePreview() {
+        if (!birthDate || !agePreview) return;
+        if (!birthDate.value) {
+            agePreview.textContent = 'Укажите дату рождения';
+            return;
+        }
+        const born = new Date(`${birthDate.value}T00:00:00`);
+        const today = new Date();
+        let months = (today.getFullYear() - born.getFullYear()) * 12
+            + today.getMonth() - born.getMonth();
+        if (today.getDate() < born.getDate()) months -= 1;
+        months = Math.max(0, months);
+        const years = Math.floor(months / 12);
+        const restMonths = months % 12;
+        const parts = [];
+        if (years) parts.push(`${years} ${plural(years, 'год', 'года', 'лет')}`);
+        if (restMonths || !years) {
+            parts.push(`${restMonths} ${plural(restMonths, 'месяц', 'месяца', 'месяцев')}`);
+        }
+        agePreview.textContent = `Возраст: ${parts.join(' ')}`;
+    }
+
+    function syncGroups() {
+        if (!trainer || !group || trainer.disabled) return;
+        const trainerId = trainer.value;
+        let selectedMatches = false;
+        [...group.options].forEach(option => {
+            if (!option.value) return;
+            const matches = Boolean(trainerId) && option.dataset.trainerId === trainerId;
+            option.hidden = !matches;
+            option.disabled = !matches;
+            if (option.selected && matches) selectedMatches = true;
+        });
+        if (!selectedMatches) group.value = '';
+        group.disabled = !trainerId;
+        if (group.options[0]) {
+            group.options[0].textContent = trainerId
+                ? '— Выберите группу —'
+                : '— Сначала выберите тренера —';
+        }
+    }
+
+    birthDate?.addEventListener('change', updateAgePreview);
+    trainer?.addEventListener('change', syncGroups);
+    updateAgePreview();
+    syncGroups();
 })();
 </script>
 {% if editing or form.errors or request.GET.create == "1" %}

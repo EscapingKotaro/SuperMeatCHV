@@ -292,6 +292,102 @@ class IntakeEditRegressionTests(TestCase):
         self.assertContains(response, 'colspan="10"')
 
 
+    def test_application_form_calculates_age_from_birth_date_and_gates_groups_by_trainer(self):
+        trainer = Trainer.objects.create(full_name="Основной тренер")
+        other_trainer = Trainer.objects.create(full_name="Другой тренер")
+        group = Group.objects.create(name="Группа тренера", trainer=trainer)
+        other_group = Group.objects.create(name="Чужая группа", trainer=other_trainer)
+
+        response = self.client.get(f"{reverse('applications')}?create=1")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="birth_date"')
+        self.assertNotContains(response, 'name="age_text"')
+        self.assertContains(response, "Возраст рассчитывается автоматически")
+        self.assertContains(response, "data-lead-age-preview")
+        self.assertContains(response, f'data-trainer-id="{trainer.pk}"')
+        self.assertContains(response, f'data-trainer-id="{other_trainer.pk}"')
+        self.assertContains(response, "function updateAgePreview()")
+        self.assertContains(response, "function syncGroups()")
+        self.assertContains(response, "group.disabled = !trainerId")
+        self.assertContains(response, "option.dataset.trainerId === trainerId")
+
+        wrong_group = self.client.post(
+            reverse("applications"),
+            {
+                "action": "save",
+                "form_mode": "create",
+                "editing_id": "",
+                "full_name": "Несовпадающая группа",
+                "birth_date": "2016-04-15",
+                "trainer": str(trainer.pk),
+                "group": str(other_group.pk),
+                "status": Lead.Status.NEW,
+            },
+        )
+        self.assertEqual(wrong_group.status_code, 200)
+        self.assertContains(wrong_group, "Выберите группу выбранного тренера")
+        self.assertFalse(Lead.objects.filter(full_name="Несовпадающая группа").exists())
+
+        without_trainer = self.client.post(
+            reverse("applications"),
+            {
+                "action": "save",
+                "form_mode": "create",
+                "editing_id": "",
+                "full_name": "Группа без тренера",
+                "birth_date": "2016-04-15",
+                "group": str(group.pk),
+                "status": Lead.Status.NEW,
+            },
+        )
+        self.assertEqual(without_trainer.status_code, 200)
+        self.assertContains(without_trainer, "Сначала выберите тренера")
+        self.assertFalse(Lead.objects.filter(full_name="Группа без тренера").exists())
+
+        valid = self.client.post(
+            reverse("applications"),
+            {
+                "action": "save",
+                "form_mode": "create",
+                "editing_id": "",
+                "full_name": "Корректная заявка",
+                "birth_date": "2016-04-15",
+                "trainer": str(trainer.pk),
+                "group": str(group.pk),
+                "status": Lead.Status.NEW,
+            },
+        )
+        self.assertRedirects(valid, reverse("applications"))
+        lead = Lead.objects.get(full_name="Корректная заявка")
+        self.assertEqual(lead.birth_date, date(2016, 4, 15))
+        self.assertEqual(lead.trainer, trainer)
+        self.assertEqual(lead.group, group)
+
+    def test_application_edit_keeps_locked_trial_fields_compatible_with_group_gate(self):
+        trainer = Trainer.objects.create(full_name="Тренер пробного")
+        group = Group.objects.create(name="Группа пробного", trainer=trainer)
+        lead = Lead.objects.create(
+            full_name="Заявка с пробным",
+            trainer=trainer,
+            group=group,
+            status=Lead.Status.QUALIFIED,
+        )
+        Newcomer.objects.create(
+            lead=lead,
+            full_name=lead.full_name,
+            trainer=trainer,
+            group=group,
+        )
+
+        response = self.client.get(f"{reverse('applications')}?edit={lead.pk}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'name="trainer"', count=1)
+        self.assertContains(response, 'name="group"', count=1)
+        self.assertContains(response, "Пробное изменяется в разделе «Новички»")
+        self.assertContains(response, "if (!trainer || !group || trainer.disabled) return;")
+
     def test_newcomers_have_filters_and_inline_operational_flags(self):
         trainer = Trainer.objects.create(full_name="Тренер пробников")
         group = Group.objects.create(name="Пробная группа", trainer=trainer)
