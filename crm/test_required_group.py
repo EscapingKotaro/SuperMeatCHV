@@ -107,3 +107,59 @@ class RequiredChildGroupTests(TestCase):
             newcomer.child.group_id,
             self.group.pk,
         )
+
+    def test_group_list_has_trainer_age_state_and_child_count_filters(self):
+        second_trainer = Trainer.objects.create(
+            full_name="Другой тренер",
+        )
+        second_group = Group.objects.create(
+            name="Архивная группа",
+            trainer=second_trainer,
+            is_active=False,
+        )
+        Child.objects.create(
+            last_name="Фильтрова",
+            first_name="Анна",
+            birth_year=2014,
+            group=self.group,
+        )
+        Child.objects.create(
+            last_name="Архивная",
+            first_name="Елена",
+            birth_year=2017,
+            group=second_group,
+        )
+
+        response = self.client.get(reverse("group_list"))
+
+        self.assertEqual(response.status_code, 200)
+        for marker in (
+            'data-group-filter="trainer"',
+            'data-group-filter="state"',
+            'data-group-filter="age"',
+            'data-group-filter="min_children"',
+            'data-group-filter="max_children"',
+            "data-group-filter-reset",
+            "data-group-filter-empty",
+        ):
+            self.assertContains(response, marker)
+        self.assertContains(
+            response,
+            f'data-trainer-id="{self.trainer.pk}"',
+        )
+        self.assertContains(
+            response,
+            f'data-trainer-id="{second_trainer.pk}"',
+        )
+        self.assertContains(response, 'data-group-state="active"')
+        self.assertContains(response, 'data-group-state="archive"')
+        self.assertContains(response, 'data-child-count="1"')
+        self.assertContains(response, 'data-child-birth-values="2014"')
+        self.assertContains(response, 'data-child-birth-values="2017"')
+        self.assertContains(response, "function childAgeMatches")
+        self.assertContains(response, "count >= minChildren")
+        self.assertContains(response, "count <= maxChildren")
+        self.assertContains(
+            response,
+            "section.querySelector('[data-group-row]:not([hidden])')",
+        )

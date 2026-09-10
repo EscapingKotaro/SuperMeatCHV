@@ -1,12 +1,24 @@
 {% extends "crm/base.html" %}
 
 {% block actions %}
-<a href="?create=1" class="btn btn-primary">
+<a href="?state={{ trainer_state|default:'active' }}&create=1" class="btn btn-primary">
     <i data-lucide="user-plus"></i>Добавить тренера
 </a>
 {% endblock %}
 
 {% block content %}
+<div class="mb-4 flex flex-wrap items-center gap-2" data-trainer-filters>
+    <a href="?state=active" class="btn {% if trainer_state == 'active' %}btn-primary{% else %}btn-soft{% endif %}">
+        Активные <span class="badge ml-1">{{ trainer_active_count|default:0 }}</span>
+    </a>
+    <a href="?state=archive" class="btn {% if trainer_state == 'archive' %}btn-primary{% else %}btn-soft{% endif %}">
+        Архив <span class="badge ml-1">{{ trainer_archive_count|default:0 }}</span>
+    </a>
+    <a href="?state=all" class="btn {% if trainer_state == 'all' %}btn-primary{% else %}btn-soft{% endif %}">
+        Все <span class="badge ml-1">{{ trainer_total_count|default:0 }}</span>
+    </a>
+</div>
+
 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
     {% for trainer in trainers %}
     <div class="card p-5 {% if not trainer.is_active %}opacity-60{% endif %}">
@@ -48,12 +60,24 @@
         </div>
 
         <div class="flex gap-2 pt-3 border-t border-slate-100">
-            <a href="?edit={{ trainer.pk }}" class="flex-1 text-center py-2 text-xs font-bold text-slate-600 bg-slate-50 rounded-lg hover:bg-slate-100">
+            <a href="?state={{ trainer_state }}&edit={{ trainer.pk }}" class="flex-1 text-center py-2 text-xs font-bold text-slate-600 bg-slate-50 rounded-lg hover:bg-slate-100">
                 <i data-lucide="edit-3" class="inline h-3 w-3 mr-1"></i>Изменить
             </a>
-            <a href="{% url 'trainer_delete' trainer.id %}" class="flex-1 text-center py-2 text-xs font-bold text-red-600 bg-red-50 rounded-lg hover:bg-red-100">
-                <i data-lucide="trash-2" class="inline h-3 w-3 mr-1"></i>Удалить
-            </a>
+            <form method="post" action="{% url 'trainer_list' %}" class="flex-1">
+                {% csrf_token %}
+                <input type="hidden" name="trainer_id" value="{{ trainer.pk }}">
+                {% if trainer.is_active %}
+                <input type="hidden" name="action" value="archive">
+                <button class="w-full py-2 text-xs font-bold text-amber-700 bg-amber-50 rounded-lg hover:bg-amber-100">
+                    <i data-lucide="archive" class="inline h-3 w-3 mr-1"></i>В архив
+                </button>
+                {% else %}
+                <input type="hidden" name="action" value="restore">
+                <button class="w-full py-2 text-xs font-bold text-emerald-700 bg-emerald-50 rounded-lg hover:bg-emerald-100">
+                    <i data-lucide="archive-restore" class="inline h-3 w-3 mr-1"></i>Восстановить
+                </button>
+                {% endif %}
+            </form>
         </div>
     </div>
     {% empty %}

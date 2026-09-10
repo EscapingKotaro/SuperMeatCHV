@@ -29,8 +29,9 @@
             <select class="field" data-lead-status-filter>
                 <option value="">Все статусы</option>
                 <option value="new">Новая заявка</option>
-                <option value="contacted">Связались</option>
-                <option value="qualified">Подходит</option>
+                <option value="contacted">В работе</option>
+                <option value="qualified">Пробное</option>
+                <option value="paid">Оплатил</option>
                 <option value="lost">Закрыта</option>
             </select>
         </label>
@@ -70,8 +71,10 @@
             <tbody data-lead-rows>
                 {% for lead in leads %}
                 <tr data-lead-row
-                    data-lead-state="{% if lead.status == 'qualified' or lead.status == 'lost' %}closed{% else %}open{% endif %}"
-                    data-lead-status="{{ lead.status }}"
+                    data-lead-state="{% if lead.status == 'lost' or lead.current_newcomer.has_paid %}closed{% else %}open{% endif %}"
+                    data-lead-status="{% if lead.status == 'lost' %}lost{% elif lead.current_newcomer.has_paid %}paid{% else %}{{ lead.status }}{% endif %}"
+                    data-lead-visual="{% if lead.status == 'lost' %}closed{% elif lead.current_newcomer.has_paid %}paid{% elif lead.status == 'qualified' %}trial{% elif lead.status == 'contacted' %}work{% else %}new{% endif %}"
+                    class="border-l-4 {% if lead.status == 'lost' %}border-red-500 bg-red-50{% elif lead.current_newcomer.has_paid %}border-sky-500 bg-sky-100{% elif lead.status == 'qualified' %}border-emerald-600 bg-emerald-100{% elif lead.status == 'contacted' %}border-amber-400 bg-amber-50{% else %}border-transparent bg-white{% endif %}"
                     data-lead-date="{{ lead.created_at|date:'Y-m-d' }}"
                     data-lead-trainer-id="{{ lead.current_trial.trainer_id|default:'' }}"
                     data-lead-trainer-name="{{ lead.current_trial.trainer.full_name|default:'' }}"
@@ -92,13 +95,33 @@
                     <td>{% if lead.current_newcomer %}{% if lead.current_newcomer.lesson_cancelled %}Отменено{% elif lead.current_newcomer.attended %}Пришёл{% else %}Не подтверждён{% endif %}<small class="block">{% if lead.current_newcomer.has_paid %}Оплачено{% else %}Нет оплаты{% endif %}</small>{% else %}—{% endif %}</td>
                     <td class="max-w-xs whitespace-pre-line">{{ lead.current_trial.comment|default:"—" }}</td>
                     <td>
-                        <span class="inline-flex rounded-lg px-2 py-1 text-xs font-bold
-                            {% if lead.status == 'new' %}bg-slate-100 text-slate-700
-                            {% elif lead.status == 'contacted' %}bg-amber-100 text-amber-800
-                            {% elif lead.status == 'qualified' %}bg-emerald-100 text-emerald-800
-                            {% else %}bg-red-100 text-red-700{% endif %}">
-                            {{ lead.get_status_display }}
-                        </span>
+                        <form method="post" class="min-w-36" data-lead-status-form>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="quick_status">
+                            <input type="hidden" name="lead_id" value="{{ lead.pk }}">
+                            <select name="status" aria-label="Статус заявки: {{ lead.full_name }}"
+                                    class="w-full rounded-lg border px-2 py-1 text-xs font-bold
+                                    {% if lead.status == 'lost' %}border-red-300 bg-red-100 text-red-800
+                                    {% elif lead.current_newcomer.has_paid %}border-sky-400 bg-sky-600 text-white
+                                    {% elif lead.status == 'qualified' %}border-emerald-700 bg-emerald-700 text-white
+                                    {% elif lead.status == 'contacted' %}border-amber-300 bg-amber-100 text-amber-900
+                                    {% else %}border-slate-300 bg-white text-slate-700{% endif %}"
+                                    onchange="this.form.submit()">
+                                {% if lead.current_newcomer.has_paid and lead.status != 'lost' %}
+                                <option value="paid" selected>Оплатил</option>
+                                {% endif %}
+                                <option value="new" {% if lead.current_newcomer.has_paid %}disabled{% elif lead.status == 'new' %}selected{% endif %}>Новая заявка</option>
+                                <option value="contacted" {% if lead.current_newcomer.has_paid %}disabled{% elif lead.status == 'contacted' %}selected{% endif %}>В работе</option>
+                                <option value="qualified" {% if lead.current_newcomer.has_paid %}disabled{% elif lead.status == 'qualified' %}selected{% endif %}>Пробное</option>
+                                {% if lead.current_newcomer.has_paid and lead.status == 'lost' %}
+                                <option value="paid">Оплатил</option>
+                                {% endif %}
+                                <option value="lost" {% if lead.status == 'lost' %}selected{% endif %}>Закрыта</option>
+                            </select>
+                        </form>
+                        {% if lead.current_newcomer.has_paid and lead.status != 'lost' %}
+                        <small class="mt-1 block font-semibold text-sky-700" data-paid-status-source>по фактической оплате</small>
+                        {% endif %}
                         {% if lead.child %}
                         <small class="block text-emerald-700">Спортсмен создан</small>
                         {% elif lead.current_newcomer %}

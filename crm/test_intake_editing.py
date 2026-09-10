@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Group, Lead, Newcomer, Trainer
+from .models import Child, Group, Lead, Newcomer, Payment, Trainer
 
 
 class IntakeEditRegressionTests(TestCase):
@@ -64,7 +64,7 @@ class IntakeEditRegressionTests(TestCase):
         self.assertRedirects(response, reverse("applications"))
         lead.refresh_from_db()
         self.assertEqual(lead.full_name, "После редактирования")
-        self.assertEqual(lead.status, Lead.Status.CONTACTED)
+        self.assertEqual(lead.status, Lead.Status.NEW)
         self.assertEqual(Lead.objects.count(), 1)
 
     def test_stale_newcomer_query_cannot_overwrite_old_record(self):
@@ -303,6 +303,7 @@ class IntakeEditRegressionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'name="birth_date"')
         self.assertNotContains(response, 'name="age_text"')
+        self.assertNotIn("status", response.context["form"].fields)
         self.assertContains(response, "Возраст рассчитывается автоматически")
         self.assertContains(response, "data-lead-age-preview")
         self.assertContains(response, f'data-trainer-id="{trainer.pk}"')
@@ -387,6 +388,89 @@ class IntakeEditRegressionTests(TestCase):
         self.assertContains(response, 'name="group"', count=1)
         self.assertContains(response, "Пробное изменяется в разделе «Новички»")
         self.assertContains(response, "if (!trainer || !group || trainer.disabled) return;")
+
+    def test_application_status_is_inline_and_uses_spec_colors(self):
+        for name, status in (
+            ("Новая", Lead.Status.NEW),
+            ("Рабочая", Lead.Status.CONTACTED),
+            ("Пробная", Lead.Status.QUALIFIED),
+            ("Закрытая", Lead.Status.LOST),
+        ):
+            Lead.objects.create(full_name=name, status=status)
+
+        response = self.client.get(f"{reverse('applications')}?state=all")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-lead-status-form')
+        self.assertContains(response, 'name="action" value="quick_status"')
+        for label in ("Новая заявка", "В работе", "Пробное", "Оплатил", "Закрыта"):
+            self.assertContains(response, label)
+        for visual in ("new", "work", "trial", "closed"):
+            self.assertContains(response, f'data-lead-visual="{visual}"')
+        for color in (
+            "border-amber-400 bg-amber-50",
+            "border-emerald-600 bg-emerald-100",
+            "border-red-500 bg-red-50",
+        ):
+            self.assertContains(response, color)
+
+    def test_application_quick_status_and_paid_state_follow_real_payment(self):
+        trainer = Trainer.objects.create(full_name="Тренер оплаты")
+        group = Group.objects.create(name="Группа оплаты", trainer=trainer)
+        child = Child.objects.create(
+            last_name="Платёжный", first_name="Ребёнок", birth_year=2016, group=group,
+        )
+        lead = Lead.objects.create(
+            full_name="Быстрый статус", status=Lead.Status.NEW,
+            trainer=trainer, group=group, child=child,
+        )
+        Newcomer.objects.create(
+            lead=lead, full_name=lead.full_name, trainer=trainer, group=group, child=child,
+        )
+        target = f"{reverse('applications')}?state=all&status=contacted"
+
+        response = self.client.post(target, {
+            "action": "quick_status", "lead_id": str(lead.pk),
+            "status": Lead.Status.CONTACTED,
+        })
+        self.assertRedirects(response, target)
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, Lead.Status.CONTACTED)
+
+        response = self.client.post(reverse("applications"), {
+            "action": "quick_status", "lead_id": str(lead.pk), "status": "paid",
+        })
+        self.assertRedirects(response, reverse("applications"))
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, Lead.Status.CONTACTED)
+
+        payment = Payment.objects.create(child=child, amount="5000")
+        paid_page = self.client.get(f"{reverse('applications')}?state=all")
+        self.assertContains(paid_page, 'data-lead-status="paid"')
+        self.assertContains(paid_page, 'data-lead-state="closed"')
+        self.assertContains(paid_page, 'data-lead-visual="paid"')
+        self.assertContains(paid_page, "border-sky-500 bg-sky-100")
+        self.assertContains(paid_page, 'data-paid-status-source')
+
+        closed = self.client.post(reverse("applications"), {
+            "action": "quick_status", "lead_id": str(lead.pk),
+            "status": Lead.Status.LOST,
+        })
+        self.assertRedirects(closed, reverse("applications"))
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, Lead.Status.LOST)
+
+        reopened = self.client.post(reverse("applications"), {
+            "action": "quick_status", "lead_id": str(lead.pk), "status": "paid",
+        })
+        self.assertRedirects(reopened, reverse("applications"))
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, Lead.Status.QUALIFIED)
+
+        payment.delete()
+        trial_page = self.client.get(f"{reverse('applications')}?state=all")
+        self.assertContains(trial_page, 'data-lead-status="qualified"')
+        self.assertContains(trial_page, 'data-lead-visual="trial"')
 
     def test_newcomers_have_filters_and_inline_operational_flags(self):
         trainer = Trainer.objects.create(full_name="Тренер пробников")

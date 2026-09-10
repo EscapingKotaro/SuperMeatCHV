@@ -2,7 +2,150 @@
 {% block actions %}<a href="?create=1" class="btn btn-primary">Добавить группу</a>{% endblock %}
 {% block content %}
 {% regroup groups by trainer as trainer_groups %}
-{% for section in trainer_groups %}<section id="trainer-{{ section.grouper.pk }}" class="card mb-4 overflow-hidden"><h2 class="p-4 font-bold">{{ section.grouper|default:'Без тренера' }}</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Группа</th><th>Расписание</th><th>Спортсмены</th><th>Действия</th></tr></thead><tbody>{% for group in section.list %}<tr><td><a class="font-bold underline" href="{% url 'attendance' %}?group_id={{ group.pk }}">{{ group.name }}</a>{% if not group.is_active %}<small class="block">Неактивна</small>{% endif %}</td><td>{% for slot in group.schedule.all %}<span class="inline-block mr-3">{{ slot.get_weekday_display }} {{ slot.start_time|time:'H:i' }}</span>{% empty %}Нет расписания{% endfor %}</td><td>{{ group.children.count }}</td><td><a class="btn btn-soft" href="?edit={{ group.pk }}">Изменить</a> <a class="btn btn-soft text-red-600" href="{% url 'group_delete' group.pk %}">Удалить</a></td></tr>{% endfor %}</tbody></table></div></section>{% empty %}<section class="card p-6">Групп пока нет</section>{% endfor %}
+<section class="card mb-4 p-4" data-group-filters>
+    <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <label>
+            <span class="label">Тренер</span>
+            <select class="field" data-group-filter="trainer">
+                <option value="">Все тренеры</option>
+                {% for section in trainer_groups %}<option value="{{ section.grouper.pk }}">{{ section.grouper|default:"Без тренера" }}</option>{% endfor %}
+            </select>
+        </label>
+        <label>
+            <span class="label">Состояние</span>
+            <select class="field" data-group-filter="state">
+                <option value="all">Все группы</option>
+                <option value="active">Активные</option>
+                <option value="archive">Неактивные</option>
+            </select>
+        </label>
+        <label>
+            <span class="label">Год рождения / возраст</span>
+            <input type="number" min="0" max="2100" inputmode="numeric" class="field"
+                   placeholder="Например 2016 или 10" data-group-filter="age">
+        </label>
+        <label>
+            <span class="label">Детей от</span>
+            <input type="number" min="0" inputmode="numeric" class="field" data-group-filter="min_children">
+        </label>
+        <label>
+            <span class="label">Детей до</span>
+            <input type="number" min="0" inputmode="numeric" class="field" data-group-filter="max_children">
+        </label>
+    </div>
+    <div class="mt-3 flex items-center justify-between gap-3">
+        <small class="text-slate-500">Возраст проверяется по детям, которые сейчас числятся в группе.</small>
+        <button type="button" class="btn btn-soft" data-group-filter-reset>Сбросить</button>
+    </div>
+</section>
+{% for section in trainer_groups %}<section id="trainer-{{ section.grouper.pk }}" class="card mb-4 overflow-hidden" data-group-section><h2 class="p-4 font-bold">{{ section.grouper|default:'Без тренера' }}</h2><div class="table-wrap"><table class="data-table"><thead><tr><th>Группа</th><th>Расписание</th><th>Спортсмены</th><th>Действия</th></tr></thead><tbody>{% for group in section.list %}<tr data-group-row data-trainer-id="{{ group.trainer_id }}" data-group-state="{% if group.is_active %}active{% else %}archive{% endif %}" data-child-count="{{ group.children.count }}" data-child-birth-values="{% for child in group.children.all %}{% if child.birth_date %}{{ child.birth_date|date:'Y-m-d' }}{% else %}{{ child.birth_year }}{% endif %}{% if not forloop.last %},{% endif %}{% endfor %}"><td><a class="font-bold underline" href="{% url 'attendance' %}?group_id={{ group.pk }}">{{ group.name }}</a>{% if not group.is_active %}<small class="block">Неактивна</small>{% endif %}</td><td>{% for slot in group.schedule.all %}<span class="inline-block mr-3">{{ slot.get_weekday_display }} {{ slot.start_time|time:'H:i' }}</span>{% empty %}Нет расписания{% endfor %}</td><td>{{ group.children.count }}</td><td><a class="btn btn-soft" href="?edit={{ group.pk }}">Изменить</a> <a class="btn btn-soft text-red-600" href="{% url 'group_delete' group.pk %}">Удалить</a></td></tr>{% endfor %}</tbody></table></div></section>{% empty %}<section class="card p-6">Групп пока нет</section>{% endfor %}
+{% if groups %}<section class="card p-6 text-center text-slate-500" data-group-filter-empty hidden>По выбранным фильтрам групп нет</section>{% endif %}
 {% endblock %}
 {% block modals %}{% if group_form %}<section class="modal open" id="group-modal"><div class="modal-head"><b>{{ form_title }}</b><a href="{% url 'group_list' %}" aria-label="Закрыть">×</a></div><div class="modal-body">{% include 'crm/group_fields.html' %}</div></section>{% endif %}{% endblock %}
-{% block scripts %}{% if group_form %}<script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>{% endif %}{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+    const rows = [...document.querySelectorAll('[data-group-row]')];
+    const sections = [...document.querySelectorAll('[data-group-section]')];
+    const controls = Object.fromEntries(
+        [...document.querySelectorAll('[data-group-filter]')]
+            .map(control => [control.dataset.groupFilter, control]),
+    );
+    const empty = document.querySelector('[data-group-filter-empty]');
+    const reset = document.querySelector('[data-group-filter-reset]');
+    if (!rows.length || !Object.keys(controls).length) return;
+
+    const params = new URLSearchParams(window.location.search);
+    Object.entries(controls).forEach(([name, control]) => {
+        const value = params.get(name);
+        if (value !== null) control.value = value;
+    });
+    if (!controls.state.value) controls.state.value = 'all';
+
+    function childAgeMatches(rawValues, rawFilter) {
+        if (!rawFilter) return true;
+        const target = Number(rawFilter);
+        if (!Number.isFinite(target)) return true;
+        const today = new Date();
+        return rawValues.split(',').filter(Boolean).some(raw => {
+            if (target >= 1900) {
+                return Number(raw.slice(0, 4)) === target;
+            }
+            if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
+                const born = new Date(`${raw}T00:00:00`);
+                let age = today.getFullYear() - born.getFullYear();
+                const birthdayPassed = (
+                    today.getMonth() > born.getMonth()
+                    || (
+                        today.getMonth() === born.getMonth()
+                        && today.getDate() >= born.getDate()
+                    )
+                );
+                if (!birthdayPassed) age -= 1;
+                return age === target;
+            }
+            return today.getFullYear() - Number(raw) === target;
+        });
+    }
+
+    function syncUrl() {
+        const url = new URL(window.location.href);
+        Object.entries(controls).forEach(([name, control]) => {
+            const value = control.value;
+            if (value && !(name === 'state' && value === 'all')) {
+                url.searchParams.set(name, value);
+            } else {
+                url.searchParams.delete(name);
+            }
+        });
+        url.searchParams.delete('edit');
+        url.searchParams.delete('create');
+        window.history.replaceState({}, '', url);
+    }
+
+    function applyFilters(updateUrl = false) {
+        const trainer = controls.trainer.value;
+        const state = controls.state.value || 'all';
+        const age = controls.age.value.trim();
+        const minChildren = controls.min_children.value === ''
+            ? null
+            : Number(controls.min_children.value);
+        const maxChildren = controls.max_children.value === ''
+            ? null
+            : Number(controls.max_children.value);
+        let visible = 0;
+
+        rows.forEach(row => {
+            const count = Number(row.dataset.childCount || 0);
+            const show = (!trainer || row.dataset.trainerId === trainer)
+                && (state === 'all' || row.dataset.groupState === state)
+                && (minChildren === null || count >= minChildren)
+                && (maxChildren === null || count <= maxChildren)
+                && childAgeMatches(row.dataset.childBirthValues || '', age);
+            row.hidden = !show;
+            if (show) visible += 1;
+        });
+
+        sections.forEach(section => {
+            section.hidden = !section.querySelector('[data-group-row]:not([hidden])');
+        });
+        if (empty) empty.hidden = visible !== 0;
+        if (updateUrl) syncUrl();
+    }
+
+    Object.values(controls).forEach(control => {
+        control.addEventListener('change', () => applyFilters(true));
+    });
+    reset?.addEventListener('click', () => {
+        controls.trainer.value = '';
+        controls.state.value = 'all';
+        controls.age.value = '';
+        controls.min_children.value = '';
+        controls.max_children.value = '';
+        applyFilters(true);
+    });
+    applyFilters();
+})();
+</script>
+{% if group_form %}<script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>{% endif %}
+{% endblock %}

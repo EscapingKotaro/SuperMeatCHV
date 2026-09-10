@@ -456,7 +456,7 @@ class LeadGroupSelect(forms.Select):
 class LeadForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = Lead
-        fields = ("full_name", "birth_date", "source", "phone", "trial_at", "trainer", "group", "status", "comment")
+        fields = ("full_name", "birth_date", "source", "phone", "trial_at", "trainer", "group", "comment")
         widgets = {
             "birth_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "trial_at": forms.DateTimeInput(format="%Y-%m-%dT%H:%M", attrs={"type": "datetime-local"}),

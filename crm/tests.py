@@ -579,6 +579,65 @@ class CrmWorkflowTests(TestCase):
             'id="trainer-modal" class="modal open"',
         )
 
+    def test_trainer_archive_is_explicit_filterable_and_reversible(self):
+        archived = Trainer.objects.create(
+            full_name="Тренер из архива",
+            is_active=False,
+        )
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        active_page = self.client.get(reverse("trainer_list"))
+        self.assertEqual(active_page.status_code, 200)
+        self.assertContains(active_page, self.trainer.full_name)
+        self.assertNotContains(active_page, archived.full_name)
+        self.assertContains(active_page, 'data-trainer-filters')
+        self.assertContains(active_page, 'name="action" value="archive"')
+        self.assertNotContains(
+            active_page,
+            reverse("trainer_delete", args=[self.trainer.pk]),
+        )
+
+        archive_response = self.client.post(
+            reverse("trainer_list"),
+            {
+                "action": "archive",
+                "trainer_id": str(self.trainer.pk),
+            },
+        )
+        self.assertRedirects(
+            archive_response,
+            f"{reverse('trainer_list')}?state=archive",
+        )
+        self.trainer.refresh_from_db()
+        self.group.refresh_from_db()
+        self.assertFalse(self.trainer.is_active)
+        self.assertEqual(self.group.trainer_id, self.trainer.pk)
+
+        archive_page = self.client.get(
+            reverse("trainer_list"),
+            {"state": "archive"},
+        )
+        self.assertContains(archive_page, self.trainer.full_name)
+        self.assertContains(archive_page, archived.full_name)
+        self.assertContains(archive_page, 'name="action" value="restore"')
+
+        restore_response = self.client.post(
+            reverse("trainer_list"),
+            {
+                "action": "restore",
+                "trainer_id": str(self.trainer.pk),
+            },
+        )
+        self.assertRedirects(
+            restore_response,
+            f"{reverse('trainer_list')}?state=active",
+        )
+        self.trainer.refresh_from_db()
+        self.assertTrue(self.trainer.is_active)
+
     def test_legacy_group_form_gets_redirect_to_list_modals(self):
         self.client.login(
             username="admin",

@@ -5150,16 +5150,76 @@ from .forms import TrainerForm, GroupForm, ScheduleSlotFormSet
 
 # ==================== ТРЕНЕРЫ ====================
 
+def _trainer_list_data(request):
+    state = request.GET.get("state", "active")
+    if state not in {"active", "archive", "all"}:
+        state = "active"
+
+    base = Trainer.objects.prefetch_related("groups")
+    counts = Trainer.objects.aggregate(
+        active=Count("pk", filter=Q(is_active=True)),
+        archive=Count("pk", filter=Q(is_active=False)),
+    )
+    trainers = base
+    if state == "active":
+        trainers = trainers.filter(is_active=True)
+    elif state == "archive":
+        trainers = trainers.filter(is_active=False)
+
+    return (
+        state,
+        trainers.order_by("full_name"),
+        counts["active"],
+        counts["archive"],
+    )
+
+
 @login_required
 def trainer_list_view(request):
-    """Список тренеров и встроенное редактирование."""
+    """Список тренеров, архив и встроенное редактирование."""
+    state, trainers, active_count, archive_count = _trainer_list_data(request)
+
+    if request.method == "POST":
+        action = request.POST.get("action")
+        if action in {"archive", "restore"}:
+            trainer = get_object_or_404(
+                Trainer,
+                pk=_optional_pk(request.POST.get("trainer_id")),
+            )
+            make_active = action == "restore"
+            if trainer.is_active != make_active:
+                trainer.is_active = make_active
+                trainer.save(update_fields=["is_active"])
+                log_action(
+                    request,
+                    f"trainer.{action}",
+                    trainer,
+                    (
+                        f"Тренер {trainer.full_name} "
+                        f"{'восстановлен из архива' if make_active else 'перенесён в архив'}"
+                    ),
+                )
+            messages.success(
+                request,
+                (
+                    f"Тренер {trainer.full_name} восстановлен"
+                    if make_active
+                    else f"Тренер {trainer.full_name} добавлен в архив"
+                ),
+            )
+            target_state = "active" if make_active else "archive"
+            return redirect(f"{reverse('trainer_list')}?state={target_state}")
+
     editing_id = _optional_pk(request.GET.get("edit"))
     if editing_id is not None or request.GET.get("create"):
         request._inline_trainer = True
         return trainer_edit_view(request, editing_id) if editing_id is not None else trainer_create_view(request)
-    trainers = Trainer.objects.all().prefetch_related('groups').order_by('full_name')
     context = {
         'trainers': trainers,
+        'trainer_state': state,
+        'trainer_active_count': active_count,
+        'trainer_archive_count': archive_count,
+        'trainer_total_count': active_count + archive_count,
         'title': 'Тренеры',
         'subtitle': 'Управление тренерским составом',
         'page': 'trainers'
@@ -5186,9 +5246,14 @@ def trainer_create_view(request):
         'title': 'Новый тренер',
         'page': 'trainers'
     }
+    state, trainers, active_count, archive_count = _trainer_list_data(request)
     context["form_title"] = context["title"]
     context["title"] = "Тренеры"
-    context["trainers"] = Trainer.objects.prefetch_related("groups").order_by("full_name")
+    context["trainers"] = trainers
+    context["trainer_state"] = state
+    context["trainer_active_count"] = active_count
+    context["trainer_archive_count"] = archive_count
+    context["trainer_total_count"] = active_count + archive_count
     return render(request, "crm/trainers.html", context)
 
 @login_required
@@ -5213,9 +5278,14 @@ def trainer_edit_view(request, pk):
         'title': f'Редактирование: {trainer.full_name}',
         'page': 'trainers'
     }
+    state, trainers, active_count, archive_count = _trainer_list_data(request)
     context["form_title"] = context["title"]
     context["title"] = "Тренеры"
-    context["trainers"] = Trainer.objects.prefetch_related("groups").order_by("full_name")
+    context["trainers"] = trainers
+    context["trainer_state"] = state
+    context["trainer_active_count"] = active_count
+    context["trainer_archive_count"] = archive_count
+    context["trainer_total_count"] = active_count + archive_count
     return render(request, "crm/trainers.html", context)
 
 @login_required

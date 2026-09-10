@@ -1,6 +1,8 @@
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
+from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect
+from django.urls import reverse
 
 from . import views
 from .models import Lead, Newcomer
@@ -45,12 +47,74 @@ def _start_clean_create(request):
     request.GET = query
 
 
+def _applications_return_url(request):
+    """Возвращает к текущим фильтрам, не переоткрывая модалку."""
+    query = request.GET.copy()
+    query.pop("edit", None)
+    query.pop("create", None)
+    url = reverse("applications")
+    encoded = query.urlencode()
+    return f"{url}?{encoded}" if encoded else url
+
+
 @login_required
 def applications_page(request):
-    if (
-        request.method == "POST"
-        and request.POST.get("action", "save") == "save"
-    ):
+    action = request.POST.get("action", "save")
+
+    if request.method == "POST" and action == "quick_status":
+        requested_status = (request.POST.get("status") or "").strip()
+        status_labels = {
+            Lead.Status.NEW.value: "Новая заявка",
+            Lead.Status.CONTACTED.value: "В работе",
+            Lead.Status.QUALIFIED.value: "Пробное",
+            Lead.Status.LOST.value: "Закрыта",
+        }
+
+        with transaction.atomic():
+            lead = get_object_or_404(
+                Lead.objects.select_for_update(),
+                pk=views._optional_pk(request.POST.get("lead_id")),
+            )
+            has_paid = lead.newcomers.filter(
+                child__payments__amount__gt=0,
+            ).exists()
+
+            if requested_status == "paid":
+                if not has_paid:
+                    messages.error(
+                        request,
+                        "Статус «Оплатил» определяется только фактической оплатой",
+                    )
+                    return redirect(_applications_return_url(request))
+                new_status = Lead.Status.QUALIFIED.value
+            elif requested_status in status_labels:
+                if has_paid and requested_status != Lead.Status.LOST.value:
+                    messages.error(
+                        request,
+                        "У оплаченной заявки статус «Оплатил» определяется автоматически",
+                    )
+                    return redirect(_applications_return_url(request))
+                new_status = requested_status
+            else:
+                messages.error(request, "Недоступный статус заявки")
+                return redirect(_applications_return_url(request))
+
+            if lead.status != new_status:
+                lead.status = new_status
+                lead.save(update_fields=["status"])
+                views.log_action(
+                    request,
+                    "lead.quick_status",
+                    lead,
+                    (
+                        f"{lead.full_name}: статус — "
+                        f"{'Оплатил' if requested_status == 'paid' else status_labels[new_status]}"
+                    ),
+                )
+
+        return redirect(_applications_return_url(request))
+
+    if request.method == "POST" and action == "save":
         _set_form_target(request, Lead)
     else:
         _start_clean_create(request)
