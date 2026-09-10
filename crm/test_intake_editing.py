@@ -315,15 +315,23 @@ class IntakeEditRegressionTests(TestCase):
             'data-filter="to"',
             'data-filter="attended"',
             'data-filter="paid"',
+            'data-filter="documents"',
+            'data-filter="not_liked"',
             'data-filter="cancelled"',
         ):
             self.assertContains(response, marker)
         self.assertContains(response, 'data-birth-year="2015"')
         self.assertContains(response, 'name="field" value="attended"')
+        self.assertContains(response, 'name="field" value="documents_collected"')
+        self.assertContains(response, 'name="field" value="trial_not_liked"')
         self.assertContains(response, 'name="field" value="lesson_cancelled"')
         self.assertNotContains(response, 'name="field" value="paid"')
+        self.assertContains(response, 'data-documents="0"')
+        self.assertContains(response, 'data-not-liked="0"')
         self.assertContains(response, "matchesAge(row, v.age)")
         self.assertContains(response, "row.dataset.paid === v.paid")
+        self.assertContains(response, "row.dataset.documents === v.documents")
+        self.assertContains(response, "row.dataset.notLiked === v.not_liked")
 
     def test_newcomer_quick_flags_are_mutually_exclusive_and_paid_is_read_only(self):
         newcomer = Newcomer.objects.create(
@@ -362,3 +370,80 @@ class IntakeEditRegressionTests(TestCase):
         newcomer.refresh_from_db()
         self.assertFalse(newcomer.paid)
         self.assertFalse(newcomer.has_paid)
+
+    def test_newcomer_documents_and_not_liked_flags_keep_trial_state_consistent(self):
+        newcomer = Newcomer.objects.create(
+            full_name="Результат пробного",
+            lesson_cancelled=True,
+        )
+
+        response = self.client.post(
+            reverse("newcomers"),
+            {
+                "action": "quick_flag",
+                "newcomer_id": str(newcomer.pk),
+                "field": "documents_collected",
+                "value": "1",
+            },
+        )
+        self.assertRedirects(response, reverse("newcomers"))
+        newcomer.refresh_from_db()
+        self.assertTrue(newcomer.documents_collected)
+        self.assertTrue(newcomer.lesson_cancelled)
+
+        response = self.client.post(
+            reverse("newcomers"),
+            {
+                "action": "quick_flag",
+                "newcomer_id": str(newcomer.pk),
+                "field": "trial_not_liked",
+                "value": "1",
+            },
+        )
+        self.assertRedirects(response, reverse("newcomers"))
+        newcomer.refresh_from_db()
+        self.assertTrue(newcomer.trial_not_liked)
+        self.assertTrue(newcomer.attended)
+        self.assertFalse(newcomer.lesson_cancelled)
+
+        response = self.client.post(
+            reverse("newcomers"),
+            {
+                "action": "quick_flag",
+                "newcomer_id": str(newcomer.pk),
+                "field": "attended",
+                "value": "0",
+            },
+        )
+        self.assertRedirects(response, reverse("newcomers"))
+        newcomer.refresh_from_db()
+        self.assertFalse(newcomer.attended)
+        self.assertFalse(newcomer.trial_not_liked)
+
+        newcomer.attended = True
+        newcomer.trial_not_liked = True
+        newcomer.save(update_fields=["attended", "trial_not_liked"])
+        response = self.client.post(
+            reverse("newcomers"),
+            {
+                "action": "quick_flag",
+                "newcomer_id": str(newcomer.pk),
+                "field": "lesson_cancelled",
+                "value": "1",
+            },
+        )
+        self.assertRedirects(response, reverse("newcomers"))
+        newcomer.refresh_from_db()
+        self.assertTrue(newcomer.lesson_cancelled)
+        self.assertFalse(newcomer.attended)
+        self.assertFalse(newcomer.trial_not_liked)
+
+        normalized = Newcomer.objects.create(
+            full_name="Нормализация пробного",
+            attended=True,
+            lesson_cancelled=True,
+            trial_not_liked=True,
+        )
+        self.assertTrue(normalized.lesson_cancelled)
+        self.assertFalse(normalized.attended)
+        self.assertFalse(normalized.trial_not_liked)

@@ -1616,6 +1616,8 @@ class Newcomer(models.Model):
     attended = models.BooleanField("Был на пробном", default=False)
     paid = models.BooleanField("Оплатил", default=False)
     lesson_cancelled = models.BooleanField("Занятие отменено", default=False)
+    documents_collected = models.BooleanField("Забрал документы", default=False)
+    trial_not_liked = models.BooleanField("Был, но не понравилось", default=False)
     comment = models.TextField("Комментарий / перенос", blank=True)
     child = models.OneToOneField(Child, on_delete=models.SET_NULL, blank=True, null=True,
                                  related_name="source_newcomer", verbose_name="карточка спортсмена")
@@ -1645,10 +1647,27 @@ class Newcomer(models.Model):
         with transaction.atomic():
             if self.lead_id:
                 Lead.objects.select_for_update().get(pk=self.lead_id)
+
+            normalized_fields = set()
+            if self.lesson_cancelled:
+                if self.attended:
+                    self.attended = False
+                    normalized_fields.add("attended")
+                if self.trial_not_liked:
+                    self.trial_not_liked = False
+                    normalized_fields.add("trial_not_liked")
+            elif self.trial_not_liked and not self.attended:
+                self.attended = True
+                normalized_fields.add("attended")
+
             # paid is never accepted as manual input.
             self.paid = self.has_paid
             if kwargs.get("update_fields") is not None:
-                kwargs["update_fields"] = set(kwargs["update_fields"]) | {"paid"}
+                kwargs["update_fields"] = (
+                    set(kwargs["update_fields"])
+                    | normalized_fields
+                    | {"paid"}
+                )
             super().save(*args, **kwargs)
             if self.lead_id:
                 fields = kwargs.get("update_fields")

@@ -68,27 +68,49 @@ def newcomers_page(request):
             pk=views._optional_pk(request.POST.get("newcomer_id")),
         )
         field = (request.POST.get("field") or "").strip()
-        if field not in {"attended", "lesson_cancelled"}:
+        flag_labels = {
+            "attended": "был на пробном",
+            "lesson_cancelled": "занятие отменено",
+            "documents_collected": "забрал документы",
+            "trial_not_liked": "был, но не понравилось",
+        }
+        if field not in flag_labels:
             messages.error(request, "Недоступный быстрый признак")
             return redirect(request.get_full_path())
 
         enabled = request.POST.get("value") == "1"
         setattr(newcomer, field, enabled)
-        update_fields = [field]
+        update_fields = {field}
 
-        paired_field = "lesson_cancelled" if field == "attended" else "attended"
-        if enabled and getattr(newcomer, paired_field):
-            setattr(newcomer, paired_field, False)
-            update_fields.append(paired_field)
+        if field == "attended":
+            if enabled and newcomer.lesson_cancelled:
+                newcomer.lesson_cancelled = False
+                update_fields.add("lesson_cancelled")
+            if not enabled and newcomer.trial_not_liked:
+                newcomer.trial_not_liked = False
+                update_fields.add("trial_not_liked")
+        elif field == "lesson_cancelled" and enabled:
+            if newcomer.attended:
+                newcomer.attended = False
+                update_fields.add("attended")
+            if newcomer.trial_not_liked:
+                newcomer.trial_not_liked = False
+                update_fields.add("trial_not_liked")
+        elif field == "trial_not_liked" and enabled:
+            if not newcomer.attended:
+                newcomer.attended = True
+                update_fields.add("attended")
+            if newcomer.lesson_cancelled:
+                newcomer.lesson_cancelled = False
+                update_fields.add("lesson_cancelled")
 
-        newcomer.save(update_fields=update_fields)
+        newcomer.save(update_fields=sorted(update_fields))
         views.log_action(
             request,
             "newcomer.quick_flag",
             newcomer,
             (
-                f"{newcomer.full_name}: "
-                f"{'был на пробном' if field == 'attended' else 'занятие отменено'} "
+                f"{newcomer.full_name}: {flag_labels[field]} "
                 f"— {'да' if enabled else 'нет'}"
             ),
         )

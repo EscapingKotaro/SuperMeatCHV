@@ -21,6 +21,12 @@
         <select class="field" data-filter="paid">
             <option value="">Оплата: все</option><option value="1">Оплатил</option><option value="0">Не оплатил</option>
         </select>
+        <select class="field" data-filter="documents">
+            <option value="">Документы: все</option><option value="1">Документы забраны</option><option value="0">Документы не забраны</option>
+        </select>
+        <select class="field" data-filter="not_liked">
+            <option value="">Результат: все</option><option value="1">Был, но не понравилось</option><option value="0">Без отметки «не понравилось»</option>
+        </select>
         <select class="field" data-filter="cancelled">
             <option value="">Отмена: все</option><option value="1">Отменено</option><option value="0">Не отменено</option>
         </select>
@@ -34,6 +40,8 @@
                     <th>Дата заявки</th><th>Возраст</th><th>Тренер / группа</th><th>Пробное</th>
                     <th class="text-center">Был</th>
                     <th class="text-center">Оплатил</th>
+                    <th class="text-center">Документы</th>
+                    <th class="text-center">Не понравилось</th>
                     <th class="text-center">Отмена</th>
                     <th>Комментарий</th>
                     <th>Действия</th>
@@ -50,6 +58,8 @@
                     data-age="{{ item.age_display }}"
                     data-attended="{% if item.attended %}1{% else %}0{% endif %}"
                     data-paid="{% if item.has_paid %}1{% else %}0{% endif %}"
+                    data-documents="{% if item.documents_collected %}1{% else %}0{% endif %}"
+                    data-not-liked="{% if item.trial_not_liked %}1{% else %}0{% endif %}"
                     data-cancelled="{% if item.lesson_cancelled %}1{% else %}0{% endif %}">
                     <td>
                         <b>{{ item.full_name }}</b>
@@ -72,6 +82,28 @@
                         <input type="checkbox" class="h-4 w-4" disabled
                                title="Оплата определяется по фактическим платежам"
                                aria-label="Оплата: {{ item.full_name }}" {% if item.has_paid %}checked{% endif %}>
+                    </td>
+                    <td class="text-center">
+                        <form method="post" class="inline-flex" data-quick-flag>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="quick_flag">
+                            <input type="hidden" name="newcomer_id" value="{{ item.pk }}">
+                            <input type="hidden" name="field" value="documents_collected">
+                            <input type="checkbox" name="value" value="1" class="h-4 w-4"
+                                   aria-label="Документы забраны: {{ item.full_name }}"
+                                   {% if item.documents_collected %}checked{% endif %} onchange="this.form.submit()">
+                        </form>
+                    </td>
+                    <td class="text-center">
+                        <form method="post" class="inline-flex" data-quick-flag>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="quick_flag">
+                            <input type="hidden" name="newcomer_id" value="{{ item.pk }}">
+                            <input type="hidden" name="field" value="trial_not_liked">
+                            <input type="checkbox" name="value" value="1" class="h-4 w-4"
+                                   aria-label="Был, но не понравилось: {{ item.full_name }}"
+                                   {% if item.trial_not_liked %}checked{% endif %} onchange="this.form.submit()">
+                        </form>
                     </td>
                     <td class="text-center">
                         <form method="post" class="inline-flex" data-quick-flag>
@@ -103,12 +135,12 @@
                 </tr>
                 {% empty %}
                 <tr>
-                    <td colspan="10" class="py-12 text-center text-slate-500">Новичков пока нет</td>
+                    <td colspan="12" class="py-12 text-center text-slate-500">Новичков пока нет</td>
                 </tr>
                 {% endfor %}
                 {% if newcomers %}
                 <tr data-filter-empty hidden>
-                    <td colspan="10" class="py-12 text-center text-slate-500">По фильтрам ничего не найдено</td>
+                    <td colspan="12" class="py-12 text-center text-slate-500">По фильтрам ничего не найдено</td>
                 </tr>
                 {% endif %}
             </tbody>
@@ -181,6 +213,8 @@
                 && (!v.to || row.dataset.applicationDate <= v.to)
                 && (!v.attended || row.dataset.attended === v.attended)
                 && (!v.paid || row.dataset.paid === v.paid)
+                && (!v.documents || row.dataset.documents === v.documents)
+                && (!v.not_liked || row.dataset.notLiked === v.not_liked)
                 && (!v.cancelled || row.dataset.cancelled === v.cancelled)
                 && matchesAge(row, v.age)
             );
