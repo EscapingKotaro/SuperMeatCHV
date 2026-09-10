@@ -409,17 +409,18 @@
             {% if subscriptions %}
             <div class="space-y-2">
                 {% for sub in subscriptions %}
-                <div class="border border-slate-200 rounded-xl p-3 {% if sub == active_sub %}bg-emerald-50 border-emerald-200{% endif %}">
+                <div class="border border-slate-200 rounded-xl p-3 {% if sub.pk in active_subscription_ids %}bg-emerald-50 border-emerald-200{% endif %}">
                     <div class="flex items-center justify-between mb-1">
                         <div class="flex items-center gap-2">
                             <b class="text-sm">{{ sub.start_date|date:"d.m" }} — {{ sub.end_date|date:"d.m" }}</b>
-                            {% if sub == active_sub %}
+                            {% if sub.pk in active_subscription_ids %}
                             <span class="px-1.5 py-0.5 text-[9px] font-bold bg-emerald-100 text-emerald-700 rounded">Активный</span>
                             {% endif %}
                         </div>
                         <b class="text-sm">{{ sub.price }} ₽</b>
                     </div>
                     <div class="flex items-center gap-3 text-[10px] text-slate-500">
+                        <span class="font-semibold text-slate-600">{{ sub.group|default:child.group }}</span>
                         <span>{{ sub.sessions_total }} занятий{% if sub.cancelled_at %} · Отменён{% endif %} · Индивидуальная скидка {{ sub.discount_percent }}%</span>
                         {% if sub.promo %}
                         <span class="text-[#FF5C35] font-bold">

@@ -690,6 +690,17 @@ class Child(models.Model):
                 )
             )
 
+            if (
+                group_changed
+                and previous_group_id
+                and not self._state.adding
+            ):
+                # Старые абонементы без group должны остаться привязаны
+                # к той группе, для которой они были оформлены.
+                self.subscriptions.filter(group__isnull=True).update(
+                    group_id=previous_group_id,
+                )
+
             super().save(*args, **kwargs)
 
             if group_changed:
@@ -706,12 +717,76 @@ class Child(models.Model):
     def trainer(self):
         return self.group.trainer if self.group else None
 
-    def active_subscription(self):
+    def _subscription_matches_group(self, subscription, group):
+        if group is None:
+            return False
+        return (
+            subscription.group_id == group.pk
+            or (
+                subscription.group_id is None
+                and self.group_id == group.pk
+            )
+        )
+
+    def _attendance_matches_group(self, mark, group):
+        if group is None:
+            return False
+        return (
+            mark.group_snapshot_id == group.pk
+            or (
+                mark.group_snapshot_id is None
+                and self.group_id == group.pk
+            )
+        )
+
+    def _subscription_group_scope(self, group):
+        if group is None:
+            return models.Q(pk__in=[])
+        scope = models.Q(group=group)
+        if self.group_id == group.pk:
+            scope |= models.Q(group__isnull=True)
+        return scope
+
+    def active_subscription(self, group=None):
+        """Текущий абонемент конкретной группы; без аргумента — основной."""
+        group = group or self.group
+        if group is None:
+            return None
+
         today = timezone.localdate()
-        cached = getattr(self, "_prefetched_objects_cache", {}).get("subscriptions")
+        cached = getattr(
+            self,
+            "_prefetched_objects_cache",
+            {},
+        ).get("subscriptions")
         if cached is not None:
-            return min((sub for sub in cached if sub.is_active and not sub.cancelled_at and sub.start_date <= today <= sub.end_date), key=lambda sub: sub.end_date, default=None)
-        return self.subscriptions.filter(is_active=True, cancelled_at__isnull=True, start_date__lte=today, end_date__gte=today).order_by("end_date").first()
+            return min(
+                (
+                    sub
+                    for sub in cached
+                    if (
+                        sub.is_active
+                        and not sub.cancelled_at
+                        and sub.start_date <= today <= sub.end_date
+                        and self._subscription_matches_group(sub, group)
+                    )
+                ),
+                key=lambda sub: (sub.end_date, sub.pk),
+                default=None,
+            )
+
+        return (
+            self.subscriptions
+            .filter(
+                is_active=True,
+                cancelled_at__isnull=True,
+                start_date__lte=today,
+                end_date__gte=today,
+            )
+            .filter(self._subscription_group_scope(group))
+            .order_by("end_date", "pk")
+            .first()
+        )
 
     def age_display(self):
         return age_label(self.birth_date, self.birth_year)
@@ -804,90 +879,99 @@ class Child(models.Model):
         group_id = mark.group_snapshot_id or self.group_id
         return group_id not in excluded
 
-    def sessions_left(self):
-        """Остаток занятий по текущему действующему абонементу."""
-        today = timezone.localdate()
-        subscription = self.active_subscription()
-        if not subscription:
+    def sessions_left(self, group=None):
+        """Остаток занятий по действующему абонементу выбранной группы."""
+        group = group or self.group
+        subscription = self.active_subscription(group)
+        if not subscription or group is None:
             return 0
 
-        excluded_group_ids = self._non_subscription_group_ids()
-        cached = getattr(self, "_prefetched_objects_cache", {}).get("attendances")
+        today = timezone.localdate()
+        cached = getattr(
+            self,
+            "_prefetched_objects_cache",
+            {},
+        ).get("attendances")
         if cached is not None:
             used = sum(
                 mark.status in ("present", "absent")
                 and subscription.start_date <= mark.date <= today
-                and self._attendance_uses_subscription(
-                    mark,
-                    excluded_group_ids,
-                )
+                and self._attendance_matches_group(mark, group)
                 for mark in cached
             )
         else:
-            usage = self.attendances.filter(
-                status__in=("present", "absent"),
-                date__gte=subscription.start_date,
-                date__lte=today,
-            )
-            if excluded_group_ids:
-                excluded_marks = models.Q(
-                    group_snapshot_id__in=excluded_group_ids,
+            group_scope = models.Q(group_snapshot=group)
+            if self.group_id == group.pk:
+                group_scope |= models.Q(group_snapshot__isnull=True)
+            used = (
+                self.attendances
+                .filter(
+                    status__in=("present", "absent"),
+                    date__gte=subscription.start_date,
+                    date__lte=today,
                 )
-                if self.group_id in excluded_group_ids:
-                    excluded_marks |= models.Q(group_snapshot__isnull=True)
-                usage = usage.exclude(excluded_marks)
-            used = usage.count()
+                .filter(group_scope)
+                .count()
+            )
 
         return max(0, subscription.sessions_total - used)
 
-    def has_class_today(self):
+    def has_class_today(self, group=None):
+        group = group or self.group
         today = timezone.localdate()
-        if not self.group:
+        if group is None:
             return False
         return bool(
             effective_class_dates(
-                self.group,
+                group,
                 today,
                 today,
             )
         )
 
-    def has_mark_today(self):
+    def has_mark_today(self, group=None):
+        group = group or self.group
+        if group is None:
+            return False
+
         today = timezone.localdate()
-        excluded_group_ids = self._non_subscription_group_ids()
-        cached = getattr(self, "_prefetched_objects_cache", {}).get("attendances")
+        cached = getattr(
+            self,
+            "_prefetched_objects_cache",
+            {},
+        ).get("attendances")
         if cached is not None:
             return any(
                 mark.date == today
-                and self._attendance_uses_subscription(
-                    mark,
-                    excluded_group_ids,
-                )
+                and self._attendance_matches_group(mark, group)
                 for mark in cached
             )
-        marks = self.attendances.filter(date=today)
-        if excluded_group_ids:
-            excluded_marks = models.Q(
-                group_snapshot_id__in=excluded_group_ids,
-            )
-            if self.group_id in excluded_group_ids:
-                excluded_marks |= models.Q(group_snapshot__isnull=True)
-            marks = marks.exclude(excluded_marks)
-        return marks.exists()
 
-    def projected_end_date(self):
-        left = self.sessions_left()
-        if left <= 0 or not self.group:
+        marks = self.attendances.filter(date=today)
+        group_scope = models.Q(group_snapshot=group)
+        if self.group_id == group.pk:
+            group_scope |= models.Q(group_snapshot__isnull=True)
+        return marks.filter(group_scope).exists()
+
+    def projected_end_date(self, group=None):
+        group = group or self.group
+        left = self.sessions_left(group)
+        if left <= 0 or group is None:
             return None
 
         today = timezone.localdate()
-        start = today + timedelta(days=1) if self.has_mark_today() else today
-        return calculate_projected_end_date(self.group, start, left)
+        start = (
+            today + timedelta(days=1)
+            if self.has_mark_today(group)
+            else today
+        )
+        return calculate_projected_end_date(group, start, left)
 
-    def sessions_left_on_date(self, target_date):
-        """Остаток занятий на начало указанной даты."""
-        left = self.sessions_left()
-        if left <= 0 or not self.group:
+    def sessions_left_on_date(self, target_date, group=None):
+        """Остаток занятий выбранной группы на начало указанной даты."""
+        group = group or self.group
+        left = self.sessions_left(group)
+        if left <= 0 or group is None:
             return 0
 
         today = timezone.localdate()
@@ -895,11 +979,11 @@ class Child(models.Model):
             return left
 
         class_dates = effective_class_dates(
-            self.group,
+            group,
             today,
             target_date - timedelta(days=1),
         )
-        if self.has_mark_today() and today in class_dates:
+        if self.has_mark_today(group) and today in class_dates:
             class_dates.remove(today)
 
         return max(0, left - len(class_dates))
@@ -952,9 +1036,9 @@ class Child(models.Model):
         )
 
 
-    def nearest_expiry(self):
-        """Дата окончания текущего активного абонемента."""
-        sub = self.active_subscription()
+    def nearest_expiry(self, group=None):
+        """Дата окончания текущего активного абонемента выбранной группы."""
+        sub = self.active_subscription(group)
 
         return (
             sub.end_date
@@ -1004,17 +1088,17 @@ class Child(models.Model):
         today = timezone.localdate()
         return (today - self.trial_from).days >= TRIAL_EXPIRY_DAYS
 
-    def has_subscription_ending_soon(self):
-        """Абонемент заканчивается в течение 7 дней"""
-        end = self.nearest_expiry()
+    def has_subscription_ending_soon(self, group=None):
+        """Абонемент выбранной группы заканчивается в течение 7 дней."""
+        end = self.nearest_expiry(group)
         if not end:
             return False
         today = timezone.localdate()
         return 0 <= (end - today).days <= 7
 
-    def days_until_expiry(self):
-        """Дней до окончания абонемента"""
-        end = self.nearest_expiry()
+    def days_until_expiry(self, group=None):
+        """Дней до окончания абонемента выбранной группы."""
+        end = self.nearest_expiry(group)
         if not end:
             return None
         return (end - timezone.localdate()).days
@@ -1110,9 +1194,18 @@ class Tariff(models.Model):
 
 
 class Subscription(models.Model):
-    """Абонемент ребёнка."""
+    """Абонемент ребёнка, привязанный к конкретной группе."""
     child = models.ForeignKey(Child, on_delete=models.CASCADE,
                               related_name="subscriptions", verbose_name="ребёнок")
+    group = models.ForeignKey(
+        Group,
+        on_delete=models.PROTECT,
+        blank=True,
+        null=True,
+        related_name="subscriptions",
+        verbose_name="группа",
+        help_text="Для старых абонементов без группы используется основная группа ребёнка.",
+    )
     tariff = models.ForeignKey(Tariff, on_delete=models.SET_NULL, blank=True, null=True,
                                related_name="subscriptions", verbose_name="тариф")
     start_date = models.DateField("Начало")
@@ -1132,7 +1225,26 @@ class Subscription(models.Model):
         ordering = ("-end_date",)
 
     def __str__(self):
-        return f"{self.child} · {self.start_date:%d.%m.%y}–{self.end_date:%d.%m.%y}"
+        group = self.group or self.child.group
+        return (
+            f"{self.child} · {group} · "
+            f"{self.start_date:%d.%m.%y}–{self.end_date:%d.%m.%y}"
+        )
+
+    @property
+    def effective_group_id(self):
+        """Группа абонемента с fallback для исторических строк."""
+        return self.group_id or self.child.group_id
+
+    def save(self, *args, **kwargs):
+        if self._state.adding and self.group_id is None and self.child_id:
+            self.group_id = (
+                Child.objects
+                .filter(pk=self.child_id)
+                .values_list("group_id", flat=True)
+                .first()
+            )
+        super().save(*args, **kwargs)
 
     def cancel(self):
         if self.cancelled_at is None:
@@ -1158,7 +1270,11 @@ def extend_subscriptions_for_schedule_move(
         Subscription.objects
         .select_for_update()
         .filter(
-            child__group=group,
+            models.Q(group=group)
+            | models.Q(
+                group__isnull=True,
+                child__group=group,
+            ),
             is_active=True,
             cancelled_at__isnull=True,
             start_date__lte=original_date,

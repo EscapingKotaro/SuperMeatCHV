@@ -586,6 +586,7 @@ class CrmWorkflowTests(TestCase):
         )
         Subscription.objects.create(
             child=self.child,
+            group=second_group,
             start_date=today - timedelta(days=1),
             end_date=today + timedelta(days=30),
             sessions_total=8,
@@ -723,6 +724,125 @@ class CrmWorkflowTests(TestCase):
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["code"], "group_membership_required")
         self.assertFalse(Attendance.objects.filter(child=self.child, date=today).exists())
+
+    def test_paid_groups_keep_independent_subscription_session_pools(self):
+        today = timezone.localdate()
+        second_group = Group.objects.create(
+            name="Вторая платная группа",
+            trainer=self.trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=second_group,
+            requires_subscription=True,
+        )
+        primary_subscription = Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=today - timedelta(days=2),
+            end_date=today + timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("6000"),
+        )
+        second_subscription = Subscription.objects.create(
+            child=self.child,
+            group=second_group,
+            start_date=today - timedelta(days=2),
+            end_date=today + timedelta(days=30),
+            sessions_total=4,
+            price=Decimal("3500"),
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=today - timedelta(days=1),
+            group_snapshot=self.group,
+            status=Attendance.Status.PRESENT,
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=today - timedelta(days=1),
+            group_snapshot=second_group,
+            status=Attendance.Status.PRESENT,
+        )
+
+        self.assertEqual(
+            self.child.active_subscription(self.group),
+            primary_subscription,
+        )
+        self.assertEqual(
+            self.child.active_subscription(second_group),
+            second_subscription,
+        )
+        self.assertEqual(self.child.sessions_left(self.group), 7)
+        self.assertEqual(self.child.sessions_left(second_group), 3)
+
+    def test_additional_paid_group_does_not_use_primary_subscription(self):
+        today = timezone.localdate()
+        second_group = Group.objects.create(
+            name="Вторая платная без абонемента",
+            trainer=self.trainer,
+            single_session_price=Decimal("1000"),
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=second_group,
+            requires_subscription=True,
+        )
+        Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=today - timedelta(days=1),
+            end_date=today + timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("6000"),
+        )
+        self.client.login(username="admin", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "group_id": second_group.pk,
+                "date": today.isoformat(),
+                "status": Attendance.Status.PRESENT,
+            },
+        )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["code"], "debt_required")
+        self.assertFalse(
+            Attendance.objects.filter(
+                child=self.child,
+                date=today,
+                group_snapshot=second_group,
+            ).exists()
+        )
+
+    def test_group_change_backfills_legacy_subscription_to_previous_group(self):
+        today = timezone.localdate()
+        subscription = Subscription.objects.create(
+            child=self.child,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("6000"),
+        )
+        Subscription.objects.filter(pk=subscription.pk).update(group=None)
+
+        second_group = Group.objects.create(
+            name="Новая основная",
+            trainer=self.trainer,
+        )
+        self.child.group = second_group
+        self.child.save(update_fields=["group"])
+
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.group, self.group)
+        self.assertIsNone(self.child.active_subscription(second_group))
+        self.assertEqual(
+            self.child.active_subscription(self.group),
+            subscription,
+        )
 
     def test_non_subscription_membership_marks_without_debt(self):
         today = timezone.localdate()
@@ -3274,6 +3394,7 @@ class CrmWorkflowTests(TestCase):
         start = timezone.localdate()
         self.client.post(reverse("payments"), {
             "action": "save_subscription", "subscription-child": self.child.pk,
+            "subscription-group": self.group.pk,
             "subscription-tariff": tariff.pk, "subscription-start_date": start.isoformat(),
             "subscription-promo": "", "subscription-is_active": "on",
         })
@@ -3303,6 +3424,7 @@ class CrmWorkflowTests(TestCase):
             {
                 "action": "save_subscription",
                 "subscription-child": self.child.pk,
+                "subscription-group": self.group.pk,
                 "subscription-tariff": foreign_tariff.pk,
                 "subscription-start_date": start.isoformat(),
                 "subscription-promo": "",
@@ -3315,7 +3437,7 @@ class CrmWorkflowTests(TestCase):
         )
         self.assertContains(
             blocked,
-            "не назначен основной группе",
+            "не назначен группе",
         )
 
         allowed = self.client.post(
@@ -3323,6 +3445,7 @@ class CrmWorkflowTests(TestCase):
             {
                 "action": "save_subscription",
                 "subscription-child": self.child.pk,
+                "subscription-group": self.group.pk,
                 "subscription-tariff": allowed_tariff.pk,
                 "subscription-start_date": start.isoformat(),
                 "subscription-promo": "",
@@ -3343,21 +3466,145 @@ class CrmWorkflowTests(TestCase):
         )
         self.assertContains(
             modal,
-            f'data-group-id="{self.group.pk}"',
-        )
-        self.assertContains(
-            modal,
-            'data-tariffs-configured="1"',
+            f'data-primary-group-id="{self.group.pk}"',
         )
         self.assertContains(
             modal,
             f'data-group-ids="{self.group.pk}"',
         )
+        self.assertContains(
+            modal,
+            'data-tariffs-configured="1"',
+        )
+        self.assertContains(modal, "applyGroupAvailability")
         self.assertContains(modal, "applyTariffAvailability")
         self.assertContains(
             modal,
             "Для выбранной группы нет активного тарифа",
         )
+
+    def test_subscription_is_bound_to_selected_membership_group(self):
+        second_group = Group.objects.create(
+            name="Дополнительная платная",
+            trainer=self.trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=second_group,
+            requires_subscription=True,
+        )
+        primary_tariff = Tariff.objects.create(
+            name="Основная группа",
+            price=Decimal("5000"),
+            sessions_total=8,
+            duration_days=30,
+        )
+        second_tariff = Tariff.objects.create(
+            name="Дополнительная группа",
+            price=Decimal("3500"),
+            sessions_total=4,
+            duration_days=30,
+        )
+        self.group.subscription_tariffs.add(primary_tariff)
+        second_group.subscription_tariffs.add(second_tariff)
+        start = timezone.localdate()
+        self.client.login(username="admin", password="TestPass123!")
+
+        second_response = self.client.post(
+            reverse("payments"),
+            {
+                "action": "save_subscription",
+                "subscription-child": self.child.pk,
+                "subscription-group": second_group.pk,
+                "subscription-tariff": second_tariff.pk,
+                "subscription-start_date": start.isoformat(),
+                "subscription-promo": "",
+                "subscription-is_active": "on",
+            },
+        )
+        self.assertRedirects(second_response, reverse("payments"))
+        second_subscription = Subscription.objects.get(
+            child=self.child,
+            group=second_group,
+        )
+        self.assertTrue(second_subscription.is_active)
+
+        primary_response = self.client.post(
+            reverse("payments"),
+            {
+                "action": "save_subscription",
+                "subscription-child": self.child.pk,
+                "subscription-group": self.group.pk,
+                "subscription-tariff": primary_tariff.pk,
+                "subscription-start_date": start.isoformat(),
+                "subscription-promo": "",
+                "subscription-is_active": "on",
+            },
+        )
+        self.assertRedirects(primary_response, reverse("payments"))
+
+        second_subscription.refresh_from_db()
+        primary_subscription = Subscription.objects.get(
+            child=self.child,
+            group=self.group,
+        )
+        self.assertTrue(primary_subscription.is_active)
+        self.assertTrue(second_subscription.is_active)
+
+    def test_subscription_rejects_non_subscription_membership_group(self):
+        personal_group = Group.objects.create(
+            name="Персональные",
+            trainer=self.trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=personal_group,
+            requires_subscription=False,
+        )
+        tariff = Tariff.objects.create(
+            name="Персональный тариф",
+            price=Decimal("2500"),
+            sessions_total=4,
+            duration_days=30,
+        )
+        personal_group.subscription_tariffs.add(tariff)
+        self.client.login(username="admin", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("payments"),
+            {
+                "action": "save_subscription",
+                "subscription-child": self.child.pk,
+                "subscription-group": personal_group.pk,
+                "subscription-tariff": tariff.pk,
+                "subscription-start_date": timezone.localdate().isoformat(),
+                "subscription-promo": "",
+                "subscription-is_active": "on",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            Subscription.objects.filter(
+                child=self.child,
+                group=personal_group,
+            ).exists()
+        )
+        self.assertContains(
+            response,
+            "не является активной абонементной группой спортсмена",
+        )
+
+    def test_new_subscription_defaults_to_primary_group_for_legacy_callers(self):
+        subscription = Subscription.objects.create(
+            child=self.child,
+            start_date=timezone.localdate(),
+            end_date=timezone.localdate() + timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("5000"),
+        )
+
+        self.assertEqual(subscription.group, self.group)
 
     def test_application_creates_prefilled_newcomer(self):
         lead = Lead.objects.create(full_name="Петрова Ева", phone="123", source="VK")
@@ -5735,6 +5982,216 @@ class CrmWorkflowTests(TestCase):
             'data-session-usage data-used="8" data-total="8"',
         )
 
+    def test_paid_additional_group_gets_own_renewal_row(self):
+        today = timezone.localdate()
+        end_date = today - timedelta(days=1)
+        start_date = end_date - timedelta(days=30)
+        other_trainer = Trainer.objects.create(
+            full_name="Тренер второй платной группы",
+        )
+        other_group = Group.objects.create(
+            name="Вторая платная группа",
+            trainer=other_trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=other_group,
+            requires_subscription=True,
+        )
+
+        primary_subscription = Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=start_date,
+            end_date=end_date,
+            sessions_total=8,
+            price=Decimal("5000"),
+            is_active=True,
+        )
+        additional_subscription = Subscription.objects.create(
+            child=self.child,
+            group=other_group,
+            start_date=start_date,
+            end_date=end_date,
+            sessions_total=4,
+            price=Decimal("4000"),
+            is_active=True,
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=end_date - timedelta(days=2),
+            group_snapshot=self.group,
+            status=Attendance.Status.PRESENT,
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=end_date - timedelta(days=1),
+            group_snapshot=other_group,
+            status=Attendance.Status.PRESENT,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.get(
+            reverse("payments"),
+            {"month": end_date.strftime("%Y-%m")},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        rows = [
+            row
+            for row in response.context["rows"]
+            if row["child"].pk == self.child.pk
+        ]
+        self.assertEqual(len(rows), 2)
+        by_group = {row["group"].pk: row for row in rows}
+        self.assertEqual(
+            by_group[self.group.pk]["subscription"].pk,
+            primary_subscription.pk,
+        )
+        self.assertEqual(
+            by_group[other_group.pk]["subscription"].pk,
+            additional_subscription.pk,
+        )
+        self.assertEqual(by_group[self.group.pk]["sessions_used"], 1)
+        self.assertEqual(by_group[other_group.pk]["sessions_used"], 1)
+        self.assertContains(response, self.group.name)
+        self.assertContains(response, other_group.name)
+
+    def test_prepayment_credit_is_not_duplicated_across_group_renewals(self):
+        today = timezone.localdate()
+        end_date = today - timedelta(days=1)
+        start_date = end_date - timedelta(days=30)
+        other_group = Group.objects.create(
+            name="Группа для общей предоплаты",
+            trainer=self.trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=other_group,
+            requires_subscription=True,
+        )
+        primary_subscription = Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=start_date,
+            end_date=end_date,
+            sessions_total=8,
+            price=Decimal("5000"),
+            is_active=True,
+        )
+        Subscription.objects.create(
+            child=self.child,
+            group=other_group,
+            start_date=start_date,
+            end_date=end_date,
+            sessions_total=8,
+            price=Decimal("5000"),
+            is_active=True,
+        )
+        Payment.objects.create(
+            child=self.child,
+            subscription=primary_subscription,
+            amount=Decimal("13000"),
+            date=today,
+            created_by=self.admin,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.get(
+            reverse("payments"),
+            {"month": end_date.strftime("%Y-%m")},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        rows = [
+            row
+            for row in response.context["rows"]
+            if row["child"].pk == self.child.pk
+        ]
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(
+            sum((row["renewal_price"] for row in rows), Decimal("0")),
+            Decimal("10000"),
+        )
+        self.assertEqual(
+            sum((row["prepaid_credit"] for row in rows), Decimal("0")),
+            Decimal("3000"),
+        )
+        self.assertEqual(
+            sum((row["amount"] for row in rows), Decimal("0")),
+            Decimal("7000"),
+        )
+        self.assertEqual(response.context["expected"], Decimal("7000"))
+
+    def test_future_subscription_suppresses_only_its_group_renewal(self):
+        today = timezone.localdate()
+        end_date = today - timedelta(days=1)
+        start_date = end_date - timedelta(days=30)
+        other_group = Group.objects.create(
+            name="Группа без будущего продления",
+            trainer=self.trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=other_group,
+            requires_subscription=True,
+        )
+        Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=start_date,
+            end_date=end_date,
+            sessions_total=8,
+            price=Decimal("5000"),
+            is_active=True,
+        )
+        additional_subscription = Subscription.objects.create(
+            child=self.child,
+            group=other_group,
+            start_date=start_date,
+            end_date=end_date,
+            sessions_total=8,
+            price=Decimal("4000"),
+            is_active=True,
+        )
+        Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=today + timedelta(days=1),
+            end_date=today + timedelta(days=31),
+            sessions_total=8,
+            price=Decimal("5000"),
+            is_active=True,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.get(
+            reverse("payments"),
+            {"month": end_date.strftime("%Y-%m")},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        rows = [
+            row
+            for row in response.context["rows"]
+            if row["child"].pk == self.child.pk
+        ]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["group"].pk, other_group.pk)
+        self.assertEqual(
+            rows[0]["subscription"].pk,
+            additional_subscription.pk,
+        )
+
     def test_partial_prepayment_reduces_expected_renewal(self):
         today = timezone.localdate()
         next_month = (
@@ -6027,6 +6484,159 @@ class CrmWorkflowTests(TestCase):
             "отметки посещения",
             event.description.lower(),
         )
+
+    def test_ambiguous_multigroup_payment_is_not_misattributed(self):
+        today = timezone.localdate()
+        other_group = Group.objects.create(
+            name="Группа второй оплаты",
+            trainer=self.trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=other_group,
+            requires_subscription=True,
+        )
+        Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=today - timedelta(days=5),
+            end_date=today + timedelta(days=20),
+            sessions_total=8,
+            price=Decimal("5000"),
+            is_active=True,
+        )
+        Subscription.objects.create(
+            child=self.child,
+            group=other_group,
+            start_date=today - timedelta(days=5),
+            end_date=today + timedelta(days=20),
+            sessions_total=8,
+            price=Decimal("4000"),
+            is_active=True,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.post(
+            reverse("payments"),
+            {
+                "action": "payment",
+                "child_id": self.child.pk,
+                "amount": "1500",
+                "date": today.isoformat(),
+            },
+        )
+        self.assertRedirects(response, reverse("payments"))
+
+        payment = Payment.objects.get(
+            child=self.child,
+            amount=Decimal("1500"),
+        )
+        self.assertIsNone(payment.subscription)
+
+    def test_payment_can_target_selected_group_subscription(self):
+        today = timezone.localdate()
+        other_group = Group.objects.create(
+            name="Группа выбранной оплаты",
+            trainer=self.trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=other_group,
+            requires_subscription=True,
+        )
+        primary_subscription = Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=today - timedelta(days=5),
+            end_date=today + timedelta(days=20),
+            sessions_total=8,
+            price=Decimal("5000"),
+            is_active=True,
+        )
+        target_subscription = Subscription.objects.create(
+            child=self.child,
+            group=other_group,
+            start_date=today - timedelta(days=5),
+            end_date=today + timedelta(days=20),
+            sessions_total=8,
+            price=Decimal("4000"),
+            is_active=True,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        page = self.client.get(reverse("payments"))
+        self.assertContains(page, 'data-payment-subscription')
+        self.assertContains(
+            page,
+            f'value="{target_subscription.pk}" data-child-id="{self.child.pk}"',
+        )
+
+        response = self.client.post(
+            reverse("payments"),
+            {
+                "action": "payment",
+                "child_id": self.child.pk,
+                "subscription_id": target_subscription.pk,
+                "amount": "1700",
+                "date": today.isoformat(),
+            },
+        )
+        self.assertRedirects(response, reverse("payments"))
+
+        payment = Payment.objects.get(
+            child=self.child,
+            amount=Decimal("1700"),
+        )
+        self.assertEqual(payment.subscription, target_subscription)
+        self.assertNotEqual(payment.subscription, primary_subscription)
+
+    def test_child_card_highlights_all_current_group_subscriptions(self):
+        today = timezone.localdate()
+        other_group = Group.objects.create(
+            name="Дополнительная группа карточки",
+            trainer=self.trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=other_group,
+            requires_subscription=True,
+        )
+        Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=today - timedelta(days=2),
+            end_date=today + timedelta(days=20),
+            sessions_total=8,
+            price=Decimal("5000"),
+            is_active=True,
+        )
+        Subscription.objects.create(
+            child=self.child,
+            group=other_group,
+            start_date=today - timedelta(days=2),
+            end_date=today + timedelta(days=20),
+            sessions_total=4,
+            price=Decimal("3500"),
+            is_active=True,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Активный", count=2)
+        self.assertContains(response, self.group.name)
+        self.assertContains(response, other_group.name)
 
     def test_explicit_audit_event_is_not_duplicated_by_middleware(self):
         self.client.login(
@@ -6737,6 +7347,24 @@ class CrmWorkflowTests(TestCase):
             price=Decimal("5000"),
         )
         original_end = subscription.end_date
+        second_group = Group.objects.create(
+            name="Чужая группа переноса",
+            trainer=self.trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=second_group,
+            requires_subscription=True,
+        )
+        second_subscription = Subscription.objects.create(
+            child=self.child,
+            group=second_group,
+            start_date=source_date - timedelta(days=10),
+            end_date=source_date + timedelta(days=25),
+            sessions_total=8,
+            price=Decimal("4500"),
+        )
+        second_original_end = second_subscription.end_date
         self.client.login(username="admin", password="TestPass123!")
 
         response = self.client.post(
@@ -6755,6 +7383,11 @@ class CrmWorkflowTests(TestCase):
         self.assertEqual(
             subscription.end_date,
             original_end + timedelta(days=3),
+        )
+        second_subscription.refresh_from_db()
+        self.assertEqual(
+            second_subscription.end_date,
+            second_original_end,
         )
         override = ScheduleOverride.objects.get(group=self.group)
         self.assertTrue(override.extend_subscriptions)

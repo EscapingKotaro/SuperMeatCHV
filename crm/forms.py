@@ -11,6 +11,7 @@ from .models import (
     Apparatus,
     Camp,
     Child,
+    ChildGroupMembership,
     Competition,
     CompetitionEntry,
     Expense,
@@ -351,7 +352,7 @@ class TariffForm(StyledFormMixin, forms.ModelForm):
 
 
 class SubscriptionChildSelect(forms.Select):
-    """Добавляет к спортсмену данные основной группы для фильтра тарифов."""
+    """Добавляет к спортсмену активные группы, где нужен абонемент."""
 
     def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
         option = super().create_option(
@@ -364,9 +365,52 @@ class SubscriptionChildSelect(forms.Select):
             attrs=attrs,
         )
         instance = getattr(value, "instance", None)
-        if instance is not None and instance.group_id:
-            configured_tariffs = list(instance.group.subscription_tariffs.all())
-            option["attrs"]["data-group-id"] = str(instance.group_id)
+        if instance is not None:
+            memberships = list(instance.group_memberships.all())
+            active_memberships = [
+                item
+                for item in memberships
+                if item.archived_at is None
+            ]
+            group_ids = {
+                item.group_id
+                for item in active_memberships
+                if item.requires_subscription
+            }
+            if (
+                instance.group_id
+                and not any(
+                    item.group_id == instance.group_id
+                    for item in active_memberships
+                )
+            ):
+                # Совместимость со старыми детьми без строки membership.
+                group_ids.add(instance.group_id)
+            option["attrs"]["data-group-ids"] = ",".join(
+                str(group_id)
+                for group_id in sorted(group_ids)
+            )
+            if instance.group_id:
+                option["attrs"]["data-primary-group-id"] = str(instance.group_id)
+        return option
+
+
+class SubscriptionGroupSelect(forms.Select):
+    """Помечает, настроены ли для группы собственные тарифы."""
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(
+            name,
+            value,
+            label,
+            selected,
+            index,
+            subindex=subindex,
+            attrs=attrs,
+        )
+        instance = getattr(value, "instance", None)
+        if instance is not None:
+            configured_tariffs = list(instance.subscription_tariffs.all())
             option["attrs"]["data-tariffs-configured"] = (
                 "1" if configured_tariffs else "0"
             )
@@ -401,11 +445,12 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
     class Meta:
         model = Subscription
         fields = (
-            "child", "tariff", "start_date", "end_date", "sessions_total",
+            "child", "group", "tariff", "start_date", "end_date", "sessions_total",
             "price", "promo", "promo_percent", "promo_end_date", "is_active",
         )
         widgets = {
             "child": SubscriptionChildSelect(),
+            "group": SubscriptionGroupSelect(),
             "tariff": SubscriptionTariffSelect(),
             "start_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "end_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
@@ -418,6 +463,12 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
         self.fields["end_date"].input_formats = ["%Y-%m-%d"]
         self.fields["promo_end_date"].input_formats = ["%Y-%m-%d"]
         current_child_id = self.instance.child_id if self.instance.pk else None
+        current_group_id = self.instance.group_id if self.instance.pk else None
+        membership_qs = (
+            ChildGroupMembership.objects
+            .select_related("group")
+            .order_by("-is_primary", "joined_at", "pk")
+        )
         self.fields["child"].queryset = (
             Child.objects
             .filter(
@@ -427,9 +478,24 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
                 | models.Q(pk=current_child_id)
             )
             .select_related("group")
-            .prefetch_related("group__subscription_tariffs")
+            .prefetch_related(
+                models.Prefetch(
+                    "group_memberships",
+                    queryset=membership_qs,
+                )
+            )
             .distinct()
             .order_by("last_name", "first_name", "pk")
+        )
+        self.fields["group"].queryset = (
+            Group.objects
+            .filter(
+                models.Q(is_active=True)
+                | models.Q(pk=current_group_id)
+            )
+            .prefetch_related("subscription_tariffs")
+            .distinct()
+            .order_by("name", "pk")
         )
         self.fields["tariff"].queryset = (
             Tariff.objects
@@ -441,10 +507,27 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
             .distinct()
             .order_by("price", "name")
         )
+        self.fields["group"].required = True
+        self.fields["group"].empty_label = "— Выберите группу —"
         self.fields["promo_percent"].required = False
         self.fields["manual_override"].initial = False
+
+        initial_child = self.initial.get("child")
+        if not self.instance.pk and initial_child:
+            initial_child_id = getattr(initial_child, "pk", initial_child)
+            child = (
+                self.fields["child"].queryset
+                .filter(pk=initial_child_id)
+                .first()
+            )
+            if child is not None:
+                self.initial["group"] = child.group_id
+
         if self.instance.pk:
             self.fields["child"].disabled = True
+            self.fields["group"].disabled = True
+            if self.instance.group_id is None and self.instance.child_id:
+                self.initial["group"] = self.instance.child.group_id
 
         self.fields["end_date"].required = False
         self.fields["sessions_total"].required = False
@@ -457,11 +540,56 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
         percent = cleaned.get("promo_percent") or 0
         cleaned["promo_percent"] = percent
         child = cleaned.get("child")
-        if child and child.group_id and tariff:
-            configured_tariff_ids = {
-                item.pk
-                for item in child.group.subscription_tariffs.all()
-            }
+        group = cleaned.get("group")
+
+        membership = None
+        if child and group:
+            cached = getattr(
+                child,
+                "_prefetched_objects_cache",
+                {},
+            ).get("group_memberships")
+            if cached is not None:
+                membership = next(
+                    (
+                        item
+                        for item in cached
+                        if item.group_id == group.pk
+                        and item.archived_at is None
+                    ),
+                    None,
+                )
+            else:
+                membership = (
+                    child.group_memberships
+                    .filter(
+                        group=group,
+                        archived_at__isnull=True,
+                    )
+                    .first()
+                )
+
+            legacy_primary = (
+                membership is None
+                and child.group_id == group.pk
+            )
+            if not legacy_primary and (
+                membership is None
+                or not membership.requires_subscription
+            ):
+                self.add_error(
+                    "group",
+                    (
+                        f"Группа «{group.name}» не является активной "
+                        "абонементной группой спортсмена."
+                    ),
+                )
+
+        if group and tariff:
+            configured_tariff_ids = set(
+                group.subscription_tariffs
+                .values_list("pk", flat=True)
+            )
             legacy_existing_tariff = (
                 self.instance.pk
                 and self.instance.tariff_id == tariff.pk
@@ -475,8 +603,8 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
                 self.add_error(
                     "tariff",
                     (
-                        f"Тариф «{tariff.name}» не назначен основной группе "
-                        f"«{child.group.name}». Настройте тарифы группы."
+                        f"Тариф «{tariff.name}» не назначен группе "
+                        f"«{group.name}». Настройте тарифы группы."
                     ),
                 )
 

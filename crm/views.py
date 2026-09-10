@@ -598,12 +598,12 @@ def attendance_view(request):
     
     if sort_by == 'sessions':
         def completed_sessions(child):
-            subscription = child.active_subscription()
+            subscription = child.active_subscription(group)
             if not subscription:
                 return 0
             return max(
                 0,
-                subscription.sessions_total - child.sessions_left(),
+                subscription.sessions_total - child.sessions_left(group),
             )
 
         children_list.sort(
@@ -635,11 +635,11 @@ def attendance_view(request):
             group,
         )
         active_sub = (
-            child.active_subscription()
+            child.active_subscription(group)
             if requires_subscription
             else None
         )
-        sessions_left = child.sessions_left() if active_sub else 0
+        sessions_left = child.sessions_left(group) if active_sub else 0
         sessions_used = (
             max(0, active_sub.sessions_total - sessions_left)
             if active_sub
@@ -684,7 +684,16 @@ def attendance_view(request):
                 (
                     subscription
                     for subscription in child.subscriptions.all()
-                    if subscription.cancelled_at is None
+                    if (
+                        subscription.cancelled_at is None
+                        and (
+                            subscription.group_id == group.pk
+                            or (
+                                subscription.group_id is None
+                                and child.group_id == group.pk
+                            )
+                        )
+                    )
                 ),
                 key=lambda subscription: (
                     subscription.start_date,
@@ -1458,15 +1467,18 @@ def mark_attendance_view(request):
     )
 
     requires_subscription = _attendance_requires_subscription(child, group)
+    subscription_scope = Q(group=group)
+    if child.group_id == group.pk:
+        subscription_scope |= Q(group__isnull=True)
     subscription_on_date = (
         child.subscriptions
         .filter(
-            is_active=True,
             cancelled_at__isnull=True,
             start_date__lte=mark_date,
             end_date__gte=mark_date,
         )
-        .order_by("end_date", "pk")
+        .filter(subscription_scope)
+        .order_by("-is_active", "end_date", "pk")
         .first()
         if requires_subscription
         else None
@@ -1788,7 +1800,12 @@ def attendance_reason_view(request):
 @transaction.atomic
 def payments_page(request):
     editing_tariff = Tariff.objects.filter(pk=_optional_pk(request.GET.get("edit_tariff"))).first()
-    editing_subscription = Subscription.objects.filter(pk=_optional_pk(request.GET.get("edit_subscription"))).first()
+    editing_subscription = (
+        Subscription.objects
+        .select_related("child__group", "group", "tariff")
+        .filter(pk=_optional_pk(request.GET.get("edit_subscription")))
+        .first()
+    )
     tariff_form = TariffForm(request.POST or None, prefix="tariff", instance=editing_tariff)
     subscription_form = SubscriptionForm(
         request.POST or None, prefix="subscription", instance=editing_subscription,
@@ -1805,9 +1822,45 @@ def payments_page(request):
             except django_forms.ValidationError:
                 messages.error(request, "Укажите корректную дату и положительную сумму оплаты")
             else:
+                subscription = None
+                requested_subscription = (
+                    request.POST.get("subscription_id")
+                    or ""
+                ).strip()
+                if requested_subscription:
+                    subscription_id = _optional_pk(requested_subscription)
+                    subscription = (
+                        child.subscriptions
+                        .filter(
+                            pk=subscription_id,
+                            cancelled_at__isnull=True,
+                        )
+                        .first()
+                        if subscription_id
+                        else None
+                    )
+                    if subscription is None:
+                        messages.error(
+                            request,
+                            "Выбранный абонемент не принадлежит спортсмену",
+                        )
+                        return redirect("payments")
+                else:
+                    covering = list(
+                        child.subscriptions
+                        .filter(
+                            cancelled_at__isnull=True,
+                            start_date__lte=payment_date,
+                            end_date__gte=payment_date,
+                        )
+                        .order_by("end_date", "pk")[:2]
+                    )
+                    if len(covering) == 1:
+                        subscription = covering[0]
+
                 payment = Payment.objects.create(
                     child=child,
-                    subscription=child.active_subscription(),
+                    subscription=subscription,
                     amount=amount,
                     date=payment_date,
                     created_by=request.user,
@@ -1825,7 +1878,7 @@ def payments_page(request):
                 return render(request, "crm/payments.html", page_context(
                     request, "payments", tariff_form=tariff_form,
                     subscription_form=SubscriptionForm(prefix="subscription"), tariffs=Tariff.objects.all(),
-                    subscriptions=Subscription.objects.select_related("child", "tariff"),
+                    subscriptions=Subscription.objects.select_related("child", "group", "tariff"),
                     children=Child.objects.filter(
                         status__in=[Child.Status.ACTIVE, Child.Status.TRIAL],
                     ),
@@ -1841,10 +1894,21 @@ def payments_page(request):
             if subscription_form.is_valid():
                 subscription = subscription_form.save()
                 if subscription.is_active:
-                    Subscription.objects.filter(
-                        child=subscription.child, is_active=True,
-                        start_date__lte=subscription.end_date, end_date__gte=subscription.start_date,
-                    ).exclude(pk=subscription.pk).update(is_active=False)
+                    same_group = Q(group=subscription.group)
+                    if subscription.child.group_id == subscription.group_id:
+                        same_group |= Q(group__isnull=True)
+                    (
+                        Subscription.objects
+                        .filter(
+                            child=subscription.child,
+                            is_active=True,
+                            start_date__lte=subscription.end_date,
+                            end_date__gte=subscription.start_date,
+                        )
+                        .filter(same_group)
+                        .exclude(pk=subscription.pk)
+                        .update(is_active=False)
+                    )
                 log_action(request, "subscription.save", subscription, f"Сохранён абонемент {subscription}")
                 messages.success(request, "Абонемент назначен")
             else:
@@ -1886,7 +1950,13 @@ def payments_page(request):
         tariff_preview=list(Tariff.objects.values("id", "price", "sessions_total", "duration_days")),
         child_discounts=list(Child.objects.values("id", "discount_percent")),
         tariffs=Tariff.objects.all(),
-        subscriptions=Subscription.objects.select_related("child", "tariff")[:100],
+        subscriptions=Subscription.objects.select_related("child", "group", "tariff")[:100],
+        payment_subscriptions=(
+            Subscription.objects
+            .filter(cancelled_at__isnull=True)
+            .select_related("child__group", "group")
+            .order_by("-is_active", "-end_date", "-pk")[:300]
+        ),
         tariff_form=tariff_form,
         subscription_form=subscription_form,
         editing_tariff=editing_tariff,
@@ -4740,7 +4810,11 @@ from .forms import ChildForm, SubscriptionForm  # создадим ниже
 def child_card_view(request, child_id):
     child = get_object_or_404(Child, id=child_id)
 
-    subscriptions = child.subscriptions.all().order_by('-start_date')
+    subscriptions = list(
+        child.subscriptions
+        .select_related("group", "tariff")
+        .order_by("-start_date", "-pk")
+    )
     attendances = (
         child.attendances
         .select_related("slot__group", "group_snapshot", "trainer_snapshot")
@@ -4762,7 +4836,16 @@ def child_card_view(request, child_id):
         ]
     camps = child.camp_stays.all().select_related('camp').order_by('-start_date')
 
-    active_sub = child.active_subscription()
+    today = timezone.localdate()
+    active_subscription_ids = {
+        subscription.pk
+        for subscription in subscriptions
+        if (
+            subscription.is_active
+            and subscription.cancelled_at is None
+            and subscription.start_date <= today <= subscription.end_date
+        )
+    }
     debt = child.debt()
     promos = child.active_promos()
 
@@ -5061,7 +5144,6 @@ def child_card_view(request, child_id):
                 return redirect("child_card", child_id=child.id)
 
     # === HEAT-MAP: последние 90 дней ===
-    today = timezone.localdate()
     days_back = 90
     year_ago = today - timedelta(days=days_back - 1)
 
@@ -5138,7 +5220,7 @@ def child_card_view(request, child_id):
         'ranks': ranks,
         'competitions': competitions,
         'camps': camps,
-        'active_sub': active_sub,
+        'active_subscription_ids': active_subscription_ids,
         'debt': debt,
         'promos': promos,
         'memberships': memberships,
@@ -5326,8 +5408,15 @@ def add_subscription_view(request, child_id):
     child = get_object_or_404(Child, id=child_id)
     if request.method != "POST":
         return redirect(f"{reverse('payments')}?child={child.pk}&new_subscription=1")
-    form = SubscriptionForm(request.POST, initial={"child": child})
+    form = SubscriptionForm(
+        request.POST,
+        initial={
+            "child": child,
+            "group": child.group,
+        },
+    )
     form.fields["child"].disabled = True
+    form.fields["group"].disabled = True
     if form.is_valid():
         sub = form.save()
         messages.success(request, "Абонемент добавлен")
@@ -6225,7 +6314,7 @@ def _prepaid_credit(child):
 
 
 def build_renewal_rows(month_start, month_end, today=None):
-    """Кому и когда звонить по продлению абонемента."""
+    """Кому и когда звонить по продлению каждого платного членства."""
     today = today or timezone.localdate()
     rows = []
     is_current_month = month_start <= today <= month_end
@@ -6238,113 +6327,159 @@ def build_renewal_rows(month_start, month_end, today=None):
             "subscriptions__tariff",
             "payments",
             "attendances",
-            "group_memberships",
+            "group_memberships__group__schedule",
+            "group_memberships__group__schedule_overrides",
             "group__schedule",
             "group__schedule_overrides",
         )
     )
 
     for child in children:
-        subscriptions = [sub for sub in child.subscriptions.all() if sub.is_active and not sub.cancelled_at]
-        if any(sub.start_date > today for sub in subscriptions):
-            continue
-        active_subscription = child.active_subscription()
-        subscription = active_subscription or max((sub for sub in subscriptions if sub.start_date <= today), key=lambda sub: (sub.end_date, sub.pk), default=None)
+        memberships = list(child.group_memberships.all())
+        groups = []
+        seen_group_ids = set()
 
-        if not subscription:
-            continue
-
-        sessions_left = child.sessions_left() if active_subscription else 0
-        attendance_cutoff = min(today, subscription.end_date)
-        sessions_used = min(
-            subscription.sessions_total,
-            sum(
-                1
-                for mark in child.attendances.all()
+        primary_membership = next(
+            (
+                membership
+                for membership in memberships
                 if (
-                    mark.status in (
-                        Attendance.Status.PRESENT,
-                        Attendance.Status.ABSENT,
-                    )
-                    and subscription.start_date
-                    <= mark.date
-                    <= attendance_cutoff
+                    membership.group_id == child.group_id
+                    and membership.archived_at is None
                 )
             ),
+            None,
         )
-        projected_end = (
-            child.projected_end_date()
-            if active_subscription and sessions_left > 0
-            else None
-        )
+        if (
+            child.group_id
+            and primary_membership is None
+        ):
+            # Совместимость со старыми строками до появления membership.
+            groups.append(child.group)
+            seen_group_ids.add(child.group_id)
 
-        end_candidates = [subscription.end_date]
-        if projected_end:
-            end_candidates.append(projected_end)
-
-        renewal_date = (
-            today
-            if active_subscription and sessions_left <= 0
-            else min(end_candidates)
-        )
-        call_date = renewal_date - timedelta(days=3)
-
-        if is_current_month:
-            # В текущем месяце не теряем просроченные незакрытые продления.
-            if renewal_date > month_end:
+        for membership in memberships:
+            if (
+                membership.archived_at is not None
+                or not membership.requires_subscription
+                or membership.group_id in seen_group_ids
+            ):
                 continue
-        elif not (month_start <= renewal_date <= month_end):
-            continue
+            groups.append(membership.group)
+            seen_group_ids.add(membership.group_id)
 
-        if renewal_date <= today or sessions_left <= 0:
-            priority = 0
-            status = "Срочно"
-        elif call_date <= today:
-            priority = 1
-            status = "Позвонить сегодня"
-        elif call_date <= today + timedelta(days=3):
-            priority = 2
-            status = "В ближайшие 3 дня"
-        else:
-            priority = 3
-            status = "Запланировано"
+        subscriptions = [
+            sub
+            for sub in child.subscriptions.all()
+            if sub.is_active and not sub.cancelled_at
+        ]
 
-        renewal_price = Decimal(
-            subscription.tariff.price
-            if subscription.tariff
-            else subscription.price
-        )
-        prepaid_credit = min(
-            _prepaid_credit(child),
-            renewal_price,
-        )
-        amount = max(
-            Decimal("0"),
-            renewal_price - prepaid_credit,
-        )
+        for group in groups:
+            group_subscriptions = [
+                sub
+                for sub in subscriptions
+                if child._subscription_matches_group(sub, group)
+            ]
+            if any(
+                sub.start_date > today
+                for sub in group_subscriptions
+            ):
+                # Продление этой конкретной группы уже оформлено заранее.
+                continue
 
-        # Продление уже полностью оплачено заранее — звонить не нужно,
-        # и в прогнозную выручку его второй раз не включаем.
-        if amount <= 0:
-            continue
+            active_subscription = child.active_subscription(group)
+            subscription = active_subscription or max(
+                (
+                    sub
+                    for sub in group_subscriptions
+                    if sub.start_date <= today
+                ),
+                key=lambda sub: (sub.end_date, sub.pk),
+                default=None,
+            )
+            if not subscription:
+                continue
 
-        rows.append({
-            "child": child,
-            "group": child.group,
-            "parent_name": child.parent_name,
-            "parent_phone": child.parent_phone,
-            "subscription": subscription,
-            "sessions_left": sessions_left,
-            "sessions_used": sessions_used,
-            "projected_end": projected_end,
-            "renewal_date": renewal_date,
-            "call_date": call_date,
-            "renewal_price": renewal_price,
-            "prepaid_credit": prepaid_credit,
-            "amount": amount,
-            "priority": priority,
-            "status": status,
-        })
+            sessions_left = (
+                child.sessions_left(group)
+                if active_subscription
+                else 0
+            )
+            attendance_cutoff = min(today, subscription.end_date)
+            sessions_used = min(
+                subscription.sessions_total,
+                sum(
+                    1
+                    for mark in child.attendances.all()
+                    if (
+                        mark.status in (
+                            Attendance.Status.PRESENT,
+                            Attendance.Status.ABSENT,
+                        )
+                        and subscription.start_date
+                        <= mark.date
+                        <= attendance_cutoff
+                        and child._attendance_matches_group(mark, group)
+                    )
+                ),
+            )
+            projected_end = (
+                child.projected_end_date(group)
+                if active_subscription and sessions_left > 0
+                else None
+            )
+
+            end_candidates = [subscription.end_date]
+            if projected_end:
+                end_candidates.append(projected_end)
+
+            renewal_date = (
+                today
+                if active_subscription and sessions_left <= 0
+                else min(end_candidates)
+            )
+            call_date = renewal_date - timedelta(days=3)
+
+            if is_current_month:
+                # В текущем месяце не теряем просроченные незакрытые продления.
+                if renewal_date > month_end:
+                    continue
+            elif not (month_start <= renewal_date <= month_end):
+                continue
+
+            if renewal_date <= today or sessions_left <= 0:
+                priority = 0
+                status = "Срочно"
+            elif call_date <= today:
+                priority = 1
+                status = "Позвонить сегодня"
+            elif call_date <= today + timedelta(days=3):
+                priority = 2
+                status = "В ближайшие 3 дня"
+            else:
+                priority = 3
+                status = "Запланировано"
+
+            renewal_price = Decimal(
+                subscription.tariff.price
+                if subscription.tariff
+                else subscription.price
+            )
+            rows.append({
+                "child": child,
+                "group": group,
+                "parent_name": child.parent_name,
+                "parent_phone": child.parent_phone,
+                "subscription": subscription,
+                "sessions_left": sessions_left,
+                "sessions_used": sessions_used,
+                "projected_end": projected_end,
+                "renewal_date": renewal_date,
+                "call_date": call_date,
+                "renewal_price": renewal_price,
+                "priority": priority,
+                "status": status,
+            })
 
     rows.sort(
         key=lambda row: (
@@ -6352,9 +6487,45 @@ def build_renewal_rows(month_start, month_end, today=None):
             row["call_date"],
             row["renewal_date"],
             row["child"].last_name,
+            row["child"].first_name,
+            row["group"].name,
         )
     )
-    return rows
+
+    # Баланс ребёнка общий, поэтому одну и ту же предоплату нельзя вычесть
+    # из каждого группового продления. Распределяем её по строкам один раз,
+    # начиная с самого срочного продления.
+    credit_by_child = {}
+    payable_rows = []
+    for row in rows:
+        child = row["child"]
+        if child.pk not in credit_by_child:
+            credit_by_child[child.pk] = _prepaid_credit(child)
+
+        available_credit = credit_by_child[child.pk]
+        prepaid_credit = min(
+            available_credit,
+            row["renewal_price"],
+        )
+        credit_by_child[child.pk] = max(
+            Decimal("0"),
+            available_credit - prepaid_credit,
+        )
+        amount = max(
+            Decimal("0"),
+            row["renewal_price"] - prepaid_credit,
+        )
+
+        # Полностью предоплаченное продление не требует звонка и повторного
+        # включения в прогнозную выручку.
+        if amount <= 0:
+            continue
+
+        row["prepaid_credit"] = prepaid_credit
+        row["amount"] = amount
+        payable_rows.append(row)
+
+    return payable_rows
 
 
 
