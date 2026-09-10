@@ -4914,6 +4914,20 @@ def child_card_view(request, child_id):
         .order_by("trainer__full_name", "name")
     )
 
+    child_tasks = list(
+        child.manager_tasks
+        .filter(is_done=False)
+        .select_related("assignee", "created_by")
+        .order_by("due_date", "-created_at")
+    )
+    can_manage_team_tasks = has_min_role(request.user, 2)
+
+    task_form = ManagerTaskForm(
+        prefix="task",
+        initial={"due_date": today},
+    )
+    task_form.fields["due_date"].required = True
+
     rank_form = ChildRankForm(
         prefix="rank",
         initial={"year": timezone.localdate().year},
@@ -4923,7 +4937,48 @@ def child_card_view(request, child_id):
     if request.method == "POST":
         action = request.POST.get("action")
 
-        if action == "add_rank":
+        if action == "create_child_task":
+            task_form = ManagerTaskForm(
+                request.POST,
+                prefix="task",
+            )
+            task_form.fields["due_date"].required = True
+
+            if task_form.is_valid():
+                task = task_form.save(commit=False)
+                task.child = child
+                task.created_by = request.user
+
+                if not can_manage_team_tasks:
+                    task.assignee = request.user
+
+                task.save()
+                notify_task(
+                    task,
+                    request.user,
+                    Notification.Kind.TASK_CREATED,
+                )
+                log_action(
+                    request,
+                    "task.create_child",
+                    task,
+                    f"{child}: поставлена задача «{task.title}»",
+                )
+                messages.success(
+                    request,
+                    "Задача по спортсмену поставлена",
+                )
+                return redirect(
+                    "child_card",
+                    child_id=child.pk,
+                )
+
+            messages.error(
+                request,
+                "Проверьте поля задачи",
+            )
+
+        elif action == "add_rank":
             rank_form = ChildRankForm(request.POST, prefix="rank")
             if rank_form.is_valid():
                 ChildRank.objects.update_or_create(
@@ -5351,6 +5406,9 @@ def child_card_view(request, child_id):
         'promos': promos,
         'memberships': memberships,
         'groups_list': groups_list,
+        'child_tasks': child_tasks,
+        'task_form': task_form,
+        'can_manage_team_tasks': can_manage_team_tasks,
         'weeks': weeks,
         'period_stats': period_stats,
         'attendance_period': attendance_period,

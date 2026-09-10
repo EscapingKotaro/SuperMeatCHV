@@ -2000,6 +2000,15 @@ class ManagerTask(models.Model):
         blank=True,
     )
 
+    child = models.ForeignKey(
+        Child,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="manager_tasks",
+        verbose_name="Спортсмен",
+    )
+
     assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,

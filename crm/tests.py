@@ -2816,6 +2816,181 @@ class CrmWorkflowTests(TestCase):
             "Позвонил, оплату подтвердили",
         )
 
+    def test_child_card_boss_can_assign_linked_task(self):
+        due_date = timezone.localdate() + timedelta(days=2)
+        other_child = Child.objects.create(
+            last_name="Петрова",
+            first_name="Мария",
+            birth_year=2016,
+            group=self.group,
+        )
+        ManagerTask.objects.create(
+            title="Задача другого спортсмена",
+            child=other_child,
+            assignee=self.admin,
+            created_by=self.boss,
+            due_date=due_date,
+        )
+
+        self.client.login(
+            username="boss",
+            password="TestPass123!",
+        )
+
+        card = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertEqual(card.status_code, 200)
+        self.assertContains(card, "data-child-task-button")
+        self.assertContains(card, 'id="child-task-modal"')
+        self.assertContains(card, 'name="task-title"')
+        self.assertContains(card, 'name="task-description"')
+        self.assertContains(card, 'name="task-due_date"')
+        self.assertContains(card, 'name="task-assignee"')
+        self.assertContains(card, "Поставить задачу")
+        self.assertContains(card, "Дата выполнения")
+        self.assertContains(card, "Комментарий")
+        self.assertContains(card, "Ответственный")
+        self.assertNotContains(card, "Задача другого спортсмена")
+
+        response = self.client.post(
+            reverse("child_card", args=[self.child.pk]),
+            {
+                "action": "create_child_task",
+                "task-title": "Позвонить родителю спортсмена",
+                "task-description": "Уточнить участие в соревнованиях",
+                "task-assignee": self.admin.pk,
+                "task-due_date": due_date.isoformat(),
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+        task = ManagerTask.objects.get(
+            title="Позвонить родителю спортсмена",
+        )
+        self.assertEqual(task.child, self.child)
+        self.assertEqual(task.created_by, self.boss)
+        self.assertEqual(task.assignee, self.admin)
+        self.assertEqual(task.due_date, due_date)
+        self.assertEqual(
+            task.description,
+            "Уточнить участие в соревнованиях",
+        )
+        self.assertEqual(
+            self.child.manager_tasks.get(pk=task.pk),
+            task,
+        )
+        self.assertTrue(
+            Notification.objects.filter(
+                recipient=self.admin,
+                task=task,
+                kind=Notification.Kind.TASK_CREATED,
+                read_at__isnull=True,
+            ).exists()
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                actor=self.boss,
+                action="task.create_child",
+                object_id=str(task.pk),
+            ).exists()
+        )
+
+        card = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertContains(
+            card,
+            f'data-child-task="{task.pk}"',
+        )
+        self.assertContains(
+            card,
+            "Позвонить родителю спортсмена",
+        )
+        self.assertContains(
+            card,
+            "Уточнить участие в соревнованиях",
+        )
+        self.assertContains(
+            card,
+            due_date.strftime("%d.%m.%Y"),
+        )
+        self.assertNotContains(
+            card,
+            "Задача другого спортсмена",
+        )
+
+    def test_child_card_manager_task_forces_self_and_requires_due_date(self):
+        due_date = timezone.localdate() + timedelta(days=1)
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        card = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertEqual(card.status_code, 200)
+        self.assertNotContains(
+            card,
+            'name="task-assignee"',
+        )
+
+        response = self.client.post(
+            reverse("child_card", args=[self.child.pk]),
+            {
+                "action": "create_child_task",
+                "task-title": "Проверить документы",
+                "task-description": "Позвонить после тренировки",
+                "task-assignee": self.senior.pk,
+                "task-due_date": due_date.isoformat(),
+            },
+        )
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+        task = ManagerTask.objects.get(
+            title="Проверить документы",
+        )
+        self.assertEqual(task.child, self.child)
+        self.assertEqual(task.created_by, self.admin)
+        self.assertEqual(task.assignee, self.admin)
+        self.assertEqual(task.due_date, due_date)
+
+        invalid = self.client.post(
+            reverse("child_card", args=[self.child.pk]),
+            {
+                "action": "create_child_task",
+                "task-title": "Задача без даты",
+                "task-description": "",
+                "task-assignee": self.senior.pk,
+                "task-due_date": "",
+            },
+        )
+        self.assertEqual(invalid.status_code, 200)
+        self.assertFalse(
+            ManagerTask.objects.filter(
+                title="Задача без даты",
+            ).exists()
+        )
+        self.assertIn(
+            "due_date",
+            invalid.context["task_form"].errors,
+        )
+        self.assertContains(
+            invalid,
+            'id="child-task-modal"',
+        )
+        self.assertContains(
+            invalid,
+            'class="modal open"',
+        )
+
+
     def test_attendance_mark_is_saved(self):
         today = timezone.localdate()
         Subscription.objects.create(
