@@ -229,6 +229,80 @@ class CrmWorkflowTests(TestCase):
             html.index("Посещения за 3 месяца"),
         )
 
+    def test_child_card_shows_trial_history_after_payment(self):
+        trial_at = (
+            timezone.now()
+            - timedelta(days=2)
+        ).replace(second=0, microsecond=0)
+        self.child.status = Child.Status.TRIAL
+        self.child.trial_from = timezone.localdate(trial_at)
+        self.child.save(update_fields=["status", "trial_from"])
+        newcomer = Newcomer.objects.create(
+            full_name="Иванова Анна",
+            child=self.child,
+            trial_at=trial_at,
+            trainer=self.trainer,
+            group=self.group,
+            attended=True,
+            source="VK",
+            comment="Первое пробное в основной группе",
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        before_payment = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+
+        self.assertEqual(before_payment.status_code, 200)
+        self.assertContains(before_payment, "data-child-trial")
+        self.assertContains(
+            before_payment,
+            'data-trial-state="attended"',
+        )
+        self.assertContains(
+            before_payment,
+            'data-trial-payment="unpaid"',
+        )
+        self.assertContains(before_payment, "Пробное")
+        self.assertContains(before_payment, "Был на пробном")
+        self.assertContains(before_payment, "Без оплаты")
+        self.assertContains(before_payment, self.group.name)
+        self.assertContains(before_payment, self.trainer.full_name)
+        self.assertContains(before_payment, "VK")
+        self.assertContains(
+            before_payment,
+            "Первое пробное в основной группе",
+        )
+        self.assertContains(
+            before_payment,
+            timezone.localtime(trial_at).strftime("%d.%m.%Y %H:%M"),
+        )
+
+        Payment.objects.create(
+            child=self.child,
+            amount=Decimal("1500"),
+            date=timezone.localdate(),
+            created_by=self.admin,
+        )
+        self.child.refresh_from_db()
+        newcomer.refresh_from_db()
+
+        self.assertEqual(self.child.status, Child.Status.ACTIVE)
+        self.assertTrue(newcomer.paid)
+
+        after_payment = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertContains(after_payment, "data-child-trial")
+        self.assertContains(
+            after_payment,
+            'data-trial-payment="paid"',
+        )
+        self.assertContains(after_payment, "Оплачено")
+
     def test_child_card_supports_two_parent_contacts_and_dispensary_region(self):
         self.child.parent_name = "Иванова Ольга"
         self.child.parent_phone = "+79990000001"

@@ -102,6 +102,75 @@
             </div>
         </div>
 
+        {% with trial=child.source_newcomer %}
+        {% if trial or child.status == 'trial' %}
+        <div class="card p-5"
+             data-child-trial
+             data-trial-state="{% if trial.lesson_cancelled %}cancelled{% elif trial.attended %}attended{% else %}scheduled{% endif %}"
+             data-trial-payment="{% if trial.paid %}paid{% else %}unpaid{% endif %}">
+            <div class="flex items-center justify-between gap-2">
+                <h3 class="font-extrabold text-sm flex items-center gap-2">
+                    <i data-lucide="sparkles" class="h-4 w-4 text-slate-400"></i>Пробное
+                </h3>
+                <div class="flex flex-wrap justify-end gap-1">
+                    {% if trial.lesson_cancelled %}
+                    <span class="badge bg-slate-100 text-slate-600">Занятие отменено</span>
+                    {% elif trial.attended %}
+                    <span class="badge bg-emerald-50 text-emerald-700">Был на пробном</span>
+                    {% else %}
+                    <span class="badge bg-amber-50 text-amber-700">Запланировано</span>
+                    {% endif %}
+                    {% if trial.paid %}
+                    <span class="badge bg-emerald-50 text-emerald-700">Оплачено</span>
+                    {% else %}
+                    <span class="badge bg-amber-50 text-amber-700">Без оплаты</span>
+                    {% endif %}
+                    {% if trial.trial_not_liked %}
+                    <span class="badge bg-red-50 text-red-700">Не понравилось</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="mt-4 grid grid-cols-2 gap-3 text-xs">
+                <div class="rounded-xl bg-slate-50 p-3">
+                    <div class="text-[10px] font-bold uppercase text-slate-400">Дата пробного</div>
+                    <div class="mt-1 font-semibold text-slate-700">
+                        {% if trial.trial_at %}
+                            {{ trial.trial_at|date:"d.m.Y H:i" }}
+                        {% elif child.trial_from %}
+                            {{ child.trial_from|date:"d.m.Y" }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="rounded-xl bg-slate-50 p-3">
+                    <div class="text-[10px] font-bold uppercase text-slate-400">Группа</div>
+                    <div class="mt-1 font-semibold text-slate-700">
+                        {% if trial.group %}{{ trial.group.name }}{% elif child.group %}{{ child.group.name }}{% else %}—{% endif %}
+                    </div>
+                </div>
+                <div class="rounded-xl bg-slate-50 p-3">
+                    <div class="text-[10px] font-bold uppercase text-slate-400">Тренер</div>
+                    <div class="mt-1 font-semibold text-slate-700">
+                        {% if trial.trainer %}{{ trial.trainer.full_name }}{% elif child.trainer %}{{ child.trainer.full_name }}{% else %}—{% endif %}
+                    </div>
+                </div>
+                <div class="rounded-xl bg-slate-50 p-3">
+                    <div class="text-[10px] font-bold uppercase text-slate-400">Источник</div>
+                    <div class="mt-1 font-semibold text-slate-700">{{ trial.source|default:"—" }}</div>
+                </div>
+            </div>
+
+            {% if trial.comment %}
+            <div class="mt-3 rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-600">
+                {{ trial.comment }}
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+        {% endwith %}
+
         <!-- Обязательные документы -->
 <div class="card p-5" data-child-documents>
     <div class="flex items-center justify-between gap-3">
