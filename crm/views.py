@@ -5768,20 +5768,24 @@ def build_group_stats(month_start, month_end, today):
         child_ids_by_group[group_id].add(child_id)
 
     totals = defaultdict(int)
-    for group_snapshot_id, primary_group_id, status in (
+    for child_id, group_snapshot_id, primary_group_id, status in (
         Attendance.objects
         .filter(
             child__status__in=current_statuses,
             date__range=(month_start, month_end),
         )
         .values_list(
+            "child_id",
             "group_snapshot_id",
             "child__group_id",
             "status",
         )
     ):
         group_id = group_snapshot_id or primary_group_id
-        if group_id:
+        if (
+            group_id
+            and child_id in child_ids_by_group.get(group_id, ())
+        ):
             totals[(group_id, status)] += 1
 
     result = []
@@ -6213,6 +6217,7 @@ def build_renewal_rows(month_start, month_end, today=None):
             "subscriptions__tariff",
             "payments",
             "attendances",
+            "group_memberships",
             "group__schedule",
             "group__schedule_overrides",
         )

@@ -667,10 +667,15 @@ class GroupForm(StyledFormMixin, forms.ModelForm):
         self.fields["subscription_tariffs"].help_text = (
             "Цена, число занятий и срок берутся из тарифа и не дублируются в группе."
         )
+        self.fields["single_session_price"].required = False
         self.fields["single_session_price"].help_text = (
-            "Отдельная стоимость только для разового посещения или занятия в долг."
+            "Отдельная стоимость только для разового посещения или занятия в долг. "
+            "Оставьте пустым, если такие занятия не используются."
         )
         self.apply_styles()
+
+    def clean_single_session_price(self):
+        return self.cleaned_data.get("single_session_price") or Decimal("0")
 
 
 ScheduleSlotFormSet = inlineformset_factory(

@@ -364,10 +364,10 @@
 <script>
 (() => {
     const modal = document.querySelector('#lead-modal');
-    const birthDate = modal?.querySelector('[name="birth_date"]');
+    const birthDate = modal?.querySelector('#id_birth_date');
     const agePreview = modal?.querySelector('[data-lead-age-preview]');
-    const trainer = modal?.querySelector('[name="trainer"]');
-    const group = modal?.querySelector('[name="group"]');
+    const trainer = modal?.querySelector('#id_trainer');
+    const group = modal?.querySelector('#id_group');
 
     function plural(value, one, few, many) {
         const mod100 = value % 100;
