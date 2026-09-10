@@ -565,6 +565,51 @@ class CrmWorkflowTests(TestCase):
             rendered_group._prefetched_objects_cache,
         )
 
+    def test_unslotted_attendance_is_unique_per_child_group_and_day(self):
+        today = timezone.localdate()
+        Attendance.objects.create(
+            child=self.child,
+            date=today,
+            status=Attendance.Status.PRESENT,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+        )
+
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                Attendance.objects.create(
+                    child=self.child,
+                    date=today,
+                    status=Attendance.Status.ABSENT,
+                    group_snapshot=self.group,
+                    trainer_snapshot=self.trainer,
+                )
+
+        second_group = Group.objects.create(
+            name="Параллельная группа",
+            trainer=self.trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=second_group,
+            requires_subscription=False,
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=today,
+            status=Attendance.Status.PRESENT,
+            group_snapshot=second_group,
+            trainer_snapshot=self.trainer,
+        )
+
+        self.assertEqual(
+            Attendance.objects.filter(
+                child=self.child,
+                date=today,
+            ).count(),
+            2,
+        )
+
     def test_additional_group_attendance_is_group_scoped(self):
         today = timezone.localdate()
         second_trainer = Trainer.objects.create(full_name="Тренер второй группы")
@@ -1406,6 +1451,62 @@ class CrmWorkflowTests(TestCase):
         )
         self.trainer.refresh_from_db()
         self.assertTrue(self.trainer.is_active)
+
+    def test_legacy_delete_routes_archive_and_preserve_history(self):
+        today = timezone.localdate()
+        subscription = Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("5000"),
+        )
+        payment = Payment.objects.create(
+            child=self.child,
+            subscription=subscription,
+            amount=Decimal("5000"),
+            date=today,
+            created_by=self.admin,
+        )
+        mark = Attendance.objects.create(
+            child=self.child,
+            date=today,
+            status=Attendance.Status.PRESENT,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+        )
+
+        self.client.login(username="admin", password="TestPass123!")
+
+        card = self.client.get(reverse("child_card", args=[self.child.pk]))
+        self.assertNotContains(
+            card,
+            reverse("child_delete", args=[self.child.pk]),
+        )
+
+        child_response = self.client.post(
+            reverse("child_delete", args=[self.child.pk]),
+        )
+        self.assertRedirects(child_response, reverse("attendance"))
+
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.status, Child.Status.ARCHIVED)
+        self.assertTrue(Child.objects.filter(pk=self.child.pk).exists())
+        self.assertTrue(Subscription.objects.filter(pk=subscription.pk).exists())
+        self.assertTrue(Payment.objects.filter(pk=payment.pk).exists())
+        self.assertTrue(Attendance.objects.filter(pk=mark.pk).exists())
+
+        trainer_response = self.client.post(
+            reverse("trainer_delete", args=[self.trainer.pk]),
+        )
+        self.assertRedirects(trainer_response, reverse("trainer_list"))
+
+        self.trainer.refresh_from_db()
+        self.group.refresh_from_db()
+        self.assertFalse(self.trainer.is_active)
+        self.assertEqual(self.group.trainer_id, self.trainer.pk)
+        self.assertTrue(Trainer.objects.filter(pk=self.trainer.pk).exists())
 
     def test_legacy_group_form_gets_redirect_to_list_modals(self):
         self.client.login(
@@ -3550,6 +3651,89 @@ class CrmWorkflowTests(TestCase):
         )
         self.assertTrue(primary_subscription.is_active)
         self.assertTrue(second_subscription.is_active)
+
+    def test_legacy_add_subscription_deactivates_only_same_group_overlap(self):
+        second_group = Group.objects.create(
+            name="Дополнительная для legacy add",
+            trainer=self.trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=second_group,
+            requires_subscription=True,
+        )
+        primary_tariff = Tariff.objects.create(
+            name="Legacy add primary",
+            price=Decimal("5000"),
+            sessions_total=8,
+            duration_days=30,
+        )
+        second_tariff = Tariff.objects.create(
+            name="Legacy add additional",
+            price=Decimal("3000"),
+            sessions_total=4,
+            duration_days=30,
+        )
+        self.group.subscription_tariffs.add(primary_tariff)
+        second_group.subscription_tariffs.add(second_tariff)
+
+        today = timezone.localdate()
+        old_primary = Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            tariff=primary_tariff,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("5000"),
+            is_active=True,
+        )
+        additional = Subscription.objects.create(
+            child=self.child,
+            group=second_group,
+            tariff=second_tariff,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            sessions_total=4,
+            price=Decimal("3000"),
+            is_active=True,
+        )
+        self.client.login(username="admin", password="TestPass123!")
+
+        response = self.client.post(
+            reverse("add_subscription", args=[self.child.pk]),
+            {
+                "child": self.child.pk,
+                "group": self.group.pk,
+                "tariff": primary_tariff.pk,
+                "start_date": today.isoformat(),
+                "promo": "",
+                "is_active": "on",
+            },
+        )
+
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+        old_primary.refresh_from_db()
+        additional.refresh_from_db()
+        self.assertFalse(old_primary.is_active)
+        self.assertTrue(additional.is_active)
+        self.assertEqual(
+            Subscription.objects.filter(
+                child=self.child,
+                group=self.group,
+                is_active=True,
+            ).count(),
+            1,
+        )
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                actor=self.admin,
+                action="subscription.save",
+            ).exists()
+        )
 
     def test_subscription_rejects_non_subscription_membership_group(self):
         personal_group = Group.objects.create(
@@ -6890,15 +7074,15 @@ class CrmWorkflowTests(TestCase):
             (18, 30),
         )
 
-    def test_trial_expires_only_after_one_month_without_payment(self):
+    def test_trial_expires_after_two_weeks_without_payment(self):
         today = timezone.localdate()
         trial = Child.objects.create(
-            last_name="Месячная",
+            last_name="Двухнедельная",
             first_name="Проба",
             birth_year=2016,
             group=self.group,
             status=Child.Status.TRIAL,
-            trial_from=today - timedelta(days=29),
+            trial_from=today - timedelta(days=13),
         )
 
         self.assertFalse(trial.is_trial_expired())
@@ -6907,7 +7091,7 @@ class CrmWorkflowTests(TestCase):
         trial.refresh_from_db()
         self.assertEqual(trial.status, Child.Status.TRIAL)
 
-        trial.trial_from = today - timedelta(days=30)
+        trial.trial_from = today - timedelta(days=14)
         trial.save(update_fields=["trial_from"])
 
         self.assertTrue(trial.is_trial_expired())

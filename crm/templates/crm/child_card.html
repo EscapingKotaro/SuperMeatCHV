@@ -732,19 +732,6 @@
             </form>
         </div>
 
-        <!-- Удаление -->
-        <div class="card p-5 border-red-200">
-            <h3 class="font-extrabold text-sm mb-3 text-red-600 flex items-center gap-2">
-                <i data-lucide="alert-triangle" class="h-4 w-4"></i>Опасная зона
-            </h3>
-            <p class="text-xs text-slate-600 mb-3">Удаление необратимо. Все данные будут удалены.</p>
-            <form method="post" action="{% url 'child_delete' child.id %}" onsubmit="return confirm('Удалить {{ child.last_name }} {{ child.first_name }}?')">
-                {% csrf_token %}
-                <button type="submit" class="btn bg-red-600 text-white hover:bg-red-700 text-xs w-full">
-                    <i data-lucide="trash-2" class="h-3 w-3 mr-1"></i>Удалить ребенка
-                </button>
-            </form>
-        </div>
     </div>
 </div>
 {% endblock %}

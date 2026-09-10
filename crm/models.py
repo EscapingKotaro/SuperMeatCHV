@@ -9,7 +9,7 @@ from django.db.models import Sum
 from django.utils import timezone
 
 
-TRIAL_EXPIRY_DAYS = 30
+TRIAL_EXPIRY_DAYS = 14
 
 
 def age_label(birth_date=None, birth_year=None, age_text="", today=None):
@@ -507,7 +507,7 @@ class Child(models.Model):
 
     class Status(models.TextChoices):
         ACTIVE   = "active",   "Активный"
-        TRIAL    = "trial",    "Пробное (1 месяц)"
+        TRIAL    = "trial",    "Пробное (2 недели)"
         ARCHIVED = "archived", "Архив"
         LOST     = "lost",     "Потерянный"
 
@@ -1082,7 +1082,7 @@ class Child(models.Model):
         return self.total_paid() - self.total_spent() - self.related_total("attendances", "charge_amount")
 
     def is_trial_expired(self):
-        """Проверяем, истёк ли месяц после пробного без оплаты."""
+        """Проверяем, истекли ли две недели после пробного без оплаты."""
         if self.status != self.Status.TRIAL or not self.trial_from:
             return False
         today = timezone.localdate()
@@ -1419,7 +1419,18 @@ class Attendance(models.Model):
         verbose_name_plural = "Посещения"
         ordering = ("-date",)
         constraints = [
-            models.UniqueConstraint(fields=["child", "date", "slot"], name="one_mark_per_slot"),
+            models.UniqueConstraint(
+                fields=["child", "date", "slot"],
+                name="one_mark_per_slot",
+            ),
+            models.UniqueConstraint(
+                fields=["child", "date", "group_snapshot"],
+                condition=models.Q(
+                    slot__isnull=True,
+                    group_snapshot__isnull=False,
+                ),
+                name="one_unslotted_mark_per_group_day",
+            ),
         ]
 
     def __str__(self):
