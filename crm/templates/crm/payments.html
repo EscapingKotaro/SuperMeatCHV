@@ -268,14 +268,44 @@
   const tariffs = JSON.parse(document.getElementById('tariff-preview-data').textContent) || [];
   const discounts = JSON.parse(document.getElementById('child-discount-data').textContent) || [];
   const field = name => document.getElementById('id_subscription-' + name);
+  const childField = field('child');
+  const tariffField = field('tariff');
   const output = document.getElementById('subscription-preview');
   const existing = {% if editing_subscription %}true{% else %}false{% endif %};
   const snapshot = Object.fromEntries(['child','tariff','start_date','end_date','promo_percent','price','sessions_total'].map(name => [name, field(name).value]));
   const money = new Intl.NumberFormat('ru-RU', {style:'currency', currency:'RUB'});
+  let tariffsAvailableForGroup = true;
+  function applyTariffAvailability() {
+    const selectedChild = childField.options[childField.selectedIndex];
+    const groupId = selectedChild?.dataset.groupId || '';
+    const configured = selectedChild?.dataset.tariffsConfigured === '1';
+    let selectedAllowed = !tariffField.value;
+    let availableCount = 0;
+
+    Array.from(tariffField.options).forEach(option => {
+      if (!option.value) return;
+      const groupIds = (option.dataset.groupIds || '').split(',').filter(Boolean);
+      const allowed = !configured
+        || groupIds.includes(groupId)
+        || (existing && option.value === snapshot.tariff);
+      option.disabled = !allowed;
+      option.hidden = !allowed;
+      if (allowed) availableCount += 1;
+      if (option.value === tariffField.value) selectedAllowed = allowed;
+    });
+
+    tariffsAvailableForGroup = !configured || availableCount > 0;
+    if (!selectedAllowed) tariffField.value = '';
+  }
   function show() {
+    if (!tariffsAvailableForGroup) {
+      output.textContent = 'Для выбранной группы нет активного тарифа. Настройте тарифы группы.';
+      return;
+    }
     output.textContent = field('price').value ? `${field('sessions_total').value} занятий · до ${field('end_date').value} · ${money.format(Number(field('price').value.replace(',', '.')))}` : 'Выберите спортсмена и тариф';
   }
   function calculate(event) {
+    applyTariffAvailability();
     const tariff = tariffs.find(item => String(item.id) === field('tariff').value);
     if (tariff && !field('manual_override').checked) {
       const discount = discounts.find(item => String(item.id) === field('child').value)?.discount_percent || 0;
@@ -293,6 +323,7 @@
   }
   ['child','tariff','start_date','promo_percent','manual_override'].forEach(name => field(name).addEventListener('change', calculate));
   ['price','sessions_total','end_date'].forEach(name => field(name).addEventListener('input', show));
+  applyTariffAvailability();
   show();
 })();
 </script>

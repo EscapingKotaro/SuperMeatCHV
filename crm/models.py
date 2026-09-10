@@ -171,6 +171,13 @@ class Group(models.Model):
                                related_name="groups", verbose_name="тренер")
     branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, blank=True, null=True,
                                related_name="groups", verbose_name="филиал")
+    subscription_tariffs = models.ManyToManyField(
+        "Tariff",
+        blank=True,
+        related_name="groups",
+        verbose_name="Тарифы абонементов",
+        help_text="Доступные для этой группы абонементные тарифы.",
+    )
     single_session_price = models.DecimalField("Разовое занятие / занятие в долг, ₽",
                                                max_digits=10, decimal_places=2, default=0)
     is_active = models.BooleanField("Активна", default=True)
@@ -198,6 +205,26 @@ class Group(models.Model):
             .distinct()
             .order_by("last_name", "first_name", "pk")
         )
+
+    def freeze_current_history(self):
+        """Фиксирует старые реквизиты группы до изменения её тренера/ставки."""
+        legacy_marks = Attendance.objects.filter(
+            group_snapshot__isnull=True,
+            child__group=self,
+        )
+        legacy_marks.update(
+            group_snapshot=self,
+            trainer_snapshot=self.trainer,
+            salary_rate_snapshot=self.salary_rate,
+        )
+        Attendance.objects.filter(
+            group_snapshot=self,
+            trainer_snapshot__isnull=True,
+        ).update(trainer_snapshot=self.trainer)
+        Attendance.objects.filter(
+            group_snapshot=self,
+            salary_rate_snapshot__isnull=True,
+        ).update(salary_rate_snapshot=self.salary_rate)
 
 
 class ChildGroupMembership(models.Model):
@@ -658,6 +685,34 @@ class Child(models.Model):
             if item["state"] != "valid"
         ]
 
+    def _non_subscription_group_ids(self):
+        """Группы, посещения которых не расходуют обычный абонемент."""
+        cached = getattr(
+            self,
+            "_prefetched_objects_cache",
+            {},
+        ).get("group_memberships")
+        if cached is not None:
+            return {
+                membership.group_id
+                for membership in cached
+                if not membership.requires_subscription
+            }
+        return set(
+            self.group_memberships
+            .filter(requires_subscription=False)
+            .values_list("group_id", flat=True)
+        )
+
+    def _attendance_uses_subscription(self, mark, excluded_group_ids=None):
+        excluded = (
+            excluded_group_ids
+            if excluded_group_ids is not None
+            else self._non_subscription_group_ids()
+        )
+        group_id = mark.group_snapshot_id or self.group_id
+        return group_id not in excluded
+
     def sessions_left(self):
         """Остаток занятий по текущему действующему абонементу."""
         today = timezone.localdate()
@@ -665,8 +720,32 @@ class Child(models.Model):
         if not subscription:
             return 0
 
+        excluded_group_ids = self._non_subscription_group_ids()
         cached = getattr(self, "_prefetched_objects_cache", {}).get("attendances")
-        used = sum(mark.status in ("present", "absent") and subscription.start_date <= mark.date <= today for mark in cached) if cached is not None else self.attendances.filter(status__in=("present", "absent"), date__gte=subscription.start_date, date__lte=today).count()
+        if cached is not None:
+            used = sum(
+                mark.status in ("present", "absent")
+                and subscription.start_date <= mark.date <= today
+                and self._attendance_uses_subscription(
+                    mark,
+                    excluded_group_ids,
+                )
+                for mark in cached
+            )
+        else:
+            usage = self.attendances.filter(
+                status__in=("present", "absent"),
+                date__gte=subscription.start_date,
+                date__lte=today,
+            )
+            if excluded_group_ids:
+                excluded_marks = models.Q(
+                    group_snapshot_id__in=excluded_group_ids,
+                )
+                if self.group_id in excluded_group_ids:
+                    excluded_marks |= models.Q(group_snapshot__isnull=True)
+                usage = usage.exclude(excluded_marks)
+            used = usage.count()
 
         return max(0, subscription.sessions_total - used)
 
@@ -684,8 +763,26 @@ class Child(models.Model):
 
     def has_mark_today(self):
         today = timezone.localdate()
+        excluded_group_ids = self._non_subscription_group_ids()
         cached = getattr(self, "_prefetched_objects_cache", {}).get("attendances")
-        return any(mark.date == today for mark in cached) if cached is not None else self.attendances.filter(date=today).exists()
+        if cached is not None:
+            return any(
+                mark.date == today
+                and self._attendance_uses_subscription(
+                    mark,
+                    excluded_group_ids,
+                )
+                for mark in cached
+            )
+        marks = self.attendances.filter(date=today)
+        if excluded_group_ids:
+            excluded_marks = models.Q(
+                group_snapshot_id__in=excluded_group_ids,
+            )
+            if self.group_id in excluded_group_ids:
+                excluded_marks |= models.Q(group_snapshot__isnull=True)
+            marks = marks.exclude(excluded_marks)
+        return marks.exists()
 
     def projected_end_date(self):
         left = self.sessions_left()
@@ -717,9 +814,20 @@ class Child(models.Model):
         return max(0, left - len(class_dates))
 
     def debt_sessions(self):
-        paid_sessions = sum(sub.sessions_total for sub in self.subscriptions.filter(cancelled_at__isnull=True))
-        used_sessions = self.attendances.filter(status__in=("present", "absent")).count()
-        return max(0, used_sessions - paid_sessions)
+        paid_sessions = sum(
+            sub.sessions_total
+            for sub in self.subscriptions.filter(cancelled_at__isnull=True)
+        )
+        excluded_group_ids = self._non_subscription_group_ids()
+        used = self.attendances.filter(status__in=("present", "absent"))
+        if excluded_group_ids:
+            excluded_marks = models.Q(
+                group_snapshot_id__in=excluded_group_ids,
+            )
+            if self.group_id in excluded_group_ids:
+                excluded_marks |= models.Q(group_snapshot__isnull=True)
+            used = used.exclude(excluded_marks)
+        return max(0, used.count() - paid_sessions)
 
     def debt(self):
         """Денежный долг: неотменённые начисления минус реальные оплаты."""

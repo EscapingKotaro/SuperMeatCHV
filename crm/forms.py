@@ -9,6 +9,7 @@ from django.contrib.auth.forms import PasswordChangeForm, UserCreationForm
 
 from .models import (
     Apparatus,
+    Camp,
     Child,
     Competition,
     CompetitionEntry,
@@ -306,8 +307,13 @@ class ChildRankForm(StyledFormMixin, forms.Form):
 
 
 class CampStayForm(StyledFormMixin, forms.Form):
+    kind = forms.ChoiceField(
+        label="Тип",
+        choices=Camp.Kind.choices,
+        initial=Camp.Kind.CAMP,
+    )
     camp_name = forms.CharField(
-        label="Лагерь / сборы",
+        label="Название",
         max_length=200,
     )
     start_date = forms.DateField(
@@ -344,6 +350,51 @@ class TariffForm(StyledFormMixin, forms.ModelForm):
         self.apply_styles()
 
 
+class SubscriptionChildSelect(forms.Select):
+    """Добавляет к спортсмену данные основной группы для фильтра тарифов."""
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(
+            name,
+            value,
+            label,
+            selected,
+            index,
+            subindex=subindex,
+            attrs=attrs,
+        )
+        instance = getattr(value, "instance", None)
+        if instance is not None and instance.group_id:
+            configured_tariffs = list(instance.group.subscription_tariffs.all())
+            option["attrs"]["data-group-id"] = str(instance.group_id)
+            option["attrs"]["data-tariffs-configured"] = (
+                "1" if configured_tariffs else "0"
+            )
+        return option
+
+
+class SubscriptionTariffSelect(forms.Select):
+    """Помечает тариф группами, в которых он разрешён."""
+
+    def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
+        option = super().create_option(
+            name,
+            value,
+            label,
+            selected,
+            index,
+            subindex=subindex,
+            attrs=attrs,
+        )
+        instance = getattr(value, "instance", None)
+        if instance is not None:
+            option["attrs"]["data-group-ids"] = ",".join(
+                str(group.pk)
+                for group in instance.groups.all()
+            )
+        return option
+
+
 class SubscriptionForm(StyledFormMixin, forms.ModelForm):
     manual_override = forms.BooleanField(label="Изменить вручную (итоговая цена после скидок)", required=False)
 
@@ -354,6 +405,8 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
             "price", "promo", "promo_percent", "promo_end_date", "is_active",
         )
         widgets = {
+            "child": SubscriptionChildSelect(),
+            "tariff": SubscriptionTariffSelect(),
             "start_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "end_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
             "promo_end_date": forms.DateInput(format="%Y-%m-%d", attrs={"type": "date"}),
@@ -364,8 +417,29 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
         self.fields["start_date"].input_formats = ["%Y-%m-%d"]
         self.fields["end_date"].input_formats = ["%Y-%m-%d"]
         self.fields["promo_end_date"].input_formats = ["%Y-%m-%d"]
-        self.fields["tariff"].queryset = Tariff.objects.filter(
-            models.Q(is_active=True) | models.Q(pk=self.instance.tariff_id)
+        current_child_id = self.instance.child_id if self.instance.pk else None
+        self.fields["child"].queryset = (
+            Child.objects
+            .filter(
+                models.Q(
+                    status__in=(Child.Status.ACTIVE, Child.Status.TRIAL),
+                )
+                | models.Q(pk=current_child_id)
+            )
+            .select_related("group")
+            .prefetch_related("group__subscription_tariffs")
+            .distinct()
+            .order_by("last_name", "first_name", "pk")
+        )
+        self.fields["tariff"].queryset = (
+            Tariff.objects
+            .filter(
+                models.Q(is_active=True)
+                | models.Q(pk=self.instance.tariff_id)
+            )
+            .prefetch_related("groups")
+            .distinct()
+            .order_by("price", "name")
         )
         self.fields["promo_percent"].required = False
         self.fields["manual_override"].initial = False
@@ -383,6 +457,29 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
         percent = cleaned.get("promo_percent") or 0
         cleaned["promo_percent"] = percent
         child = cleaned.get("child")
+        if child and child.group_id and tariff:
+            configured_tariff_ids = {
+                item.pk
+                for item in child.group.subscription_tariffs.all()
+            }
+            legacy_existing_tariff = (
+                self.instance.pk
+                and self.instance.tariff_id == tariff.pk
+                and "tariff" not in self.changed_data
+            )
+            if (
+                configured_tariff_ids
+                and tariff.pk not in configured_tariff_ids
+                and not legacy_existing_tariff
+            ):
+                self.add_error(
+                    "tariff",
+                    (
+                        f"Тариф «{tariff.name}» не назначен основной группе "
+                        f"«{child.group.name}». Настройте тарифы группы."
+                    ),
+                )
+
         if not cleaned.get("manual_override") and tariff:
             # Existing snapshot stays unchanged unless its pricing inputs change.
             reprice = not self.instance.pk or any(key in self.changed_data for key in ("tariff", "child", "promo_percent"))
@@ -545,11 +642,34 @@ class GroupForm(StyledFormMixin, forms.ModelForm):
             "name",
             "trainer",
             "capacity",
+            "subscription_tariffs",
+            "single_session_price",
             "is_active",
         )
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        current_tariff_ids = (
+            self.instance.subscription_tariffs.values_list("pk", flat=True)
+            if self.instance.pk
+            else []
+        )
+        self.fields["subscription_tariffs"].queryset = (
+            Tariff.objects
+            .filter(
+                models.Q(is_active=True)
+                | models.Q(pk__in=current_tariff_ids)
+            )
+            .distinct()
+            .order_by("price", "name")
+        )
+        self.fields["subscription_tariffs"].label = "Абонементные тарифы"
+        self.fields["subscription_tariffs"].help_text = (
+            "Цена, число занятий и срок берутся из тарифа и не дублируются в группе."
+        )
+        self.fields["single_session_price"].help_text = (
+            "Отдельная стоимость только для разового посещения или занятия в долг."
+        )
         self.apply_styles()
 
 

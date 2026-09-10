@@ -321,7 +321,18 @@
                         </div>
 
                         {% if not membership.archived_at %}
-                        <div class="flex shrink-0 gap-1">
+                        <div class="flex shrink-0 flex-wrap justify-end gap-1">
+                            <form method="post" data-membership-subscription-mode>
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="set_membership_subscription_mode">
+                                <input type="hidden" name="membership_id" value="{{ membership.id }}">
+                                <input type="hidden" name="requires_subscription" value="{% if membership.requires_subscription %}0{% else %}1{% endif %}">
+                                <button type="submit"
+                                        class="btn px-2 py-1 text-[10px] {% if membership.requires_subscription %}bg-emerald-50 text-emerald-700 hover:bg-emerald-100{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}"
+                                        title="Переключить, используется ли абонемент для этой группы">
+                                    {% if membership.requires_subscription %}Абонемент{% else %}Без абонемента{% endif %}
+                                </button>
+                            </form>
                             {% if not membership.is_primary %}
                             <form method="post">
                                 {% csrf_token %}
@@ -477,14 +488,15 @@
             <thead><tr><th>Неделя</th><th>Пн</th><th>Вт</th><th>Ср</th><th>Чт</th><th>Пт</th><th>Сб</th><th>Вс</th></tr></thead>
             <tbody>{% for week in weeks %}<tr><th class="py-1 font-normal">{{ week.week_start|date:"d.m" }}</th>
                 {% for day in week.days %}<td class="p-1">{% if day %}<span class="flex h-7 w-7 items-center justify-center rounded
-                {% if day.status == 'present' %}bg-emerald-100 text-emerald-800{% elif day.status == 'absent' %}bg-red-100 text-red-800{% elif day.status == 'frozen' %}bg-blue-100 text-blue-800{% elif day.status == 'vacation' %}bg-amber-100 text-amber-800{% elif day.status == 'excused' %}bg-yellow-100 text-yellow-800{% else %}bg-slate-100{% endif %}"
-                title="{{ day.date|date:'d.m.Y' }}: {{ day.status_label|default:'Нет отметки' }}">{% if day.status == 'present' %}+{% elif day.status == 'absent' %}×{% elif day.status == 'frozen' %}❄{% elif day.status == 'vacation' %}О{% elif day.status == 'excused' %}У{% else %}·{% endif %}</span>{% endif %}</td>{% endfor %}
+                {% if day.is_multi %}bg-violet-100 text-violet-800 font-bold{% elif day.status == 'present' %}bg-emerald-100 text-emerald-800{% elif day.status == 'absent' %}bg-red-100 text-red-800{% elif day.status == 'frozen' %}bg-blue-100 text-blue-800{% elif day.status == 'vacation' %}bg-amber-100 text-amber-800{% elif day.status == 'excused' %}bg-yellow-100 text-yellow-800{% elif day.status == 'sick' %}bg-rose-100 text-rose-800{% else %}bg-slate-100{% endif %}"
+                {% if day.is_multi %}data-multi-attendance="{{ day.mark_count }}"{% endif %}
+                title="{{ day.date|date:'d.m.Y' }}: {{ day.status_label|default:'Нет отметки' }}">{% if day.is_multi %}{{ day.mark_count }}{% elif day.status == 'present' %}+{% elif day.status == 'absent' %}×{% elif day.status == 'frozen' %}❄{% elif day.status == 'vacation' %}О{% elif day.status == 'excused' %}У{% elif day.status == 'sick' %}Б{% else %}·{% endif %}</span>{% endif %}</td>{% endfor %}
             </tr>{% endfor %}</tbody>
         </table>
     </div>
 
     <!-- Статистика за период -->
-    <div class="grid grid-cols-5 gap-2 mt-4">
+    <div class="grid grid-cols-3 gap-2 mt-4 sm:grid-cols-6">
         <div class="bg-emerald-50 p-2 rounded-lg text-center">
             <div class="text-lg font-extrabold text-emerald-700">{{ period_stats.present }}</div>
             <div class="text-[9px] font-bold text-emerald-600 uppercase">Пришёл</div>
@@ -504,6 +516,10 @@
         <div class="bg-yellow-50 p-2 rounded-lg text-center">
             <div class="text-lg font-extrabold text-yellow-700">{{ period_stats.excused }}</div>
             <div class="text-[9px] font-bold text-yellow-600 uppercase">Уваж.</div>
+        </div>
+        <div class="bg-rose-50 p-2 rounded-lg text-center">
+            <div class="text-lg font-extrabold text-rose-700">{{ period_stats.sick }}</div>
+            <div class="text-[9px] font-bold text-rose-600 uppercase">Больничный</div>
         </div>
     </div>
 
@@ -617,6 +633,28 @@
                         {% endif %}
                     </div>
                     {% endif %}
+                    {% if entry.card_documents %}
+                    <div class="mt-3 border-t border-slate-100 pt-2" data-competition-documents>
+                        <div class="mb-1 text-[9px] font-bold uppercase tracking-wide text-slate-400">
+                            Документы и награды
+                        </div>
+                        <div class="flex flex-wrap gap-1.5">
+                            {% for document in entry.card_documents %}
+                            <a href="{% url 'competition_document_download' document.pk %}"
+                               class="inline-flex max-w-full items-center gap-1 rounded-lg bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-700 hover:bg-slate-100"
+                               title="Открыть {{ document.title }}">
+                                <i data-lucide="file-down" class="h-3 w-3 shrink-0"></i>
+                                <span class="truncate">{{ document.title }}</span>
+                                {% if document.child_id %}
+                                <span class="rounded bg-violet-100 px-1 text-[8px] text-violet-700">Личное</span>
+                                {% else %}
+                                <span class="rounded bg-slate-200 px-1 text-[8px] text-slate-600">Общее</span>
+                                {% endif %}
+                            </a>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
                 {% endfor %}
             </div>
@@ -625,17 +663,22 @@
             {% endif %}
         </div>
 
-        <!-- Лагеря -->
+        <!-- Лагеря и сборы -->
         <div class="card p-5">
             <h3 class="font-extrabold text-sm mb-4 flex items-center gap-2">
-                <i data-lucide="tent" class="h-4 w-4 text-slate-400"></i>Лагеря
+                <i data-lucide="tent" class="h-4 w-4 text-slate-400"></i>Лагеря и сборы
             </h3>
             {% if camps %}
             <div class="space-y-2">
                 {% for stay in camps %}
                 <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3">
                     <div class="flex items-start justify-between gap-2">
-                        <b class="text-sm text-emerald-900">{{ stay.camp.name }}</b>
+                        <div>
+                            <b class="text-sm text-emerald-900">{{ stay.camp.name }}</b>
+                            <span class="ml-1 rounded bg-emerald-100 px-1.5 py-0.5 text-[9px] font-bold text-emerald-700">
+                                {{ stay.camp.get_kind_display }}
+                            </span>
+                        </div>
                         <form method="post" onsubmit="return confirm('Удалить эту поездку?')">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="delete_camp">
@@ -653,15 +696,21 @@
                 {% endfor %}
             </div>
             {% else %}
-            <p class="text-xs text-slate-400 italic">Нет поездок в лагеря</p>
+            <p class="text-xs text-slate-400 italic">Нет поездок в лагеря и на сборы</p>
             {% endif %}
 
             <form method="post" class="mt-4 space-y-2">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="add_camp">
-                <div>
-                    <div class="text-[10px] font-bold uppercase text-slate-400 mb-1">Лагерь / сборы</div>
-                    {{ camp_form.camp_name }}
+                <div class="grid grid-cols-[9rem_1fr] gap-2">
+                    <div>
+                        <div class="text-[10px] font-bold uppercase text-slate-400 mb-1">Тип</div>
+                        {{ camp_form.kind }}
+                    </div>
+                    <div>
+                        <div class="text-[10px] font-bold uppercase text-slate-400 mb-1">Название</div>
+                        {{ camp_form.camp_name }}
+                    </div>
                 </div>
                 <div class="grid grid-cols-2 gap-2">
                     <div>
@@ -677,7 +726,7 @@
                 <p class="text-xs text-red-600">Проверьте название лагеря и даты</p>
                 {% endif %}
                 <button type="submit" class="btn btn-soft text-xs w-full">
-                    + Добавить поездку
+                    + Добавить поездку / сборы
                 </button>
             </form>
         </div>

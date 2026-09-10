@@ -311,6 +311,62 @@ def _save_active_child(request, form):
     return child
 
 
+def _attendance_group_for_child(child, group_id):
+    """Группа табеля из запроса с проверкой активного членства ребёнка."""
+    requested_id = _optional_pk(group_id)
+    group = (
+        Group.objects.select_related("trainer").filter(pk=requested_id).first()
+        if requested_id is not None
+        else child.group
+    )
+    if group is None:
+        return None
+    if child.group_id == group.pk:
+        return group
+    if child.group_memberships.filter(
+        group=group,
+        archived_at__isnull=True,
+    ).exists():
+        return group
+    return None
+
+
+def _attendance_belongs_to_group(mark, child, group):
+    return (
+        mark.group_snapshot_id == group.pk
+        or (
+            mark.group_snapshot_id is None
+            and child.group_id == group.pk
+        )
+    )
+
+
+def _attendance_requires_subscription(child, group):
+    """Настройка абонемента именно для выбранного членства в группе."""
+    cached = getattr(
+        child,
+        "_prefetched_objects_cache",
+        {},
+    ).get("group_memberships")
+    if cached is not None:
+        membership = next(
+            (
+                item
+                for item in cached
+                if item.group_id == group.pk
+                and item.archived_at is None
+            ),
+            None,
+        )
+    else:
+        membership = (
+            child.group_memberships
+            .filter(group=group, archived_at__isnull=True)
+            .first()
+        )
+    return membership.requires_subscription if membership else True
+
+
 def attendance_view(request):
     inline_child_form = getattr(request, "_child_create_form", None)
     inline_child_group_id = getattr(request, "_child_create_group_id", None)
@@ -530,13 +586,11 @@ def attendance_view(request):
             status__in=[Child.Status.ARCHIVED, Child.Status.LOST]
         )
     else:
-        children_qs = Child.objects.filter(
-            group=group,
-            status__in=[Child.Status.ACTIVE, Child.Status.TRIAL]
-        )
+        children_qs = group.current_children()
 
     children_qs = children_qs.select_related('group__trainer').prefetch_related(
-        'subscriptions', 'payments', 'attendances', 'ranks'
+        'subscriptions', 'payments', 'attendances', 'ranks',
+        'group_memberships',
     )
 
     # 6. СОРТИРОВКА (превращаем в список и сортируем)
@@ -576,18 +630,38 @@ def attendance_view(request):
     }
     children_data = []
     for child in children_list:
-        active_sub = child.active_subscription()
-        sessions_left = child.sessions_left()
+        requires_subscription = _attendance_requires_subscription(
+            child,
+            group,
+        )
+        active_sub = (
+            child.active_subscription()
+            if requires_subscription
+            else None
+        )
+        sessions_left = child.sessions_left() if active_sub else 0
         sessions_used = (
             max(0, active_sub.sessions_total - sessions_left)
             if active_sub
             else 0
         )
-        projected_end = (
-            child.projected_end_date()
-            if active_sub and sessions_left > 0
-            else None
-        )
+        group_attendances = [
+            mark
+            for mark in child.attendances.all()
+            if _attendance_belongs_to_group(mark, child, group)
+        ]
+        projected_end = None
+        if active_sub and sessions_left > 0:
+            projection_start = (
+                today + timedelta(days=1)
+                if any(mark.date == today for mark in group_attendances)
+                else today
+            )
+            projected_end = calculate_projected_end_date(
+                group,
+                projection_start,
+                sessions_left,
+            )
 
         # Единая граница для табеля: абонемент заканчивается либо по
         # исчерпанию занятий, либо по календарной дате — что наступит раньше.
@@ -602,20 +676,24 @@ def attendance_view(request):
 
         att_map = {
             att.date: att.status
-            for att in child.attendances.all()
+            for att in group_attendances
             if att.date in visible_dates
         }
-        subscriptions = sorted(
-            (
-                subscription
-                for subscription in child.subscriptions.all()
-                if subscription.cancelled_at is None
-            ),
-            key=lambda subscription: (
-                subscription.start_date,
-                subscription.end_date,
-                subscription.pk,
-            ),
+        subscriptions = (
+            sorted(
+                (
+                    subscription
+                    for subscription in child.subscriptions.all()
+                    if subscription.cancelled_at is None
+                ),
+                key=lambda subscription: (
+                    subscription.start_date,
+                    subscription.end_date,
+                    subscription.pk,
+                ),
+            )
+            if requires_subscription
+            else []
         )
         document_alerts = child.document_alerts(today)
         document_alert_text = ", ".join(
@@ -654,7 +732,9 @@ def attendance_view(request):
                 ),
                 None,
             )
-            if covering_subscription:
+            if not requires_subscription:
+                subscription_state = "not_required"
+            elif covering_subscription:
                 was_renewed = any(
                     subscription.pk != covering_subscription.pk
                     and subscription.start_date
@@ -709,6 +789,7 @@ def attendance_view(request):
             'child': child,
             'initials': f"{child.last_name[0]}{child.first_name[0]}".upper(),
             'age': child.age_display(),
+            'requires_subscription': requires_subscription,
             'sessions_left': sessions_left,
             'sessions_used': sessions_used,
             'sessions_total': active_sub.sessions_total if active_sub else 0,
@@ -758,10 +839,7 @@ def attendance_view(request):
         lesson_trainers=Trainer.objects.filter(
             is_active=True,
         ).order_by("full_name"),
-        lesson_trainer_children=Child.objects.filter(
-            group=group,
-            status__in=[Child.Status.ACTIVE, Child.Status.TRIAL],
-        ).order_by("last_name", "first_name"),
+        lesson_trainer_children=group.current_children(),
     )
 
     return render(request, "crm/attendance.html", context)
@@ -1153,13 +1231,7 @@ def assign_lesson_trainer_view(request):
         )
 
     children = list(
-        Child.objects
-        .filter(
-            pk__in=child_ids,
-            group=group,
-            status__in=[Child.Status.ACTIVE, Child.Status.TRIAL],
-        )
-        .order_by("last_name", "first_name")
+        group.current_children().filter(pk__in=child_ids)
     )
     if len(children) != len(child_ids):
         messages.error(
@@ -1239,21 +1311,47 @@ def assign_lesson_trainer_view(request):
 @login_required
 @require_POST
 def cancel_attendance_view(request):
-    """Отмена отметки через правый клик"""
-    child_id = request.POST.get('child_id')
-    date_str = request.POST.get('date')
-    
-    if child_id and date_str:
-        try:
-            date = datetime.strptime(date_str, '%Y-%m-%d').date()
-            attendance = Attendance.objects.filter(child_id=child_id, date=date).first()
-            if attendance:
-                attendance.delete()
-                return JsonResponse({'status': 'ok', 'message': 'Отметка отменена'})
-        except ValueError:
-            pass
-    
-    return JsonResponse({'status': 'error', 'message': 'Ошибка'}, status=400)
+    """Удалить отметку только из выбранной группы табеля."""
+    child_id = request.POST.get("child_id")
+    date_str = request.POST.get("date")
+    if not child_id or not date_str:
+        return JsonResponse({"status": "error", "message": "Ошибка"}, status=400)
+
+    child = get_object_or_404(Child, pk=child_id)
+    group = _attendance_group_for_child(child, request.POST.get("group_id"))
+    if group is None:
+        return JsonResponse(
+            {
+                "status": "error",
+                "code": "group_membership_required",
+                "message": "Спортсмен не состоит в выбранной группе",
+            },
+            status=409,
+        )
+
+    try:
+        mark_date = date.fromisoformat(date_str)
+    except ValueError:
+        return JsonResponse({"status": "error", "message": "Ошибка"}, status=400)
+
+    attendance = (
+        Attendance.objects
+        .filter(child=child, date=mark_date, slot=None)
+        .filter(
+            Q(group_snapshot=group)
+            | Q(
+                group_snapshot__isnull=True,
+                child__group=group,
+            )
+        )
+        .order_by("pk")
+        .first()
+    )
+    if attendance is None:
+        return JsonResponse({"status": "error", "message": "Отметка не найдена"}, status=404)
+
+    attendance.delete()
+    return JsonResponse({"status": "ok", "message": "Отметка отменена"})
 
 @login_required
 @require_POST
@@ -1299,6 +1397,16 @@ def mark_attendance_view(request):
         )
 
     child = get_object_or_404(Child, pk=child_id)
+    group = _attendance_group_for_child(child, request.POST.get("group_id"))
+    if group is None:
+        return JsonResponse(
+            {
+                "status": "error",
+                "code": "group_membership_required",
+                "message": "Спортсмен не состоит в выбранной группе",
+            },
+            status=409,
+        )
 
     allowed_statuses = {
         Attendance.Status.PRESENT,
@@ -1318,29 +1426,38 @@ def mark_attendance_view(request):
             status=400,
         )
 
-    attendance = Attendance.objects.filter(
-        child=child,
-        date=mark_date,
-        slot=None,
-    ).first()
+    attendance = (
+        Attendance.objects
+        .filter(child=child, date=mark_date, slot=None)
+        .filter(
+            Q(group_snapshot=group)
+            | Q(
+                group_snapshot__isnull=True,
+                child__group=group,
+            )
+        )
+        .order_by("pk")
+        .first()
+    )
     trainer_assignment = (
         LessonTrainerAssignment.objects
         .filter(
-            group=child.group,
+            group=group,
             child=child,
             date=mark_date,
         )
         .select_related("trainer")
         .first()
-        if child.group_id
+        if group
         else None
     )
     actual_trainer = (
         trainer_assignment.trainer
         if trainer_assignment
-        else child.trainer
+        else group.trainer
     )
 
+    requires_subscription = _attendance_requires_subscription(child, group)
     subscription_on_date = (
         child.subscriptions
         .filter(
@@ -1351,30 +1468,22 @@ def mark_attendance_view(request):
         )
         .order_by("end_date", "pk")
         .first()
+        if requires_subscription
+        else None
     )
     debt_already_formalized = (
-        attendance is not None
+        requires_subscription
+        and attendance is not None
         and attendance.status == Attendance.Status.PRESENT
         and subscription_on_date is None
     )
 
     charge = Decimal("0")
     if (
-        status == Attendance.Status.PRESENT
+        requires_subscription
+        and status == Attendance.Status.PRESENT
         and subscription_on_date is None
     ):
-        if not child.group:
-            return JsonResponse(
-                {
-                    "status": "error",
-                    "code": "debt_unavailable",
-                    "message": (
-                        "Нельзя оформить посещение в долг без группы"
-                    ),
-                },
-                status=409,
-            )
-
         if not allow_debt and not debt_already_formalized:
             return JsonResponse(
                 {
@@ -1388,7 +1497,7 @@ def mark_attendance_view(request):
                 status=409,
             )
 
-        if allow_debt and child.group.single_session_price <= 0:
+        if allow_debt and group.single_session_price <= 0:
             return JsonResponse(
                 {
                     "status": "error",
@@ -1404,7 +1513,7 @@ def mark_attendance_view(request):
         charge = (
             attendance.charge_amount
             if debt_already_formalized and not allow_debt
-            else child.group.single_session_price
+            else group.single_session_price
         )
 
     if attendance is None:
@@ -1413,11 +1522,11 @@ def mark_attendance_view(request):
             child=child,
             date=mark_date,
             slot=None,
-            group_snapshot=child.group,
+            group_snapshot=group,
             trainer_snapshot=actual_trainer,
             salary_rate_snapshot=(
-                child.group.salary_rate
-                if child.group
+                group.salary_rate
+                if group
                 else None
             ),
             status=status,
@@ -1429,18 +1538,17 @@ def mark_attendance_view(request):
         attendance.status = status
         attendance.charge_amount = charge
 
-        if attendance.group_snapshot_id is None and child.group:
-            attendance.group_snapshot = child.group
+        if attendance.group_snapshot_id is None:
+            attendance.group_snapshot = group
             attendance.trainer_snapshot = actual_trainer
-            attendance.salary_rate_snapshot = child.group.salary_rate
+            attendance.salary_rate_snapshot = group.salary_rate
             update_fields.extend([
                 "group_snapshot",
                 "trainer_snapshot",
                 "salary_rate_snapshot",
             ])
         elif (
-            child.group
-            and attendance.group_snapshot_id == child.group_id
+            attendance.group_snapshot_id == group.pk
             and attendance.trainer_snapshot_id != (
                 actual_trainer.pk
                 if actual_trainer
@@ -1453,7 +1561,8 @@ def mark_attendance_view(request):
         attendance.save(update_fields=update_fields)
 
     debt_formalized = (
-        status == Attendance.Status.PRESENT
+        requires_subscription
+        and status == Attendance.Status.PRESENT
         and subscription_on_date is None
     )
     if debt_formalized and allow_debt:
@@ -1486,6 +1595,16 @@ def attendance_reason_view(request):
         Child.objects.select_related("group__trainer"),
         pk=request.POST.get("child_id"),
     )
+    group = _attendance_group_for_child(child, request.POST.get("group_id"))
+    if group is None:
+        return JsonResponse(
+            {
+                "status": "error",
+                "code": "group_membership_required",
+                "message": "Спортсмен не состоит в выбранной группе",
+            },
+            status=409,
+        )
     kind = request.POST.get("kind", "").strip()
     date_from_raw = request.POST.get("date_from", "").strip()
     date_to_raw = request.POST.get("date_to", "").strip() or date_from_raw
@@ -1534,17 +1653,8 @@ def attendance_reason_view(request):
             },
             status=400,
         )
-    if not child.group:
-        return JsonResponse(
-            {
-                "status": "error",
-                "message": "У ребёнка нет группы",
-            },
-            status=409,
-        )
-
     class_dates = effective_class_dates(
-        child.group,
+        group,
         date_from,
         date_to,
     )
@@ -1578,7 +1688,7 @@ def attendance_reason_view(request):
         for assignment in (
             LessonTrainerAssignment.objects
             .filter(
-                group=child.group,
+                group=group,
                 child=child,
                 date__in=class_dates,
             )
@@ -1590,15 +1700,18 @@ def attendance_reason_view(request):
     for class_date in class_dates:
         actual_trainer = assigned_trainers.get(
             class_date,
-            child.trainer,
+            group.trainer,
         )
         attendance = (
             Attendance.objects
             .select_for_update()
+            .filter(child=child, date=class_date, slot=None)
             .filter(
-                child=child,
-                date=class_date,
-                slot=None,
+                Q(group_snapshot=group)
+                | Q(
+                    group_snapshot__isnull=True,
+                    child__group=group,
+                )
             )
             .order_by("pk")
             .first()
@@ -1608,9 +1721,9 @@ def attendance_reason_view(request):
                 child=child,
                 date=class_date,
                 slot=None,
-                group_snapshot=child.group,
+                group_snapshot=group,
                 trainer_snapshot=actual_trainer,
-                salary_rate_snapshot=child.group.salary_rate,
+                salary_rate_snapshot=group.salary_rate,
                 status=status,
                 comment=legacy_comment,
                 reason=reason,
@@ -1628,16 +1741,16 @@ def attendance_reason_view(request):
                 "charge_amount",
             ]
             if attendance.group_snapshot_id is None:
-                attendance.group_snapshot = child.group
+                attendance.group_snapshot = group
                 attendance.trainer_snapshot = actual_trainer
-                attendance.salary_rate_snapshot = child.group.salary_rate
+                attendance.salary_rate_snapshot = group.salary_rate
                 update_fields.extend([
                     "group_snapshot",
                     "trainer_snapshot",
                     "salary_rate_snapshot",
                 ])
             elif (
-                attendance.group_snapshot_id == child.group_id
+                attendance.group_snapshot_id == group.pk
                 and attendance.trainer_snapshot_id != (
                     actual_trainer.pk
                     if actual_trainer
@@ -4635,7 +4748,18 @@ def child_card_view(request, child_id):
         .order_by("-date", "-id")
     )
     ranks = child.ranks.all().order_by('-year')
-    competitions = child.competition_entries.all().select_related('competition').order_by('-competition__date')[:20]
+    competitions = list(
+        child.competition_entries
+        .select_related("competition")
+        .prefetch_related("competition__documents")
+        .order_by("-competition__date")[:20]
+    )
+    for entry in competitions:
+        entry.card_documents = [
+            document
+            for document in entry.competition.documents.all()
+            if document.child_id in (None, child.pk)
+        ]
     camps = child.camp_stays.all().select_related('camp').order_by('-start_date')
 
     active_sub = child.active_subscription()
@@ -4713,9 +4837,16 @@ def child_card_view(request, child_id):
             camp_form = CampStayForm(request.POST, prefix="camp")
             if camp_form.is_valid():
                 camp_name = camp_form.cleaned_data["camp_name"].strip()
-                camp = Camp.objects.filter(name__iexact=camp_name).first()
+                camp_kind = camp_form.cleaned_data["kind"]
+                camp = Camp.objects.filter(
+                    name__iexact=camp_name,
+                    kind=camp_kind,
+                ).first()
                 if camp is None:
-                    camp = Camp.objects.create(name=camp_name)
+                    camp = Camp.objects.create(
+                        name=camp_name,
+                        kind=camp_kind,
+                    )
 
                 CampStay.objects.get_or_create(
                     child=child,
@@ -4723,7 +4854,7 @@ def child_card_view(request, child_id):
                     start_date=camp_form.cleaned_data["start_date"],
                     end_date=camp_form.cleaned_data["end_date"],
                 )
-                messages.success(request, "Поездка в лагерь сохранена")
+                messages.success(request, "Поездка в лагерь / на сборы сохранена")
                 return redirect("child_card", child_id=child.pk)
 
         elif action == "delete_camp":
@@ -4769,6 +4900,35 @@ def child_card_view(request, child_id):
             messages.success(
                 request,
                 f'Группа "{new_group.name}" добавлена спортсмену',
+            )
+            return redirect("child_card", child_id=child.pk)
+
+        elif action == "set_membership_subscription_mode":
+            membership = get_object_or_404(
+                child.group_memberships.select_related("group"),
+                pk=request.POST.get("membership_id"),
+                archived_at__isnull=True,
+            )
+            requires_subscription = (
+                request.POST.get("requires_subscription") == "1"
+            )
+            if membership.requires_subscription != requires_subscription:
+                membership.requires_subscription = requires_subscription
+                membership.save(update_fields=["requires_subscription"])
+                mode = (
+                    "использует абонемент"
+                    if requires_subscription
+                    else "персональные / разовые без абонемента"
+                )
+                log_action(
+                    request,
+                    "child.group_membership.subscription_mode",
+                    child,
+                    f"{child}: группа {membership.group} — {mode}",
+                )
+            messages.success(
+                request,
+                "Режим абонемента для группы обновлён",
             )
             return redirect("child_card", child_id=child.pk)
 
@@ -4897,18 +5057,23 @@ def child_card_view(request, child_id):
                 )
                 return redirect("child_card", child_id=child.id)
 
-    # === HEAT-MAP: последние 365 дней ===
-        # === HEAT-MAP: последние 180 дней ===
+    # === HEAT-MAP: последние 90 дней ===
     today = timezone.localdate()
     days_back = 90
     year_ago = today - timedelta(days=days_back - 1)
 
-    # Получаем все посещения за период
-    period_attendances = {
-        att.date: att.status
-        for att in child.attendances.filter(date__gte=year_ago)
-    }
+    # В нескольких группах у ребёнка может быть несколько отметок в один день.
+    # Heat-map не должен терять вторую отметку при сведении по дате.
+    period_marks = list(
+        child.attendances
+        .filter(date__gte=year_ago, date__lte=today)
+        .select_related("group_snapshot", "slot__group")
+        .order_by("date", "id")
+    )
     attendance_labels = dict(Attendance.Status.choices)
+    period_attendances = defaultdict(list)
+    for mark in period_marks:
+        period_attendances[mark.date].append(mark)
 
     # Начинаем с понедельника (weekday() возвращает 0=Пн, 6=Вс)
     start_date = year_ago - timedelta(days=year_ago.weekday())
@@ -4925,11 +5090,24 @@ def child_card_view(request, child_id):
             if date > end_date or date < year_ago:
                 week.append(None)
             else:
-                status = period_attendances.get(date)
+                day_marks = period_attendances.get(date, [])
+                status = day_marks[0].status if len(day_marks) == 1 else ""
+                descriptions = []
+                for mark in day_marks:
+                    group = (
+                        mark.group_snapshot
+                        or (mark.slot.group if mark.slot_id else None)
+                    )
+                    group_name = group.name if group else "Группа не указана"
+                    descriptions.append(
+                        f"{group_name}: {attendance_labels.get(mark.status, mark.status)}"
+                    )
                 week.append({
                     'date': date,
                     'status': status,
-                    'status_label': attendance_labels.get(status, ''),
+                    'status_label': "; ".join(descriptions),
+                    'mark_count': len(day_marks),
+                    'is_multi': len(day_marks) > 1,
                     'is_future': date > today,
                 })
         weeks.append({
@@ -4940,13 +5118,14 @@ def child_card_view(request, child_id):
         current += timedelta(days=7)
         week_index += 1
 
-    # Статистика по статусам за период
+    # Статистика считает все групповые отметки, а не одну произвольную на дату.
     period_stats = {
-        'present': sum(1 for s in period_attendances.values() if s == 'present'),
-        'absent': sum(1 for s in period_attendances.values() if s == 'absent'),
-        'frozen': sum(1 for s in period_attendances.values() if s == 'frozen'),
-        'vacation': sum(1 for s in period_attendances.values() if s == 'vacation'),
-        'excused': sum(1 for s in period_attendances.values() if s == 'excused'),
+        'present': sum(mark.status == Attendance.Status.PRESENT for mark in period_marks),
+        'absent': sum(mark.status == Attendance.Status.ABSENT for mark in period_marks),
+        'frozen': sum(mark.status == Attendance.Status.FROZEN for mark in period_marks),
+        'vacation': sum(mark.status == Attendance.Status.VACATION for mark in period_marks),
+        'excused': sum(mark.status == Attendance.Status.EXCUSED for mark in period_marks),
+        'sick': sum(mark.status == Attendance.Status.SICK for mark in period_marks),
     }
 
     context = {
@@ -5318,7 +5497,7 @@ def group_list_view(request):
     if editing_id is not None or request.GET.get("create"):
         request._inline_group = True
         return group_edit_view(request, editing_id) if editing_id is not None else group_create_view(request)
-    groups = Group.objects.select_related('trainer').prefetch_related('schedule', 'children').order_by('trainer__full_name', 'trainer_id', 'name')
+    groups = Group.objects.select_related('trainer').prefetch_related('schedule', 'children', 'subscription_tariffs').order_by('trainer__full_name', 'trainer_id', 'name')
     context = {
         'groups': groups,
         'title': 'Группы',
@@ -5355,7 +5534,7 @@ def group_create_view(request):
     }
     context["form_title"] = context["title"]
     context["title"] = "Группы"
-    context["groups"] = Group.objects.select_related("trainer").prefetch_related("schedule", "children").order_by("trainer__full_name", "trainer_id", "name")
+    context["groups"] = Group.objects.select_related("trainer").prefetch_related("schedule", "children", "subscription_tariffs").order_by("trainer__full_name", "trainer_id", "name")
     return render(request, "crm/groups.html", context)
 
 @login_required
@@ -5366,9 +5545,9 @@ def group_edit_view(request, pk):
         return redirect(f"{reverse('group_list')}?edit={group.pk}")
 
     if request.method == 'POST':
-        # До изменения тренера/ставки фиксируем старые посещения.
-        for child in group.children.select_related("group__trainer"):
-            child.freeze_current_history()
+        # До изменения тренера/ставки фиксируем историю всей группы,
+        # включая спортсменов из дополнительных членств.
+        group.freeze_current_history()
 
         group_form = GroupForm(request.POST, instance=group)
         slot_formset = ScheduleSlotFormSet(request.POST, instance=group)
@@ -5391,7 +5570,7 @@ def group_edit_view(request, pk):
     }
     context["form_title"] = context["title"]
     context["title"] = "Группы"
-    context["groups"] = Group.objects.select_related("trainer").prefetch_related("schedule", "children").order_by("trainer__full_name", "trainer_id", "name")
+    context["groups"] = Group.objects.select_related("trainer").prefetch_related("schedule", "children", "subscription_tariffs").order_by("trainer__full_name", "trainer_id", "name")
     return render(request, "crm/groups.html", context)
 
 @login_required
@@ -5399,9 +5578,24 @@ def group_delete_view(request, pk):
     """Удаление группы"""
     group = get_object_or_404(Group, pk=pk)
     if request.method == 'POST':
-        children_count = group.children.count()
-        if children_count > 0:
-            messages.error(request, f'Нельзя удалить группу "{group.name}": в ней {children_count} детей. Сначала переведите детей в другие группы.')
+        active_children_count = group.current_children().count()
+        has_history = (
+            group.children.exists()
+            or group.child_memberships.exists()
+        )
+        if has_history:
+            if active_children_count:
+                reason = f"с ней связано {active_children_count} действующих спортсменов"
+            else:
+                reason = "с ней сохранена история спортсменов"
+            messages.error(
+                request,
+                (
+                    f'Нельзя удалить группу "{group.name}": {reason}. '
+                    "Переведите действующих спортсменов, затем сделайте группу неактивной — "
+                    "история останется доступна."
+                ),
+            )
             return redirect('group_list')
         group.delete()
         messages.success(request, f'Группа "{group.name}" удалена')
@@ -5484,14 +5678,16 @@ def _attendance_for_group(group, month_start, month_end):
     return (
         Attendance.objects
         .filter(
-            child__group=group,
             child__status__in=current_statuses,
             date__gte=month_start,
             date__lte=month_end,
         )
         .filter(
             Q(group_snapshot=group)
-            | Q(group_snapshot__isnull=True)
+            | Q(
+                group_snapshot__isnull=True,
+                child__group=group,
+            )
         )
     )
 
@@ -5549,23 +5745,80 @@ def _report_trainers(month_start, month_end):
 
 
 def build_group_stats(month_start, month_end, today):
-    """Единая формула посещаемости; суммы считаются пакетно."""
-    from django.db.models import F
+    """Посещаемость групп с учётом основной и дополнительных групп ребёнка."""
     current_statuses = (Child.Status.ACTIVE, Child.Status.TRIAL)
-    kids_by_group = dict(Child.objects.filter(status__in=current_statuses).values("group_id").annotate(total=Count("pk")).values_list("group_id", "total"))
-    totals = {(row["child__group_id"], row["status"]): row["total"] for row in Attendance.objects.filter(
-        child__status__in=current_statuses, date__range=(month_start, month_end),
-    ).filter(Q(group_snapshot_id=F("child__group_id")) | Q(group_snapshot__isnull=True)).values("child__group_id", "status").annotate(total=Count("pk"))}
+
+    child_ids_by_group = defaultdict(set)
+    for child_id, group_id in (
+        Child.objects
+        .filter(status__in=current_statuses)
+        .values_list("pk", "group_id")
+    ):
+        if group_id:
+            child_ids_by_group[group_id].add(child_id)
+
+    for child_id, group_id in (
+        ChildGroupMembership.objects
+        .filter(
+            archived_at__isnull=True,
+            child__status__in=current_statuses,
+        )
+        .values_list("child_id", "group_id")
+    ):
+        child_ids_by_group[group_id].add(child_id)
+
+    totals = defaultdict(int)
+    for group_snapshot_id, primary_group_id, status in (
+        Attendance.objects
+        .filter(
+            child__status__in=current_statuses,
+            date__range=(month_start, month_end),
+        )
+        .values_list(
+            "group_snapshot_id",
+            "child__group_id",
+            "status",
+        )
+    ):
+        group_id = group_snapshot_id or primary_group_id
+        if group_id:
+            totals[(group_id, status)] += 1
+
     result = []
-    for group in Group.objects.filter(is_active=True).select_related("trainer").prefetch_related("schedule"):
-        kids = kids_by_group.get(group.pk, 0)
+    groups = (
+        Group.objects
+        .filter(is_active=True)
+        .select_related("trainer")
+        .prefetch_related("schedule")
+    )
+    for group in groups:
+        kids = len(child_ids_by_group.get(group.pk, ()))
         weekdays = {slot.weekday for slot in group.schedule.all()}
-        sessions = sum((month_start + timedelta(days=offset)).weekday() in weekdays for offset in range(max(0, (min(month_end, today) - month_start).days + 1)))
-        present = totals.get((group.pk, Attendance.Status.PRESENT), 0)
-        absent = totals.get((group.pk, Attendance.Status.ABSENT), 0)
+        sessions = sum(
+            (month_start + timedelta(days=offset)).weekday() in weekdays
+            for offset in range(
+                max(
+                    0,
+                    (min(month_end, today) - month_start).days + 1,
+                )
+            )
+        )
+        present = totals[(group.pk, Attendance.Status.PRESENT)]
+        absent = totals[(group.pk, Attendance.Status.ABSENT)]
         capacity = kids * sessions
-        result.append({"group": group, "kids": kids, "present": present, "absent": absent, "sessions": sessions,
-                       "capacity": capacity, "attendance_pct": round(present * 100 / capacity) if capacity else 0})
+        result.append({
+            "group": group,
+            "kids": kids,
+            "present": present,
+            "absent": absent,
+            "sessions": sessions,
+            "capacity": capacity,
+            "attendance_pct": (
+                round(present * 100 / capacity)
+                if capacity
+                else 0
+            ),
+        })
     return result
 
 
@@ -5698,13 +5951,27 @@ def statistics_view(request):
         status__in=current_statuses,
     ).count()
     active_children = children.filter(status=Child.Status.ACTIVE).count()
+    assigned_child_ids = set(
+        children
+        .filter(
+            status__in=current_statuses,
+            group__is_active=True,
+        )
+        .values_list("pk", flat=True)
+    )
+    assigned_child_ids.update(
+        ChildGroupMembership.objects
+        .filter(
+            child__status__in=current_statuses,
+            group__is_active=True,
+            archived_at__isnull=True,
+        )
+        .values_list("child_id", flat=True)
+    )
     unassigned_children = (
         children
         .filter(status__in=current_statuses)
-        .filter(
-            Q(group__isnull=True)
-            | Q(group__is_active=False)
-        )
+        .exclude(pk__in=assigned_child_ids)
         .count()
     )
 

@@ -214,11 +214,19 @@
                                     <b class="min-w-0 truncate text-sm {% if item.is_archived %}text-slate-500 line-through{% endif %}">
                                         {{ item.child.last_name }} {{ item.child.first_name }}
                                     </b>
+                                    {% if item.requires_subscription %}
                                     <span class="shrink-0 text-sm font-extrabold text-slate-800"
                                           title="Использовано занятий из абонемента"
                                           data-athlete-sessions>
                                         {{ item.sessions_used }}/{{ item.sessions_total }}
                                     </span>
+                                    {% else %}
+                                    <span class="shrink-0 text-[10px] font-bold text-slate-400"
+                                          title="Для этого членства абонемент не используется"
+                                          data-athlete-sessions-not-required>
+                                        без аб.
+                                    </span>
+                                    {% endif %}
                                 </div>
 
                                 <div class="mt-1 flex items-center justify-between gap-2"
@@ -289,6 +297,7 @@
                                         {% if entry.is_future %}disabled aria-disabled="true" title="Будущее занятие — отметка недоступна"{% endif %}
                                         aria-label="{{ item.child }} · {{ entry.date|date:'d.m.Y' }} · отметка посещения"
                                         data-child-id="{{ item.child.id }}"
+                                        data-group-id="{{ selected_group.id }}"
                                         data-subscription-id="{{ item.subscription_id|default:'' }}"
                                         data-date="{{ entry.date|date:'Y-m-d' }}"
                                         data-state="{% if entry.status == 'present' %}1{% elif entry.status == 'absent' %}2{% elif entry.status == 'frozen' %}3{% elif entry.status == 'vacation' %}4{% elif entry.status == 'excused' %}5{% elif entry.status == 'sick' %}6{% else %}0{% endif %}"
@@ -409,6 +418,7 @@
               class="mt-5 space-y-4">
             {% csrf_token %}
             <input type="hidden" name="child_id" data-reason-child>
+            <input type="hidden" name="group_id" value="{{ selected_group.id }}">
             <input type="hidden" name="kind" data-reason-kind>
 
             <div class="grid gap-3 sm:grid-cols-2">
@@ -946,8 +956,9 @@
     // =========================================================
     async function saveAttendance(button, status, { allowDebt = false } = {}) {
         const childId = button.dataset.childId;
+        const groupId = button.dataset.groupId;
         const date = button.dataset.date;
-        if (!childId || !date) return;
+        if (!childId || !groupId || !date) return;
 
         const oldState = button.dataset.state;
         button.disabled = true;
@@ -964,6 +975,7 @@
                 },
                 body: new URLSearchParams({
                     child_id: childId,
+                    group_id: groupId,
                     date: date,
                     status: status,
                     allow_debt: allowDebt ? "1" : ""
@@ -984,6 +996,7 @@
 
     async function clearAttendance(button) {
         const childId = button.dataset.childId;
+        const groupId = button.dataset.groupId;
         const date = button.dataset.date;
         const oldState = button.dataset.state;
 
@@ -999,7 +1012,11 @@
                     "X-CSRFToken": getCsrfToken(),
                     "X-Requested-With": "XMLHttpRequest"
                 },
-                body: new URLSearchParams({ child_id: childId, date: date }).toString()
+                body: new URLSearchParams({
+                    child_id: childId,
+                    group_id: groupId,
+                    date: date
+                }).toString()
             });
             const data = await response.json();
             if (!response.ok || data.status !== "ok") throw new Error(data.message || `HTTP ${response.status}`);
