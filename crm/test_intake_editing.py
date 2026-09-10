@@ -4,7 +4,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
 
-from .models import Lead, Newcomer, Trainer
+from .models import Group, Lead, Newcomer, Trainer
 
 
 class IntakeEditRegressionTests(TestCase):
@@ -290,3 +290,75 @@ class IntakeEditRegressionTests(TestCase):
         self.assertContains(response, "row.dataset.leadDate <= dateTo")
         self.assertContains(response, "matchesAge(row, age)")
         self.assertContains(response, 'colspan="10"')
+
+
+    def test_newcomers_have_filters_and_inline_operational_flags(self):
+        trainer = Trainer.objects.create(full_name="Тренер пробников")
+        group = Group.objects.create(name="Пробная группа", trainer=trainer)
+        Newcomer.objects.create(
+            full_name="Фильтруемый новичок",
+            birth_date=date(2015, 6, 15),
+            trainer=trainer,
+            group=group,
+            attended=True,
+        )
+
+        response = self.client.get(reverse("newcomers"))
+
+        self.assertEqual(response.status_code, 200)
+        for marker in (
+            'data-filter="q"',
+            'data-filter="trainer"',
+            'data-filter="group"',
+            'data-filter="age"',
+            'data-filter="from"',
+            'data-filter="to"',
+            'data-filter="attended"',
+            'data-filter="paid"',
+            'data-filter="cancelled"',
+        ):
+            self.assertContains(response, marker)
+        self.assertContains(response, 'data-birth-year="2015"')
+        self.assertContains(response, 'name="field" value="attended"')
+        self.assertContains(response, 'name="field" value="lesson_cancelled"')
+        self.assertNotContains(response, 'name="field" value="paid"')
+        self.assertContains(response, "matchesAge(row, v.age)")
+        self.assertContains(response, "row.dataset.paid === v.paid")
+
+    def test_newcomer_quick_flags_are_mutually_exclusive_and_paid_is_read_only(self):
+        newcomer = Newcomer.objects.create(
+            full_name="Быстрая отметка",
+            lesson_cancelled=True,
+        )
+
+        for field, expected_attended, expected_cancelled in (
+            ("attended", True, False),
+            ("lesson_cancelled", False, True),
+        ):
+            response = self.client.post(
+                reverse("newcomers"),
+                {
+                    "action": "quick_flag",
+                    "newcomer_id": str(newcomer.pk),
+                    "field": field,
+                    "value": "1",
+                },
+            )
+            self.assertRedirects(response, reverse("newcomers"))
+            newcomer.refresh_from_db()
+            self.assertEqual(newcomer.attended, expected_attended)
+            self.assertEqual(newcomer.lesson_cancelled, expected_cancelled)
+
+        response = self.client.post(
+            reverse("newcomers"),
+            {
+                "action": "quick_flag",
+                "newcomer_id": str(newcomer.pk),
+                "field": "paid",
+                "value": "1",
+            },
+        )
+        self.assertRedirects(response, reverse("newcomers"))
+        newcomer.refresh_from_db()
+        self.assertFalse(newcomer.paid)
+        self.assertFalse(newcomer.has_paid)

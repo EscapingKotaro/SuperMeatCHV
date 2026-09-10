@@ -62,6 +62,38 @@ def applications_page(request):
 def newcomers_page(request):
     action = request.POST.get("action", "save")
 
+    if request.method == "POST" and action == "quick_flag":
+        newcomer = get_object_or_404(
+            Newcomer,
+            pk=views._optional_pk(request.POST.get("newcomer_id")),
+        )
+        field = (request.POST.get("field") or "").strip()
+        if field not in {"attended", "lesson_cancelled"}:
+            messages.error(request, "Недоступный быстрый признак")
+            return redirect(request.get_full_path())
+
+        enabled = request.POST.get("value") == "1"
+        setattr(newcomer, field, enabled)
+        update_fields = [field]
+
+        paired_field = "lesson_cancelled" if field == "attended" else "attended"
+        if enabled and getattr(newcomer, paired_field):
+            setattr(newcomer, paired_field, False)
+            update_fields.append(paired_field)
+
+        newcomer.save(update_fields=update_fields)
+        views.log_action(
+            request,
+            "newcomer.quick_flag",
+            newcomer,
+            (
+                f"{newcomer.full_name}: "
+                f"{'был на пробном' if field == 'attended' else 'занятие отменено'} "
+                f"— {'да' if enabled else 'нет'}"
+            ),
+        )
+        return redirect(request.get_full_path())
+
     if request.method == "POST" and action == "convert":
         newcomer = get_object_or_404(
             Newcomer,

@@ -6,6 +6,26 @@
 {% endblock %}
 {% block content %}
 <section class="card overflow-hidden">
+    <div class="grid gap-3 border-b px-4 py-4 md:grid-cols-2 xl:grid-cols-5" data-newcomer-filters>
+        <input type="search" class="field" placeholder="ФИО, телефон, источник" data-filter="q">
+        <input type="search" class="field" placeholder="Тренер" data-filter="trainer">
+        <input type="search" class="field" placeholder="Группа" data-filter="group">
+        <input type="text" inputmode="numeric" class="field" placeholder="Возраст или год рождения" data-filter="age">
+        <div class="flex gap-2">
+            <input type="date" class="field" aria-label="Дата заявки с" data-filter="from">
+            <input type="date" class="field" aria-label="Дата заявки по" data-filter="to">
+        </div>
+        <select class="field" data-filter="attended">
+            <option value="">Был: все</option><option value="1">Был: да</option><option value="0">Был: нет</option>
+        </select>
+        <select class="field" data-filter="paid">
+            <option value="">Оплата: все</option><option value="1">Оплатил</option><option value="0">Не оплатил</option>
+        </select>
+        <select class="field" data-filter="cancelled">
+            <option value="">Отмена: все</option><option value="1">Отменено</option><option value="0">Не отменено</option>
+        </select>
+        <button type="button" class="btn btn-soft" data-clear-filters>Сбросить фильтры</button>
+    </div>
     <div class="table-wrap">
         <table class="data-table">
             <thead>
@@ -21,7 +41,16 @@
             </thead>
             <tbody>
                 {% for item in newcomers %}
-                <tr>
+                <tr data-newcomer-row
+                    data-search="{{ item.full_name }} {{ item.phone }} {{ item.source }}"
+                    data-trainer="{{ item.trainer|default:'' }}"
+                    data-group="{{ item.group|default:'' }}"
+                    data-application-date="{{ item.application_date|date:'Y-m-d' }}"
+                    data-birth-year="{{ item.birth_date|date:'Y' }}"
+                    data-age="{{ item.age_display }}"
+                    data-attended="{% if item.attended %}1{% else %}0{% endif %}"
+                    data-paid="{% if item.has_paid %}1{% else %}0{% endif %}"
+                    data-cancelled="{% if item.lesson_cancelled %}1{% else %}0{% endif %}">
                     <td>
                         <b>{{ item.full_name }}</b>
                         <small class="block text-slate-500">{{ item.phone }} · {{ item.source }}</small>
@@ -29,13 +58,31 @@
                     <td>{{ item.application_date|date:"d.m.Y" }}</td><td>{{ item.age_display }}</td><td>{{ item.trainer|default:"—" }}<small class="block">{{ item.group|default:"—" }}</small></td>
                     <td>{{ item.trial_at|date:"d.m.Y H:i"|default:"Не назначено" }}</td>
                     <td class="text-center">
-                        {% if item.attended %}✓{% else %}—{% endif %}
+                        <form method="post" class="inline-flex" data-quick-flag>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="quick_flag">
+                            <input type="hidden" name="newcomer_id" value="{{ item.pk }}">
+                            <input type="hidden" name="field" value="attended">
+                            <input type="checkbox" name="value" value="1" class="h-4 w-4"
+                                   aria-label="Был на пробном: {{ item.full_name }}"
+                                   {% if item.attended %}checked{% endif %} onchange="this.form.submit()">
+                        </form>
                     </td>
                     <td class="text-center">
-                        {% if item.has_paid %}✓{% else %}—{% endif %}
+                        <input type="checkbox" class="h-4 w-4" disabled
+                               title="Оплата определяется по фактическим платежам"
+                               aria-label="Оплата: {{ item.full_name }}" {% if item.has_paid %}checked{% endif %}>
                     </td>
                     <td class="text-center">
-                        {% if item.lesson_cancelled %}✓{% else %}—{% endif %}
+                        <form method="post" class="inline-flex" data-quick-flag>
+                            {% csrf_token %}
+                            <input type="hidden" name="action" value="quick_flag">
+                            <input type="hidden" name="newcomer_id" value="{{ item.pk }}">
+                            <input type="hidden" name="field" value="lesson_cancelled">
+                            <input type="checkbox" name="value" value="1" class="h-4 w-4"
+                                   aria-label="Занятие отменено: {{ item.full_name }}"
+                                   {% if item.lesson_cancelled %}checked{% endif %} onchange="this.form.submit()">
+                        </form>
                     </td>
                     <td class="max-w-xs">{{ item.comment|default:"—" }}</td>
                     <td>
@@ -59,6 +106,11 @@
                     <td colspan="10" class="py-12 text-center text-slate-500">Новичков пока нет</td>
                 </tr>
                 {% endfor %}
+                {% if newcomers %}
+                <tr data-filter-empty hidden>
+                    <td colspan="10" class="py-12 text-center text-slate-500">По фильтрам ничего не найдено</td>
+                </tr>
+                {% endif %}
             </tbody>
         </table>
     </div>
@@ -94,6 +146,73 @@
 </section>
 {% endblock %}
 {% block scripts %}
+<script>
+(() => {
+    const root = document.querySelector('[data-newcomer-filters]');
+    const rows = [...document.querySelectorAll('[data-newcomer-row]')];
+    if (!root || !rows.length) return;
+
+    const controls = Object.fromEntries(
+        [...root.querySelectorAll('[data-filter]')].map(el => [el.dataset.filter, el])
+    );
+    const params = new URLSearchParams(window.location.search);
+    Object.entries(controls).forEach(([key, control]) => {
+        if (params.has(key)) control.value = params.get(key);
+    });
+
+    const matchesAge = (row, value) => {
+        if (!value) return true;
+        if (/^\d{4}$/.test(value)) return row.dataset.birthYear === value;
+        return Number.parseInt(row.dataset.age, 10) === Number.parseInt(value, 10);
+    };
+
+    function applyFilters(updateUrl = true) {
+        const v = Object.fromEntries(
+            Object.entries(controls).map(([key, control]) => [key, control.value.trim()])
+        );
+        const lower = value => value.toLocaleLowerCase('ru');
+        let visible = 0;
+        rows.forEach(row => {
+            const show = (
+                (!v.q || lower(row.dataset.search).includes(lower(v.q)))
+                && (!v.trainer || lower(row.dataset.trainer).includes(lower(v.trainer)))
+                && (!v.group || lower(row.dataset.group).includes(lower(v.group)))
+                && (!v.from || row.dataset.applicationDate >= v.from)
+                && (!v.to || row.dataset.applicationDate <= v.to)
+                && (!v.attended || row.dataset.attended === v.attended)
+                && (!v.paid || row.dataset.paid === v.paid)
+                && (!v.cancelled || row.dataset.cancelled === v.cancelled)
+                && matchesAge(row, v.age)
+            );
+            row.hidden = !show;
+            if (show) visible += 1;
+        });
+        const empty = document.querySelector('[data-filter-empty]');
+        if (empty) empty.hidden = visible !== 0;
+
+        if (updateUrl) {
+            const url = new URL(window.location.href);
+            Object.entries(v).forEach(([key, value]) => {
+                if (value) url.searchParams.set(key, value);
+                else url.searchParams.delete(key);
+            });
+            url.searchParams.delete('edit');
+            url.searchParams.delete('create');
+            window.history.replaceState({}, '', url);
+        }
+    }
+
+    Object.values(controls).forEach(control => {
+        control.addEventListener('input', () => applyFilters());
+        control.addEventListener('change', () => applyFilters());
+    });
+    root.querySelector('[data-clear-filters]').addEventListener('click', () => {
+        Object.values(controls).forEach(control => control.value = '');
+        applyFilters();
+    });
+    applyFilters(false);
+})();
+</script>
 {% if editing or form.errors or request.GET.create == "1" %}
 <script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>
 {% endif %}
