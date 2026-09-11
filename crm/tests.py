@@ -6173,6 +6173,7 @@ class CrmWorkflowTests(TestCase):
                 "action": "payment",
                 "child_id": child.pk,
                 "amount": "1500",
+                "working_group_id": self.group.pk,
                 "date": timezone.localdate().isoformat(),
             },
         )

@@ -15,7 +15,7 @@ body{font-size:16px}.btn,.field,.nav-pill,.menu-item{font-size:.9rem;min-height:
 .attendance-grid .attendance-mark-cell.attendance-subscription-default{background:#fff}
 .attendance-grid .attendance-mark-cell.attendance-subscription-expired{background:#fecaca}
 .attendance-grid .attendance-mark-cell.attendance-subscription-renewed{background:#d9fdd3}
-.attendance-grid .attendance-mark-cell.attendance-today{box-shadow:inset 0 3px 0 #ff5c35}
+.attendance-grid .attendance-mark-cell.attendance-today{box-shadow:none}
 .attendance-grid .attendance-cell{display:flex;align-items:center;justify-content:center;width:100%;height:100%;min-width:0;min-height:52px;border:0;border-radius:0;background:transparent!important;font-size:1rem;font-weight:850;transition:color .12s,box-shadow .12s}
 .attendance-grid .attendance-cell:hover:not(:disabled){position:relative;z-index:1;transform:none;box-shadow:inset 0 0 0 2px #ff5c35}
 .attendance-grid .attendance-cell:disabled{opacity:1;color:#94a3b8}

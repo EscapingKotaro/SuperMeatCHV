@@ -830,7 +830,7 @@
     // УПРАВЛЕНИЕ МЕНЮ
     // =========================================================
     function requiresDebt(button) {
-        return ["expired", "none"].includes(
+        return button.dataset.debtRequired === "true" || ["expired", "none"].includes(
             button.dataset.subscriptionState
         );
     }
@@ -943,12 +943,35 @@
     // =========================================================
     // API: СОХРАНИТЬ / УДАЛИТЬ
     // =========================================================
+    let journalSaving = false;
+    async function refreshJournal(button) {
+        // Server recomputes unique club counts, debt, sessions and end boundaries.
+        const response = await fetch(window.location.href, {credentials: "same-origin", cache: "no-store"});
+        if (!response.ok) throw new Error("Не удалось обновить табель");
+        const page = new DOMParser().parseFromString(await response.text(), "text/html");
+        const fresh = page.querySelector(".attendance-journal");
+        const current = document.querySelector(".attendance-journal");
+        if (!fresh || !current) throw new Error("Не удалось обновить табель");
+        const scroll = current.querySelector(".attendance-scroll");
+        const left = scroll.scrollLeft, top = scroll.scrollTop;
+        const hadFocus = document.activeElement === button;
+        closeMenu();
+        current.replaceWith(fresh);
+        const newScroll = fresh.querySelector(".attendance-scroll");
+        newScroll.scrollLeft = left;
+        newScroll.scrollTop = top;
+        window.lucide?.createIcons();
+        if (hadFocus) fresh.querySelector(`[data-child-id="${button.dataset.childId}"][data-date="${button.dataset.date}"]`)?.focus({preventScroll:true});
+    }
+
     async function saveAttendance(button, status, { allowDebt = false } = {}) {
+        if (journalSaving) return;
         const childId = button.dataset.childId;
         const groupId = button.dataset.groupId;
         const date = button.dataset.date;
         if (!childId || !groupId || !date) return;
 
+        journalSaving = true;
         const oldState = button.dataset.state;
         button.disabled = true;
         button.classList.add("opacity-50");
@@ -971,19 +994,29 @@
                 }).toString()
             });
             const data = await response.json();
+            if (data.code === "debt_required") {
+                button.dataset.debtRequired = "true";
+                openMenu(button);
+                return;
+            }
             if (!response.ok || data.status !== "ok") throw new Error(data.message || `HTTP ${response.status}`);
             paintButton(button, status);
             updatePresentCounters(button, oldState, button.dataset.state);
+            try { await refreshJournal(button); }
+            catch { window.location.reload(); }
         } catch (error) {
             console.error("Ошибка сохранения:", error);
             alert("Не удалось сохранить отметку: " + error.message);
         } finally {
+            journalSaving = false;
             button.disabled = false;
             button.classList.remove("opacity-50");
         }
     }
 
     async function clearAttendance(button) {
+        if (journalSaving) return;
+        journalSaving = true;
         const childId = button.dataset.childId;
         const groupId = button.dataset.groupId;
         const date = button.dataset.date;
@@ -1011,10 +1044,13 @@
             if (!response.ok || data.status !== "ok") throw new Error(data.message || `HTTP ${response.status}`);
             paintButton(button, "clear");
             updatePresentCounters(button, oldState, button.dataset.state);
+            try { await refreshJournal(button); }
+            catch { window.location.reload(); }
         } catch (error) {
             console.error("Ошибка удаления:", error);
             alert("Не удалось убрать отметку: " + error.message);
         } finally {
+            journalSaving = false;
             button.disabled = false;
             button.classList.remove("opacity-50");
         }
