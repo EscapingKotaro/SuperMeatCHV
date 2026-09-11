@@ -253,6 +253,97 @@ def applications_page(request):
 
 
 @login_required
+@transaction.atomic
+def payments_page(request):
+    """
+    Для первой оплаты пробника отдельно назначает рабочую группу.
+
+    Саму оплату по-прежнему создаёт исходный views.payments_page:
+    здесь не дублируется финансовая логика и валидация абонемента.
+    """
+    if (
+        request.method != "POST"
+        or request.POST.get("action") != "payment"
+    ):
+        return views.payments_page(request)
+
+    from .models import Child, Group
+
+    child = get_object_or_404(
+        Child.objects.select_for_update().select_related("group__trainer"),
+        pk=views._optional_pk(request.POST.get("child_id")),
+    )
+    was_trial = child.status == Child.Status.TRIAL
+
+    working_group = None
+    if was_trial:
+        working_group_id = views._optional_pk(
+            request.POST.get("working_group_id"),
+        )
+        if working_group_id is None:
+            messages.error(
+                request,
+                "Для пробника выберите рабочую группу после оплаты",
+            )
+            return redirect("payments")
+
+        working_group = (
+            Group.objects
+            .select_related("trainer")
+            .filter(pk=working_group_id, is_active=True)
+            .first()
+        )
+        if working_group is None:
+            messages.error(
+                request,
+                "Выбранная рабочая группа недоступна",
+            )
+            return redirect("payments")
+
+    payments_before = set(
+        child.payments.values_list("pk", flat=True)
+    )
+    response = views.payments_page(request)
+
+    if not was_trial or working_group is None:
+        return response
+
+    payment_created = (
+        child.payments
+        .exclude(pk__in=payments_before)
+        .filter(amount__gt=0)
+        .exists()
+    )
+    if not payment_created:
+        return response
+
+    child.refresh_from_db()
+
+    if child.group_id != working_group.pk:
+        trial_group = child.group
+        child.freeze_current_history()
+        child.group = working_group
+        child.save(update_fields=["group"])
+        child.schedule.clear()
+        views.log_action(
+            request,
+            "child.group.after_trial_payment",
+            child,
+            (
+                f"{child}: после пробного рабочая группа — "
+                f"{working_group}"
+                + (
+                    f"; пробная группа — {trial_group}"
+                    if trial_group
+                    else ""
+                )
+            ),
+        )
+
+    return response
+
+
+@login_required
 def newcomers_page(request):
     action = request.POST.get("action", "save")
 

@@ -181,7 +181,7 @@
         <span class="label">Спортсмен</span>
         <select name="child_id" class="field" required data-payment-child>
           {% for child in children %}
-          <option value="{{ child.pk }}">{{ child }}</option>
+          <option value="{{ child.pk }}" data-child-status="{{ child.status }}">{{ child }}</option>
           {% endfor %}
         </select>
       </label>
@@ -196,6 +196,20 @@
           {% endfor %}
         </select>
         <small class="block text-slate-500">Если у спортсмена несколько групп, выберите нужный абонемент.</small>
+      </label>
+      <label class="sm:col-span-2 hidden" data-payment-working-group-wrap>
+        <span class="label">Рабочая группа после оплаты</span>
+        <select name="working_group_id" class="field" data-payment-working-group>
+          <option value="">— Выберите рабочую группу —</option>
+          {% for group in subscription_form.fields.group.queryset %}
+          {% if group.is_active %}
+          <option value="{{ group.pk }}">{{ group }} · {{ group.trainer }}</option>
+          {% endif %}
+          {% endfor %}
+        </select>
+        <small class="block text-slate-500">
+          Для пробника это отдельное назначение: группа и тренер пробного останутся в истории.
+        </small>
       </label>
       <label>
         <span class="label">Сумма, ₽</span>
@@ -282,6 +296,8 @@
 (() => {
   const childField = document.querySelector('[data-payment-child]');
   const subscriptionField = document.querySelector('[data-payment-subscription]');
+  const workingGroupWrap = document.querySelector('[data-payment-working-group-wrap]');
+  const workingGroupField = document.querySelector('[data-payment-working-group]');
   if (!childField || !subscriptionField) return;
 
   function filterPaymentSubscriptions() {
@@ -299,8 +315,21 @@
     if (!selectedAllowed) subscriptionField.value = '';
   }
 
-  childField.addEventListener('change', filterPaymentSubscriptions);
+  function syncWorkingGroup() {
+    if (!workingGroupWrap || !workingGroupField) return;
+    const selectedChild = childField.selectedOptions[0];
+    const isTrial = selectedChild?.dataset.childStatus === 'trial';
+    workingGroupWrap.classList.toggle('hidden', !isTrial);
+    workingGroupField.required = isTrial;
+    if (!isTrial) workingGroupField.value = '';
+  }
+
+  childField.addEventListener('change', () => {
+    filterPaymentSubscriptions();
+    syncWorkingGroup();
+  });
   filterPaymentSubscriptions();
+  syncWorkingGroup();
 })();
 </script>
 <script>

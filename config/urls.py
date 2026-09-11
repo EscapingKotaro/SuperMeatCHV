@@ -48,7 +48,7 @@ urlpatterns = [
     path("revenue-forecast/", views.revenue_forecast_view, name="revenue_forecast"),
 
     # Оплаты / абонементы
-    path("payments/", views.payments_page, name="payments"),
+    path("payments/", intake_views.payments_page, name="payments"),
     path("payments/history/", views.payment_history_view, name="payment_history"),
 
     path("subscriptions/cancel/", views.cancel_subscription_view, name="cancel_subscription"),

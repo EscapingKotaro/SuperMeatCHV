@@ -479,6 +479,92 @@ class IntakeEditRegressionTests(TestCase):
         self.assertContains(trial_page, 'data-lead-status="qualified"')
         self.assertContains(trial_page, 'data-lead-visual="trial"')
 
+    def test_trial_payment_assigns_working_group_and_keeps_trial_history(self):
+        trial_trainer = Trainer.objects.create(
+            full_name="Тренер пробного платежа",
+        )
+        working_trainer = Trainer.objects.create(
+            full_name="Тренер рабочей группы",
+        )
+        trial_group = Group.objects.create(
+            name="Пробная группа платежа",
+            trainer=trial_trainer,
+        )
+        working_group = Group.objects.create(
+            name="Рабочая группа платежа",
+            trainer=working_trainer,
+        )
+        child = Child.objects.create(
+            last_name="Оплатил",
+            first_name="Пробник",
+            birth_year=2016,
+            group=trial_group,
+            status=Child.Status.TRIAL,
+            trial_from=date.today(),
+        )
+        newcomer = Newcomer.objects.create(
+            full_name="Оплатил Пробник",
+            child=child,
+            group=trial_group,
+            trainer=trial_trainer,
+            attended=True,
+        )
+
+        page = self.client.get(reverse("payments"))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "data-payment-working-group")
+        self.assertContains(page, 'data-child-status="trial"')
+        self.assertContains(page, "Рабочая группа после оплаты")
+
+        blocked = self.client.post(
+            reverse("payments"),
+            {
+                "action": "payment",
+                "child_id": str(child.pk),
+                "subscription_id": "",
+                "amount": "1500",
+                "date": date.today().isoformat(),
+                "working_group_id": "",
+            },
+        )
+        self.assertEqual(blocked.status_code, 302)
+        self.assertFalse(Payment.objects.filter(child=child).exists())
+
+        paid = self.client.post(
+            reverse("payments"),
+            {
+                "action": "payment",
+                "child_id": str(child.pk),
+                "subscription_id": "",
+                "amount": "1500",
+                "date": date.today().isoformat(),
+                "working_group_id": str(working_group.pk),
+            },
+        )
+        self.assertIn(paid.status_code, (200, 302))
+
+        child.refresh_from_db()
+        newcomer.refresh_from_db()
+
+        self.assertEqual(child.status, Child.Status.ACTIVE)
+        self.assertEqual(child.group, working_group)
+        self.assertTrue(newcomer.paid)
+        self.assertEqual(newcomer.group, trial_group)
+        self.assertEqual(newcomer.trainer, trial_trainer)
+        self.assertTrue(
+            Payment.objects.filter(
+                child=child,
+                amount="1500",
+            ).exists(),
+        )
+
+        trial_membership = child.group_memberships.get(group=trial_group)
+        working_membership = child.group_memberships.get(group=working_group)
+        self.assertFalse(trial_membership.is_primary)
+        self.assertIsNotNone(trial_membership.archived_at)
+        self.assertTrue(working_membership.is_primary)
+        self.assertIsNone(working_membership.archived_at)
+
     def test_newcomers_have_filters_and_inline_operational_flags(self):
         trainer = Trainer.objects.create(full_name="Тренер пробников")
         group = Group.objects.create(name="Пробная группа", trainer=trainer)
