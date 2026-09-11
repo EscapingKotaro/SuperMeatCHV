@@ -141,6 +141,8 @@
              data-attendance-legend>
             <span class="badge border border-slate-200 bg-white px-1.5 py-0.5 text-slate-700">+ Пришёл</span>
             <span class="badge border border-slate-200 bg-white px-1.5 py-0.5 text-slate-500">× Пропуск</span>
+            <span class="badge border border-red-300 bg-red-50 px-1.5 py-0.5 text-red-700">Абонемент закончился</span>
+            <span class="badge border border-emerald-300 bg-emerald-50 px-1.5 py-0.5 text-emerald-700">Абонемент продлён</span>
             <span class="badge bg-blue-100 text-blue-700 px-1.5 py-0.5">❄ Заморозка</span>
             <span class="badge bg-rose-100 text-rose-700 px-1.5 py-0.5">Б Больничный</span>
             <span class="badge bg-amber-100 text-amber-700 px-1.5 py-0.5">О Отпуск</span>
@@ -275,17 +277,17 @@
                             </a>
 
                             {% if not item.is_archived %}
-                            <form method="post" action="{% url 'archive_child' item.child.id %}" class="mt-1" onsubmit="return confirm('Архивировать {{ item.child.last_name }}? Он исчезнет из активного табеля.')">
+                            <form method="post" action="{% url 'archive_child' item.child.id %}" class="attendance-row-action" onsubmit="return confirm('Архивировать {{ item.child.last_name }}? Он исчезнет из активного табеля.')">
                                 {% csrf_token %}
-                                <button type="submit" class="text-xs text-slate-400 hover:text-red-600 flex items-center gap-1">
-                                    <i data-lucide="archive" class="h-3.5 w-3.5"></i>В архив
+                                <button type="submit" class="grid h-7 w-7 place-items-center text-slate-300 hover:text-red-600" aria-label="Переместить {{ item.child }} в архив" title="В архив">
+                                    <i data-lucide="archive" class="h-3.5 w-3.5"></i>
                                 </button>
                             </form>
                             {% else %}
-                            <form method="post" action="{% url 'restore_child' item.child.id %}" class="mt-1">
+                            <form method="post" action="{% url 'restore_child' item.child.id %}" class="attendance-row-action">
                                 {% csrf_token %}
-                                <button type="submit" class="text-xs text-emerald-600 hover:text-emerald-800 flex items-center gap-1">
-                                    <i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i>Вернуть
+                                <button type="submit" class="grid h-7 w-7 place-items-center text-emerald-600 hover:text-emerald-800" aria-label="Вернуть {{ item.child }} из архива" title="Вернуть из архива">
+                                    <i data-lucide="rotate-ccw" class="h-3.5 w-3.5"></i>
                                 </button>
                             </form>
                             {% endif %}
@@ -302,7 +304,7 @@
                                         data-date="{{ entry.date|date:'Y-m-d' }}"
                                         data-state="{% if entry.status == 'present' %}1{% elif entry.status == 'absent' %}2{% elif entry.status == 'frozen' %}3{% elif entry.status == 'vacation' %}4{% elif entry.status == 'excused' %}5{% elif entry.status == 'sick' %}6{% else %}0{% endif %}"
                                         data-subscription-state="{{ entry.subscription_state }}"
-                                        class="attendance-cell border text-sm {% if entry.is_future %}cursor-not-allowed opacity-50 {% endif %}{% if entry.subscription_state == 'expired' %}bg-red-50 border-red-300{% elif entry.subscription_state == 'renewed' %}bg-emerald-50 border-emerald-300{% else %}bg-white border-slate-200{% endif %} {% if entry.status == 'present' %}text-slate-800{% elif entry.status == 'absent' %}text-slate-500{% elif entry.status == 'frozen' %}text-blue-700{% elif entry.status == 'vacation' %}text-amber-700{% elif entry.status == 'excused' %}text-yellow-700{% elif entry.status == 'sick' %}text-rose-700{% else %}text-slate-300{% endif %}">
+                                        class="attendance-cell text-sm {% if entry.is_future %}cursor-not-allowed {% endif %}{% if entry.subscription_state == 'expired' %}bg-red-50 border-red-300{% elif entry.subscription_state == 'renewed' %}bg-emerald-50 border-emerald-300{% else %}bg-white border-slate-200{% endif %} {% if entry.status == 'present' %}attendance-present{% elif entry.status == 'absent' %}attendance-absent{% elif entry.status == 'frozen' %}text-blue-700{% elif entry.status == 'vacation' %}text-amber-700{% elif entry.status == 'excused' %}text-yellow-700{% elif entry.status == 'sick' %}text-rose-700{% else %}text-slate-300{% endif %}">
                                     {% if entry.status == 'present' %}+{% elif entry.status == 'absent' %}×{% elif entry.status == 'frozen' %}❄{% elif entry.status == 'vacation' %}О{% elif entry.status == 'excused' %}У{% elif entry.status == 'sick' %}Б{% endif %}
                                 </button>
                                 {% if entry.is_substitute_trainer %}
@@ -763,8 +765,8 @@
     // СОСТОЯНИЯ
     // =========================================================
     const STATES = {
-        present: { state: "1", symbol: "+", textClass: "text-slate-800" },
-        absent: { state: "2", symbol: "×", textClass: "text-slate-500" },
+        present: { state: "1", symbol: "+", textClass: "attendance-present" },
+        absent: { state: "2", symbol: "×", textClass: "attendance-absent" },
         frozen: { state: "3", symbol: "❄", textClass: "text-blue-700" },
         vacation: { state: "4", symbol: "О", textClass: "text-amber-700" },
         excused: { state: "5", symbol: "У", textClass: "text-yellow-700" },
@@ -776,6 +778,7 @@
         "bg-white", "border-slate-200",
         "bg-red-50", "border-red-300",
         "bg-emerald-50", "border-emerald-300",
+        "attendance-present", "attendance-absent",
         "text-slate-300", "text-slate-500", "text-slate-800",
         "text-blue-700", "text-amber-700", "text-yellow-700", "text-rose-700"
     ];
