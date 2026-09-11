@@ -1,12 +1,166 @@
 {% extends 'crm/base.html' %}
 {% block content %}
-<form method="get" class="card mb-5 flex gap-2 p-4">
+{% if client_registry %}
+<form method="get" class="card mb-5 p-4" data-client-filters>
+    <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <label class="text-sm font-semibold text-slate-700">
+            ФИО или телефон
+            <input name="q" value="{{ client_query }}" class="field mt-1 w-full" placeholder="Иванова Анна">
+        </label>
+        <label class="text-sm font-semibold text-slate-700">
+            Буква фамилии
+            <input name="letter" value="{{ client_letter }}" maxlength="1" class="field mt-1 w-full uppercase" placeholder="А">
+        </label>
+        <label class="text-sm font-semibold text-slate-700">
+            Статус
+            <select name="state" class="field mt-1 w-full">
+                <option value="active" {% if client_state == 'active' %}selected{% endif %}>Активные</option>
+                <option value="inactive" {% if client_state == 'inactive' %}selected{% endif %}>Неактивные</option>
+                <option value="all" {% if client_state == 'all' %}selected{% endif %}>Все</option>
+            </select>
+        </label>
+        <label class="text-sm font-semibold text-slate-700">
+            Тренер
+            <select name="trainer" class="field mt-1 w-full">
+                <option value="">Все тренеры</option>
+                {% for trainer in filter_trainers %}
+                <option value="{{ trainer.pk }}" {% if client_trainer_id == trainer.pk %}selected{% endif %}>{{ trainer.full_name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label class="text-sm font-semibold text-slate-700">
+            Группа
+            <select name="group" class="field mt-1 w-full">
+                <option value="">Все группы</option>
+                {% for group in filter_groups %}
+                <option value="{{ group.pk }}" {% if client_group_id == group.pk %}selected{% endif %}>{{ group.trainer.full_name }} · {{ group.name }}</option>
+                {% endfor %}
+            </select>
+        </label>
+        <label class="text-sm font-semibold text-slate-700">
+            Долг
+            <select name="debt" class="field mt-1 w-full">
+                <option value="all" {% if client_debt == 'all' %}selected{% endif %}>Любой</option>
+                <option value="yes" {% if client_debt == 'yes' %}selected{% endif %}>Есть долг</option>
+                <option value="no" {% if client_debt == 'no' %}selected{% endif %}>Без долга</option>
+            </select>
+        </label>
+        <label class="text-sm font-semibold text-slate-700">
+            Документы
+            <select name="alerts" class="field mt-1 w-full">
+                <option value="all" {% if client_alerts == 'all' %}selected{% endif %}>Любые</option>
+                <option value="yes" {% if client_alerts == 'yes' %}selected{% endif %}>Есть алерты</option>
+                <option value="no" {% if client_alerts == 'no' %}selected{% endif %}>Без алертов</option>
+            </select>
+        </label>
+        <div class="grid grid-cols-2 gap-2">
+            <label class="text-sm font-semibold text-slate-700">
+                Возраст от
+                <input type="number" min="0" max="120" name="age_from" value="{{ client_age_from|default_if_none:'' }}" class="field mt-1 w-full">
+            </label>
+            <label class="text-sm font-semibold text-slate-700">
+                до
+                <input type="number" min="0" max="120" name="age_to" value="{{ client_age_to|default_if_none:'' }}" class="field mt-1 w-full">
+            </label>
+        </div>
+        <label class="text-sm font-semibold text-slate-700">
+            Сортировка
+            <select name="sort" class="field mt-1 w-full">
+                <option value="az" {% if client_sort == 'az' %}selected{% endif %}>А → Я</option>
+                <option value="za" {% if client_sort == 'za' %}selected{% endif %}>Я → А</option>
+            </select>
+        </label>
+    </div>
+    <div class="mt-4 flex flex-wrap items-center gap-2">
+        <button class="btn btn-primary">
+            <i data-lucide="list-filter" class="h-4 w-4"></i> Применить
+        </button>
+        <a href="{% url 'clients' %}" class="btn btn-secondary">Сбросить</a>
+        <span class="ml-auto text-sm font-semibold text-slate-500">Найдено: {{ client_count }}</span>
+    </div>
+</form>
+
+<div class="card overflow-hidden" data-client-registry>
+    <div class="overflow-x-auto">
+        <table class="data-table min-w-[1050px]">
+            <thead>
+                <tr>
+                    <th>Спортсмен</th>
+                    <th>Возраст</th>
+                    <th>Группа</th>
+                    <th>Тренер</th>
+                    <th>Статус</th>
+                    <th>Долг</th>
+                    <th>Документы</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in client_rows %}
+                <tr
+                    class="cursor-pointer transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
+                    tabindex="0"
+                    data-client-row="{{ row.child.pk }}"
+                    onclick="window.location.href='{% url 'child_card' row.child.pk %}'"
+                    onkeydown="if(event.key === 'Enter'){window.location.href='{% url 'child_card' row.child.pk %}';}"
+                >
+                    <td>
+                        <a href="{% url 'child_card' row.child.pk %}" class="font-extrabold text-slate-900 hover:text-[#315EBC]">
+                            {{ row.child }}
+                        </a>
+                        {% if row.child.parent_phone %}
+                        <div class="mt-1 text-xs text-slate-500">{{ row.child.parent_phone }}</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ row.age|default_if_none:"—" }}</td>
+                    <td>
+                        {% for group in row.groups %}
+                        <div class="{% if not forloop.first %}mt-1{% endif %}">{{ group.name }}</div>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        {% for trainer in row.trainers %}
+                        <div class="{% if not forloop.first %}mt-1{% endif %}">{{ trainer.full_name }}</div>
+                        {% endfor %}
+                    </td>
+                    <td>
+                        {% if row.child.status == 'active' %}
+                        <span class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">{{ row.child.get_status_display }}</span>
+                        {% else %}
+                        <span class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">{{ row.child.get_status_display }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.debt > 0 %}
+                        <span class="font-extrabold text-red-600">{{ row.debt|floatformat:0 }} ₽</span>
+                        {% else %}
+                        <span class="font-semibold text-emerald-700">Нет</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if row.alert_count %}
+                        <span class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">{{ row.alert_count }} алерт.</span>
+                        {% else %}
+                        <span class="font-semibold text-emerald-700">Ок</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="7" class="py-10 text-center text-sm text-slate-400">По выбранным фильтрам клиентов нет.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+<form method="get" class="{% if client_registry %}hidden {% endif %}card mb-5 flex gap-2 p-4">
     <input name="q" value="{{ query }}" autofocus class="field" placeholder="ФИО, телефон, группа или тренер">
     <button class="btn btn-primary">
         <i data-lucide="search">
         </i>Найти</button>
 </form>
-{% if query %}
+{% if query and not client_registry %}
 <div class="grid gap-5 lg:grid-cols-3">
     <section class="card p-4">
         <h2 class="mb-3 font-extrabold">Спортсмены</h2>

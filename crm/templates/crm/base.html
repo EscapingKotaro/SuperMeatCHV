@@ -47,7 +47,7 @@
     </a>
 
     <div class="relative" data-dropdown>
-        <button type="button" data-dropdown-toggle data-dropdown-target="dropdown-clients" aria-haspopup="menu" aria-expanded="false" class="nav-pill cursor-pointer {% if page in 'applications,newcomers' %}active{% endif %}">
+        <button type="button" data-dropdown-toggle data-dropdown-target="dropdown-clients" aria-haspopup="menu" aria-expanded="false" class="nav-pill cursor-pointer {% if page in 'clients,applications,newcomers' %}active{% endif %}">
             <i data-lucide="user-round"></i> Клиенты
             <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
         </button>
@@ -168,6 +168,9 @@
 
 <!-- Выпадающие меню (вынесены из nav, чтобы не обрезались overflow-x-auto) -->
 <div id="dropdown-clients" class="fixed z-[100] hidden min-w-[180px] flex-col gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+    <a href="{% url 'clients' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'clients' %}bg-slate-100 font-semibold{% endif %}">
+        <i data-lucide="users-round" class="h-4 w-4"></i> Клиенты
+    </a>
     <a href="{% url 'applications' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'applications' %}bg-slate-100 font-semibold{% endif %}">
         <i data-lucide="inbox" class="h-4 w-4"></i> Заявки
     </a>

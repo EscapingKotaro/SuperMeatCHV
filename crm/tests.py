@@ -4992,9 +4992,129 @@ class CrmWorkflowTests(TestCase):
             200,
         )
 
+    def test_clients_registry_filters_debt_alerts_age_and_additional_group(self):
+        today = timezone.localdate()
+        other_trainer = Trainer.objects.create(
+            full_name="Тренер дополнительной группы клиентов",
+        )
+        other_group = Group.objects.create(
+            name="Дополнительная группа клиентов",
+            trainer=other_trainer,
+        )
+        ChildGroupMembership.objects.create(
+            child=self.child,
+            group=other_group,
+            requires_subscription=False,
+        )
+        Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            sessions_total=8,
+            price=Decimal("5000"),
+            is_active=True,
+        )
+        age = today.year - self.child.birth_year
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.get(
+            reverse("clients"),
+            {
+                "q": "Иванова Анна",
+                "letter": "И",
+                "state": "active",
+                "trainer": other_trainer.pk,
+                "group": other_group.pk,
+                "debt": "yes",
+                "alerts": "yes",
+                "age_from": str(age),
+                "age_to": str(age),
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["client_registry"])
+        self.assertEqual(response.context["client_count"], 1)
+        row = response.context["client_rows"][0]
+        self.assertEqual(row["child"], self.child)
+        self.assertEqual(row["age"], age)
+        self.assertEqual(row["debt"], Decimal("5000"))
+        self.assertEqual(row["alert_count"], 3)
+        self.assertIn(other_group, row["groups"])
+        self.assertIn(other_trainer, row["trainers"])
+        self.assertContains(
+            response,
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertContains(response, "data-client-registry")
+        self.assertContains(response, "data-client-filters")
+
+    def test_clients_registry_separates_inactive_from_trials_and_keeps_search(self):
+        today = timezone.localdate()
+        archived = Child.objects.create(
+            last_name="Архивная",
+            first_name="Мария",
+            birth_year=2014,
+            group=self.group,
+            status=Child.Status.ARCHIVED,
+            archived_at=today,
+        )
+        trial = Child.objects.create(
+            last_name="Пробная",
+            first_name="Ева",
+            birth_year=2017,
+            group=self.group,
+            status=Child.Status.TRIAL,
+            trial_from=today,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        inactive_page = self.client.get(
+            reverse("clients"),
+            {"state": "inactive"},
+        )
+        inactive_ids = {
+            row["child"].pk
+            for row in inactive_page.context["client_rows"]
+        }
+        self.assertIn(archived.pk, inactive_ids)
+        self.assertNotIn(self.child.pk, inactive_ids)
+        self.assertNotIn(trial.pk, inactive_ids)
+
+        all_page = self.client.get(
+            reverse("clients"),
+            {"state": "all"},
+        )
+        all_ids = {
+            row["child"].pk
+            for row in all_page.context["client_rows"]
+        }
+        self.assertIn(self.child.pk, all_ids)
+        self.assertIn(archived.pk, all_ids)
+        self.assertNotIn(trial.pk, all_ids)
+
+        search_page = self.client.get(
+            reverse("search"),
+            {"q": self.child.last_name},
+        )
+        self.assertEqual(search_page.status_code, 200)
+        self.assertFalse(
+            search_page.context.get("client_registry", False),
+        )
+        self.assertContains(search_page, "Спортсмены")
+        self.assertContains(search_page, str(self.child))
+
     def test_all_primary_pages_render(self):
         self.client.login(username="boss", password="TestPass123!")
-        for name in ("attendance", "applications", "newcomers", "calendar", "payments", "expenses", "competitions", "notifications", "search", "statistics", "boss", "users", "profile"):
+        for name in ("attendance", "applications", "newcomers", "clients", "calendar", "payments", "expenses", "competitions", "notifications", "search", "statistics", "boss", "users", "profile"):
             with self.subTest(name=name):
                 self.assertEqual(self.client.get(reverse(name)).status_code, 200)
 

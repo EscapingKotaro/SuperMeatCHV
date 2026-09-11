@@ -10,10 +10,207 @@ from django.contrib.auth.decorators import login_required
 from django.db.models import Count, Q
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 
 from .forms import GroupForm, ScheduleSlotFormSet, TrainerForm
-from .models import Group, Trainer
+from .models import Child, Group, Trainer
 from .views import _optional_pk, log_action
+
+
+# ==================== КЛИЕНТЫ ====================
+
+def _completed_age(child, today):
+    if child.birth_date:
+        return (
+            today.year
+            - child.birth_date.year
+            - (
+                (today.month, today.day)
+                < (child.birth_date.month, child.birth_date.day)
+            )
+        )
+    if child.birth_year:
+        return max(0, today.year - child.birth_year)
+    return None
+
+
+def _age_filter_value(value):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if 0 <= parsed <= 120 else None
+
+
+@login_required
+def clients_page(request):
+    """Рабочий реестр действующих и неактивных спортсменов."""
+    today = timezone.localdate()
+    query = (request.GET.get("q") or "").strip()
+    letter = (request.GET.get("letter") or "").strip().upper()[:1]
+    if not letter.isalpha():
+        letter = ""
+
+    state = request.GET.get("state", "active")
+    if state not in {"active", "inactive", "all"}:
+        state = "active"
+
+    trainer_id = _optional_pk(request.GET.get("trainer"))
+    group_id = _optional_pk(request.GET.get("group"))
+
+    debt_filter = request.GET.get("debt", "all")
+    if debt_filter not in {"all", "yes", "no"}:
+        debt_filter = "all"
+
+    alerts_filter = request.GET.get("alerts", "all")
+    if alerts_filter not in {"all", "yes", "no"}:
+        alerts_filter = "all"
+
+    age_from = _age_filter_value(request.GET.get("age_from"))
+    age_to = _age_filter_value(request.GET.get("age_to"))
+    if (
+        age_from is not None
+        and age_to is not None
+        and age_from > age_to
+    ):
+        age_from, age_to = age_to, age_from
+
+    sort = request.GET.get("sort", "az")
+    if sort not in {"az", "za"}:
+        sort = "az"
+
+    children = (
+        Child.objects
+        .exclude(status=Child.Status.TRIAL)
+        .select_related("group__trainer")
+        .prefetch_related(
+            "subscriptions",
+            "payments",
+            "attendances",
+            "group_memberships__group__trainer",
+        )
+    )
+
+    if state == "active":
+        children = children.filter(status=Child.Status.ACTIVE)
+    elif state == "inactive":
+        children = children.filter(
+            status__in=(Child.Status.ARCHIVED, Child.Status.LOST),
+        )
+
+    for term in query.split():
+        children = children.filter(
+            Q(last_name__icontains=term)
+            | Q(first_name__icontains=term)
+            | Q(patronymic__icontains=term)
+            | Q(parent_name__icontains=term)
+            | Q(parent_phone__icontains=term)
+            | Q(second_parent_name__icontains=term)
+            | Q(second_parent_phone__icontains=term)
+        )
+
+    if letter:
+        children = children.filter(last_name__istartswith=letter)
+
+    if trainer_id is not None:
+        children = children.filter(
+            Q(group__trainer_id=trainer_id)
+            | Q(
+                group_memberships__group__trainer_id=trainer_id,
+                group_memberships__archived_at__isnull=True,
+            )
+        )
+
+    if group_id is not None:
+        children = children.filter(
+            Q(group_id=group_id)
+            | Q(
+                group_memberships__group_id=group_id,
+                group_memberships__archived_at__isnull=True,
+            )
+        )
+
+    ordering = (
+        ("last_name", "first_name", "patronymic", "pk")
+        if sort == "az"
+        else ("-last_name", "-first_name", "-patronymic", "-pk")
+    )
+    children = children.distinct().order_by(*ordering)
+
+    rows = []
+    for child in children:
+        age = _completed_age(child, today)
+        debt = child.debt()
+        alerts = child.document_alerts(today)
+
+        if age_from is not None and (age is None or age < age_from):
+            continue
+        if age_to is not None and (age is None or age > age_to):
+            continue
+        if debt_filter == "yes" and debt <= 0:
+            continue
+        if debt_filter == "no" and debt > 0:
+            continue
+        if alerts_filter == "yes" and not alerts:
+            continue
+        if alerts_filter == "no" and alerts:
+            continue
+
+        client_groups = []
+        seen_group_ids = set()
+        if child.group_id:
+            client_groups.append(child.group)
+            seen_group_ids.add(child.group_id)
+
+        for membership in child.group_memberships.all():
+            if (
+                membership.archived_at is None
+                and membership.group_id not in seen_group_ids
+            ):
+                client_groups.append(membership.group)
+                seen_group_ids.add(membership.group_id)
+
+        client_trainers = []
+        seen_trainer_ids = set()
+        for group in client_groups:
+            if group.trainer_id not in seen_trainer_ids:
+                client_trainers.append(group.trainer)
+                seen_trainer_ids.add(group.trainer_id)
+
+        rows.append({
+            "child": child,
+            "age": age,
+            "debt": debt,
+            "alert_count": len(alerts),
+            "groups": client_groups,
+            "trainers": client_trainers,
+        })
+
+    context = {
+        "client_registry": True,
+        "client_rows": rows,
+        "client_count": len(rows),
+        "client_query": query,
+        "client_letter": letter,
+        "client_state": state,
+        "client_trainer_id": trainer_id,
+        "client_group_id": group_id,
+        "client_debt": debt_filter,
+        "client_alerts": alerts_filter,
+        "client_age_from": age_from,
+        "client_age_to": age_to,
+        "client_sort": sort,
+        "filter_trainers": Trainer.objects.order_by("full_name"),
+        "filter_groups": (
+            Group.objects
+            .select_related("trainer")
+            .order_by("trainer__full_name", "name")
+        ),
+        "title": "Клиенты",
+        "subtitle": "Действующие и неактивные спортсмены",
+        "page": "clients",
+    }
+    return render(request, "crm/search.html", context)
 
 
 # ==================== ТРЕНЕРЫ ====================

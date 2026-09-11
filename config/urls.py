@@ -79,6 +79,9 @@ urlpatterns = [
     # Календарь
     path("calendar/", views.calendar_page, name="calendar"),
 
+    # Клиенты
+    path("clients/", team_views.clients_page, name="clients"),
+
     # Поиск
     path("search/", views.search_page, name="search"),
 
