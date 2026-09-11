@@ -453,12 +453,19 @@ class IntakeEditRegressionTests(TestCase):
         self.assertContains(paid_page, 'data-paid-status-source')
 
         closed = self.client.post(reverse("applications"), {
-            "action": "quick_status", "lead_id": str(lead.pk),
-            "status": Lead.Status.LOST,
+            "action": "close_lead",
+            "lead_id": str(lead.pk),
+            "closed_until": date.today().isoformat(),
+            "closed_reason": "Regression: вернуться к оплаченной заявке",
         })
         self.assertRedirects(closed, reverse("applications"))
         lead.refresh_from_db()
         self.assertEqual(lead.status, Lead.Status.LOST)
+        self.assertEqual(lead.closed_until, date.today())
+        self.assertEqual(
+            lead.closed_reason,
+            "Regression: вернуться к оплаченной заявке",
+        )
 
         reopened = self.client.post(reverse("applications"), {
             "action": "quick_status", "lead_id": str(lead.pk), "status": "paid",

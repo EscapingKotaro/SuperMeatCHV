@@ -5349,14 +5349,14 @@ def child_card_view(request, child_id):
         week = []
         week_start_date = current  # Понедельник этой недели
         for day_in_week in range(7):  # 0=Пн ... 6=Вс
-            date = current + timedelta(days=day_in_week)
+            day_date = current + timedelta(days=day_in_week)
             if (
-                date > end_date
-                or date < attendance_period_start
+                day_date > end_date
+                or day_date < attendance_period_start
             ):
                 week.append(None)
             else:
-                day_marks = period_attendances.get(date, [])
+                day_marks = period_attendances.get(day_date, [])
                 status = day_marks[0].status if len(day_marks) == 1 else ""
                 descriptions = []
                 for mark in day_marks:
@@ -5369,12 +5369,12 @@ def child_card_view(request, child_id):
                         f"{group_name}: {attendance_labels.get(mark.status, mark.status)}"
                     )
                 week.append({
-                    'date': date,
+                    'date': day_date,
                     'status': status,
                     'status_label': "; ".join(descriptions),
                     'mark_count': len(day_marks),
                     'is_multi': len(day_marks) > 1,
-                    'is_future': date > today,
+                    'is_future': day_date > today,
                 })
         weeks.append({
             'days': week,

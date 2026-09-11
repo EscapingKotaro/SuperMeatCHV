@@ -274,10 +274,17 @@ class ProjectCompletionTests(TestCase):
             with self.subTest(name=name,query=query):
                 self.assertEqual(self.client.get(reverse(name)+query).status_code,200)
         page=self.client.get(reverse('child_card',args=[self.child.pk]))
-        self.assertContains(page,'Посещения за 3 месяца')
+        self.assertContains(page,'Посещения')
+        self.assertContains(page,'data-child-attendance-period')
         self.assertContains(page,'<th>Неделя</th>')
+        self.assertEqual(page.context['attendance_period'],'month')
+        self.assertEqual(
+            page.context['attendance_period_start'],
+            self.today.replace(day=1),
+        )
+        self.assertEqual(page.context['attendance_period_end'],self.today)
         days=[day for week in page.context['weeks'] for day in week['days'] if day]
-        self.assertEqual(len(days),90)
+        self.assertEqual(len(days),self.today.day)
 
     def test_invalid_inline_child_edit_stays_in_card(self):
         page=self.client.post(reverse('child_edit',args=[self.child.pk]), {'inline':'1','last_name':'Новая'})
