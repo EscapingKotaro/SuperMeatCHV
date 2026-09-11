@@ -1,31 +1,37 @@
 {# Critical journal layout travels with the template, including deployments with stale collected static files. #}
 <style>
-.attendance-journal { border:1px solid #cbd2da; border-radius:8px; }
+.attendance-journal { border:1px solid #cbd2da; border-radius:12px; box-shadow:0 2px 6px #17202a06; }
 .attendance-instructions { padding:8px 12px; border-bottom:1px solid #cbd2da; background:#f8fafc; color:#64748b; font-size:12px; }
 .attendance-scroll { max-height:70vh; overflow:auto; scrollbar-gutter:auto; }
-table.attendance-grid { width:100%; min-width:calc(280px + var(--attendance-days,8)*76px); table-layout:fixed; border-collapse:separate; border-spacing:0; }
+table.attendance-grid { --athlete-column:340px; width:100%; min-width:calc(var(--athlete-column) + var(--attendance-days,8)*76px); table-layout:fixed; border-collapse:separate; border-spacing:0; }
 table.attendance-grid th, table.attendance-grid td { padding:0; border:0; border-right:1px solid #cbd2da; border-bottom:1px solid #cbd2da; }
 table.attendance-grid tr>:last-child { border-right:0; }
 table.attendance-grid thead th { position:sticky; top:0; z-index:4; background:#f1f4f7; text-transform:none; letter-spacing:0; }
-table.attendance-grid .attendance-date-cell { width:auto; min-width:76px; padding:5px 2px; text-align:center!important; vertical-align:middle; }
-table.attendance-grid .attendance-date-cell>b { display:block; width:100%; text-align:center; font-size:13px; line-height:20px; font-variant-numeric:tabular-nums; }
+table.attendance-grid .attendance-date-cell { width:auto; min-width:76px; padding:8px 2px; text-align:center!important; vertical-align:middle; }
+table.attendance-grid .attendance-date-cell>b { display:block; width:100%; text-align:center; font-size:14px; line-height:22px; font-variant-numeric:tabular-nums; }
 table.attendance-grid .attendance-date-cell>div { width:100%; text-align:center; line-height:16px; margin:0; }
 table.attendance-grid .attendance-date-cell [data-attendance-counter-date] { display:flex; justify-content:center; gap:4px; font-size:9px; }
 table.attendance-grid .attendance-date-cell [data-attendance-counter-date]>span { padding:0; background:transparent; color:#64748b; }
-table.attendance-grid .attendance-person-cell { position:sticky; left:0; width:280px; min-width:280px; max-width:280px; padding:0 30px 0 8px; border-right:1px solid #aeb8c5; background:#fff; z-index:3; }
+table.attendance-grid .attendance-person-cell { position:sticky; left:0; width:var(--athlete-column); min-width:var(--athlete-column); max-width:var(--athlete-column); padding:0 40px 0 12px; border-right:1px solid #aeb8c5; background:#fff; z-index:3; }
 table.attendance-grid thead .attendance-person-cell { z-index:5; background:#f1f4f7; padding:8px; text-align:center; }
-table.attendance-grid .attendance-person-cell>a { display:block; padding:5px 0; border-radius:0; }
-table.attendance-grid [data-athlete-primary-row] { gap:6px; line-height:18px; }
-table.attendance-grid [data-athlete-primary-row]>b { font-size:12px; }
-table.attendance-grid [data-athlete-sessions] { font-size:12px; font-variant-numeric:tabular-nums; }
-table.attendance-grid [data-athlete-meta-row] { margin-top:3px; gap:4px; line-height:18px; }
-table.attendance-grid [data-athlete-meta-row] span { font-size:10px; }
-table.attendance-grid [data-athlete-indicator] { width:19px; height:19px; border-radius:3px; }
-table.attendance-grid [data-athlete-indicator] svg { width:15px; height:15px; }
-table.attendance-grid [data-athlete-indicator]>span { width:12px; min-width:12px; height:12px; font-size:8px; }
-table.attendance-grid .attendance-row-action { position:absolute; right:2px; bottom:8px; margin:0; }
-table.attendance-grid .attendance-row-action button { color:#64748b; }
-table.attendance-grid .attendance-mark-cell { position:relative; width:auto; min-width:76px; height:48px; padding:0; text-align:center; background:#fff; }
+table.attendance-grid .attendance-person-cell>a { display:block; padding:9px 0; border-radius:0; }
+table.attendance-grid [data-athlete-primary-row] { align-items:baseline; gap:10px; line-height:21px; }
+table.attendance-grid [data-athlete-primary-row]>b { font-size:14px; font-weight:800; white-space:normal; overflow:visible; overflow-wrap:anywhere; }
+table.attendance-grid [data-athlete-sessions] { font-size:13px; font-variant-numeric:tabular-nums; }
+table.attendance-grid [data-athlete-meta-row] { margin-top:6px; gap:8px; line-height:20px; flex-wrap:wrap; }
+table.attendance-grid [data-athlete-meta-row]>div { flex-wrap:wrap; gap:8px; }
+table.attendance-grid [data-athlete-meta-row] span { font-size:11px; }
+table.attendance-grid [data-athlete-meta-row]>div>span { color:#64748b; }
+table.attendance-grid [data-athlete-subscription-end] { margin-left:auto; }
+table.attendance-grid [data-athlete-indicators] { gap:6px; }
+table.attendance-grid [data-athlete-indicator] { flex-shrink:0; width:26px; height:26px; border-radius:6px; }
+table.attendance-grid [data-athlete-indicator] svg { width:19px; height:19px; }
+table.attendance-grid [data-athlete-indicator]>span { right:-4px; top:-4px; width:auto; min-width:15px; height:15px; padding:0 3px; font-size:9px; box-shadow:0 0 0 2px #fff; }
+table.attendance-grid .attendance-row-action { position:absolute; right:5px; top:50%; bottom:auto; transform:translateY(-50%); margin:0; }
+table.attendance-grid .attendance-row-action button { width:30px; height:34px; border-radius:6px; color:#64748b; }
+table.attendance-grid .attendance-row-action button:hover { background:#fff1f2; color:#be123c; }
+table.attendance-grid .attendance-row-action svg { width:17px; height:17px; }
+table.attendance-grid .attendance-mark-cell { position:relative; width:auto; min-width:76px; height:72px; padding:0; text-align:center; background:#fff; }
 table.attendance-grid .attendance-mark-cell.attendance-subscription-expired { background:#ffcccc; }
 table.attendance-grid .attendance-mark-cell.attendance-subscription-renewed { background:#e0fbd5; }
 table.attendance-grid .attendance-mark-cell.attendance-today { box-shadow:inset 0 2px #ff5c35; }
@@ -38,5 +44,5 @@ table.attendance-grid .attendance-absent { color:#64748b; }
 table.attendance-grid .attendance-mark-cell>div { position:absolute; bottom:1px; left:2px; right:2px; margin:0; pointer-events:none; }
 table.attendance-grid .attendance-mark-cell.border-r-2 { border-right:2px solid #f87171; }
 table.attendance-grid .attendance-mark-cell.border-l-2 { border-left:2px solid #f87171; }
-@media(max-width:640px) { table.attendance-grid { min-width:calc(230px + var(--attendance-days,8)*64px); } table.attendance-grid .attendance-person-cell { width:230px; min-width:230px; max-width:230px; } }
+@media(max-width:640px) { table.attendance-grid { --athlete-column:260px; } table.attendance-grid .attendance-person-cell { padding-left:8px; padding-right:36px; } table.attendance-grid [data-athlete-primary-row]>b { font-size:13px; } }
 </style>
