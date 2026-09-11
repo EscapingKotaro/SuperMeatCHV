@@ -1,4 +1,5 @@
 from datetime import date
+import re
 
 from django.contrib.auth.decorators import login_required
 from django.contrib import messages
@@ -61,6 +62,21 @@ def _applications_return_url(request):
     url = reverse("applications")
     encoded = query.urlencode()
     return f"{url}?{encoded}" if encoded else url
+
+
+def _newcomer_birth_year(newcomer):
+    """Best-effort birth year for legacy trial records that only store age text."""
+    if newcomer.birth_date:
+        return newcomer.birth_date.year
+
+    match = re.search(r"\d{1,3}", newcomer.age_text or "")
+    if not match:
+        return None
+
+    age = int(match.group())
+    if not 0 <= age <= 100:
+        return None
+    return timezone.localdate().year - age
 
 
 def _lead_return_tasks(lead):
@@ -190,6 +206,18 @@ def applications_page(request):
             has_paid = lead.newcomers.filter(
                 child__payments__amount__gt=0,
             ).exists()
+            has_newcomer = lead.newcomers.exists()
+
+            if (
+                requested_status == Lead.Status.QUALIFIED.value
+                and not has_newcomer
+            ):
+                messages.error(
+                    request,
+                    "Статус «Пробное» появляется после перевода заявки в пробные. "
+                    "Используйте кнопку «В пробные».",
+                )
+                return redirect(_applications_return_url(request))
 
             if requested_status == "paid":
                 if not has_paid:
@@ -243,6 +271,25 @@ def applications_page(request):
                 )
 
         return redirect(_applications_return_url(request))
+
+    if (
+        request.method == "POST"
+        and action == "create_newcomer"
+        and request.POST.get("open_newcomer") == "1"
+    ):
+        lead_id = views._optional_pk(request.POST.get("lead_id"))
+        response = views.applications_page(request)
+        newcomer = (
+            Newcomer.objects
+            .filter(lead_id=lead_id)
+            .order_by("-pk")
+            .first()
+        )
+        if newcomer is not None:
+            return redirect(
+                f"{reverse('newcomers')}?edit={newcomer.pk}"
+            )
+        return response
 
     if request.method == "POST" and action == "save":
         _set_form_target(request, Lead)
@@ -363,6 +410,16 @@ def newcomers_page(request):
             messages.error(request, "Недоступный быстрый признак")
             return redirect(request.get_full_path())
 
+        if (
+            field in {"attended", "lesson_cancelled", "trial_not_liked"}
+            and newcomer.trial_at is None
+        ):
+            messages.error(
+                request,
+                "Сначала назначьте дату и время пробного занятия",
+            )
+            return redirect(request.get_full_path())
+
         enabled = request.POST.get("value") == "1"
         setattr(newcomer, field, enabled)
         update_fields = {field}
@@ -401,21 +458,67 @@ def newcomers_page(request):
         )
         return redirect(request.get_full_path())
 
+    convert_target = None
+    return_to_card = False
     if request.method == "POST" and action == "convert":
         newcomer = get_object_or_404(
             Newcomer,
             pk=request.POST.get("newcomer_id"),
         )
+        return_to_card = request.POST.get("return_to_card") == "1"
         if not newcomer.child_id and newcomer.group_id is None:
             messages.error(
                 request,
                 "Сначала назначьте новичку группу",
             )
             return redirect("newcomers")
+        if return_to_card and newcomer.trial_at is None:
+            messages.error(
+                request,
+                "Сначала назначьте дату и время пробного занятия",
+            )
+            return redirect(f"{reverse('newcomers')}?edit={newcomer.pk}")
+        if return_to_card and not newcomer.attended:
+            messages.error(
+                request,
+                "Сначала подтвердите, что новичок пришёл на пробное",
+            )
+            return redirect(f"{reverse('newcomers')}?edit={newcomer.pk}")
+        if return_to_card and _newcomer_birth_year(newcomer) is None:
+            messages.error(
+                request,
+                "Укажите дату рождения или возраст новичка",
+            )
+            return redirect(f"{reverse('newcomers')}?edit={newcomer.pk}")
+        convert_target = newcomer
 
     if request.method == "POST" and action == "save":
         _set_form_target(request, Newcomer)
     else:
         _start_clean_create(request)
 
-    return views.newcomers_page(request)
+    response = views.newcomers_page(request)
+
+    if convert_target is not None:
+        convert_target.refresh_from_db()
+        if convert_target.child_id:
+            child = convert_target.child
+            update_fields = []
+            birth_year = _newcomer_birth_year(convert_target)
+            if birth_year is not None and child.birth_year != birth_year:
+                child.birth_year = birth_year
+                update_fields.append("birth_year")
+
+            if convert_target.trial_at is not None:
+                trial_date = timezone.localtime(convert_target.trial_at).date()
+                if child.trial_from != trial_date:
+                    child.trial_from = trial_date
+                    update_fields.append("trial_from")
+
+            if update_fields:
+                child.save(update_fields=update_fields)
+
+            if return_to_card:
+                return redirect("child_card", child_id=child.pk)
+
+    return response

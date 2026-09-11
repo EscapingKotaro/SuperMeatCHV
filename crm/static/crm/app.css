@@ -17,3 +17,12 @@ body.modal-open{overflow:hidden}
 .modal-head,.modal-foot{flex:0 0 auto}
 .modal-body{min-height:0;overflow-y:auto;overscroll-behavior:contain}
 .crm-overlay-panel{max-height:calc(100vh - 2rem);overflow-y:auto;overscroll-behavior:contain}
+
+/* Application rows keep their workflow color on hover. */
+.data-table tbody tr[data-lead-row]{--lead-hover-bg:#f8fafc}
+.data-table tbody tr[data-lead-visual="work"]{--lead-hover-bg:#fef3c7}
+.data-table tbody tr[data-lead-visual="trial"]{--lead-hover-bg:#a7f3d0}
+.data-table tbody tr[data-lead-visual="paid"]{--lead-hover-bg:#bae6fd}
+.data-table tbody tr[data-lead-visual="closed"]{--lead-hover-bg:#fee2e2}
+.data-table tbody tr[data-lead-row]:hover,
+.data-table tbody tr[data-lead-row]:hover>td{background:var(--lead-hover-bg)!important}

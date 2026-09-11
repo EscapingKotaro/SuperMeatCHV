@@ -3,7 +3,9 @@ from datetime import date
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 
+from .forms import ChildForm
 from .models import Child, Group, Lead, Newcomer, Payment, Trainer
 
 
@@ -203,7 +205,7 @@ class IntakeEditRegressionTests(TestCase):
         )
         self.assertContains(
             newcomers,
-            "Создать карточку спортсмена",
+            "Нужны дата и группа",
         )
 
     def test_applications_show_workflow_state_without_ad_row_highlight(self):
@@ -231,7 +233,7 @@ class IntakeEditRegressionTests(TestCase):
         self.assertNotContains(response, "bg-blue-50/70")
         self.assertNotContains(response, "Они выделены синим")
         self.assertNotContains(response, "В новички")
-        self.assertNotContains(response, "Назначить пробное")
+        self.assertNotContains(response, ">В пробные<", html=True)
 
     def test_applications_have_open_closed_all_workflow_filter(self):
         Lead.objects.create(
@@ -256,7 +258,9 @@ class IntakeEditRegressionTests(TestCase):
             response,
             "state === 'all' || row.dataset.leadState === state",
         )
-        self.assertContains(response, "Назначить пробное")
+        self.assertContains(response, "В пробные")
+        self.assertContains(response, "Путь клиента")
+        self.assertContains(response, "Завершённые")
 
     def test_applications_have_detailed_filters_and_application_date(self):
         trainer = Trainer.objects.create(
@@ -609,6 +613,7 @@ class IntakeEditRegressionTests(TestCase):
     def test_newcomer_quick_flags_are_mutually_exclusive_and_paid_is_read_only(self):
         newcomer = Newcomer.objects.create(
             full_name="Быстрая отметка",
+            trial_at=timezone.now(),
             lesson_cancelled=True,
         )
 
@@ -647,6 +652,7 @@ class IntakeEditRegressionTests(TestCase):
     def test_newcomer_documents_and_not_liked_flags_keep_trial_state_consistent(self):
         newcomer = Newcomer.objects.create(
             full_name="Результат пробного",
+            trial_at=timezone.now(),
             lesson_cancelled=True,
         )
 
@@ -720,3 +726,123 @@ class IntakeEditRegressionTests(TestCase):
         self.assertTrue(normalized.lesson_cancelled)
         self.assertFalse(normalized.attended)
         self.assertFalse(normalized.trial_not_liked)
+
+
+    def test_trial_status_requires_newcomer_and_action_opens_trial_record(self):
+        lead = Lead.objects.create(
+            full_name="Переход в пробные",
+            status=Lead.Status.NEW,
+        )
+
+        blocked = self.client.post(
+            reverse("applications"),
+            {
+                "action": "quick_status",
+                "lead_id": str(lead.pk),
+                "status": Lead.Status.QUALIFIED,
+            },
+        )
+        self.assertRedirects(blocked, reverse("applications"))
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, Lead.Status.NEW)
+        self.assertFalse(lead.newcomers.exists())
+
+        moved = self.client.post(
+            reverse("applications"),
+            {
+                "action": "create_newcomer",
+                "lead_id": str(lead.pk),
+                "open_newcomer": "1",
+            },
+        )
+        newcomer = lead.newcomers.get()
+        self.assertRedirects(
+            moved,
+            f"{reverse('newcomers')}?edit={newcomer.pk}",
+        )
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, Lead.Status.QUALIFIED)
+
+    def test_trial_result_flags_require_scheduled_trial(self):
+        newcomer = Newcomer.objects.create(
+            full_name="Пробное без даты",
+        )
+
+        blocked = self.client.post(
+            reverse("newcomers"),
+            {
+                "action": "quick_flag",
+                "newcomer_id": str(newcomer.pk),
+                "field": "attended",
+                "value": "1",
+            },
+        )
+        self.assertRedirects(blocked, reverse("newcomers"))
+        newcomer.refresh_from_db()
+        self.assertFalse(newcomer.attended)
+
+        documents = self.client.post(
+            reverse("newcomers"),
+            {
+                "action": "quick_flag",
+                "newcomer_id": str(newcomer.pk),
+                "field": "documents_collected",
+                "value": "1",
+            },
+        )
+        self.assertRedirects(documents, reverse("newcomers"))
+        newcomer.refresh_from_db()
+        self.assertTrue(newcomer.documents_collected)
+
+    def test_ui_conversion_uses_age_and_trial_date_and_opens_card(self):
+        trainer = Trainer.objects.create(full_name="Тренер конверсии")
+        group = Group.objects.create(name="Группа конверсии", trainer=trainer)
+        trial_at = timezone.now()
+        newcomer = Newcomer.objects.create(
+            full_name="Иванов Пётр",
+            age_text="10 лет",
+            trial_at=trial_at,
+            trainer=trainer,
+            group=group,
+            attended=True,
+        )
+
+        response = self.client.post(
+            reverse("newcomers"),
+            {
+                "action": "convert",
+                "newcomer_id": str(newcomer.pk),
+                "return_to_card": "1",
+            },
+        )
+
+        newcomer.refresh_from_db()
+        child = newcomer.child
+        self.assertRedirects(
+            response,
+            reverse("child_card", args=[child.pk]),
+        )
+        self.assertEqual(
+            child.birth_year,
+            timezone.localdate().year - 10,
+        )
+        self.assertEqual(
+            child.trial_from,
+            timezone.localtime(trial_at).date(),
+        )
+        self.assertEqual(child.status, Child.Status.TRIAL)
+
+    def test_intake_ui_and_dispensary_field_explain_real_meaning(self):
+        applications = self.client.get(reverse("applications"))
+        newcomers = self.client.get(reverse("newcomers"))
+
+        self.assertContains(applications, "data-intake-workflow")
+        self.assertContains(newcomers, "data-intake-workflow")
+        self.assertContains(newcomers, "Добавить пробное")
+
+        field = ChildForm().fields["dispensary_region"]
+        self.assertEqual(field.label, "Регион диспансеризации")
+        self.assertIn(
+            (Child.DispensaryRegion.OTHER, "Другой регион"),
+            list(field.choices),
+        )

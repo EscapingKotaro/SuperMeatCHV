@@ -11,13 +11,17 @@
 {% endblock %}
 {% block content %}
 <section class="card overflow-hidden">
+    <div class="border-b bg-slate-50 px-4 py-3 text-xs text-slate-600" data-intake-workflow>
+        <b class="text-slate-800">Путь клиента:</b>
+        заявка → <b>В пробные</b> → дата и группа → подтверждение прихода → карточка пробника → фактическая оплата переводит спортсмена в активные.
+    </div>
     <div class="flex flex-wrap items-center gap-2 border-b px-4 py-3" data-lead-filters>
         <span class="mr-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Показывать</span>
         <button type="button" class="btn btn-soft" data-lead-filter="open">
-            Открытые <span class="badge ml-1" data-lead-filter-count="open">0</span>
+            В работе <span class="badge ml-1" data-lead-filter-count="open">0</span>
         </button>
         <button type="button" class="btn btn-soft" data-lead-filter="closed">
-            Закрытые <span class="badge ml-1" data-lead-filter-count="closed">0</span>
+            Завершённые <span class="badge ml-1" data-lead-filter-count="closed">0</span>
         </button>
         <button type="button" class="btn btn-soft" data-lead-filter="all">
             Все <span class="badge ml-1" data-lead-filter-count="all">0</span>
@@ -30,9 +34,9 @@
                 <option value="">Все статусы</option>
                 <option value="new">Новая заявка</option>
                 <option value="contacted">В работе</option>
-                <option value="qualified">Пробное</option>
-                <option value="paid">Оплатил</option>
-                <option value="lost">Закрыта</option>
+                <option value="qualified">Пробное / новичок</option>
+                <option value="paid">Оплатил (автоматически)</option>
+                <option value="lost">Закрыта / вернуться позже</option>
             </select>
         </label>
         <label>
@@ -117,11 +121,15 @@
                                 {% endif %}
                                 <option value="new" {% if lead.current_newcomer.has_paid %}disabled{% elif lead.status == 'new' %}selected{% endif %}>Новая заявка</option>
                                 <option value="contacted" {% if lead.current_newcomer.has_paid %}disabled{% elif lead.status == 'contacted' %}selected{% endif %}>В работе</option>
-                                <option value="qualified" {% if lead.current_newcomer.has_paid %}disabled{% elif lead.status == 'qualified' %}selected{% endif %}>Пробное</option>
+                                <option value="qualified"
+                                        {% if lead.current_newcomer.has_paid or not lead.current_newcomer %}disabled{% endif %}
+                                        {% if lead.status == 'qualified' and not lead.current_newcomer.has_paid %}selected{% endif %}>
+                                    Пробное / новичок{% if not lead.current_newcomer %} — через «В пробные»{% endif %}
+                                </option>
                                 {% if lead.current_newcomer.has_paid and lead.status == 'lost' %}
                                 <option value="paid">Оплатил</option>
                                 {% endif %}
-                                <option value="lost" {% if lead.status == 'lost' %}selected{% endif %}>Закрыта</option>
+                                <option value="lost" {% if lead.status == 'lost' %}selected{% endif %}>Закрыта / вернуться позже</option>
                             </select>
                         </form>
                         {% if lead.status == 'lost' %}
@@ -156,20 +164,21 @@
                             <small class="block text-slate-500">Новичок создан</small>
                             {% endif %}
                         {% else %}
-                        <small class="block text-slate-500">Пробное не создано</small>
+                        <small class="block text-amber-700">Нет записи пробного — нажмите «В пробные»</small>
                         {% endif %}
                     </td>
                     <td>
                         <div class="flex flex-wrap gap-2">
                             <a href="?edit={{ lead.pk }}" class="btn btn-soft">Изменить</a>
                             {% if lead.current_newcomer %}
-                            <a href="{% url 'newcomers' %}?edit={{ lead.current_newcomer.pk }}" class="btn btn-soft">Открыть новичка</a>
-                            {% elif lead.status != 'qualified' and lead.status != 'lost' %}
+                            <a href="{% url 'newcomers' %}?edit={{ lead.current_newcomer.pk }}" class="btn btn-soft">Открыть пробное</a>
+                            {% elif lead.status != 'lost' %}
                             <form method="post">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="create_newcomer">
                                 <input type="hidden" name="lead_id" value="{{ lead.pk }}">
-                                <button class="btn btn-soft">Назначить пробное</button>
+                                <input type="hidden" name="open_newcomer" value="1">
+                                <button class="btn btn-soft">В пробные</button>
                             </form>
                             {% endif %}
                         </div>

@@ -2,10 +2,13 @@
 {% block actions %}
 <a href="{% url 'newcomers' %}?create=1" class="btn btn-primary">
     <i data-lucide="user-plus">
-    </i>Добавить новичка</a>
+    </i>Добавить пробное</a>
 {% endblock %}
 {% block content %}
 <section class="card overflow-hidden">
+    <div class="border-b bg-slate-50 px-4 py-3 text-xs text-slate-600" data-intake-workflow>
+        Здесь ведётся именно пробное занятие: назначьте дату и группу → отметьте приход/отмену → после прихода добавьте пробника в табель → оплату фиксируйте отдельно.
+    </div>
     <div class="grid gap-3 border-b px-4 py-4 md:grid-cols-2 xl:grid-cols-5" data-newcomer-filters>
         <input type="search" class="field" placeholder="ФИО, телефон, источник" data-filter="q">
         <input type="search" class="field" placeholder="Тренер" data-filter="trainer">
@@ -38,11 +41,11 @@
                 <tr>
                     <th>Новичок</th>
                     <th>Дата заявки</th><th>Возраст</th><th>Тренер / группа</th><th>Пробное</th>
-                    <th class="text-center">Был</th>
-                    <th class="text-center">Оплатил</th>
+                    <th class="text-center">Пришёл</th>
+                    <th class="text-center">Оплата</th>
                     <th class="text-center">Документы</th>
                     <th class="text-center">Не понравилось</th>
-                    <th class="text-center">Отмена</th>
+                    <th class="text-center">Отменено</th>
                     <th>Комментарий</th>
                     <th>Действия</th>
                 </tr>
@@ -64,6 +67,15 @@
                     <td>
                         <b>{{ item.full_name }}</b>
                         <small class="block text-slate-500">{{ item.phone }} · {{ item.source }}</small>
+                        <small class="mt-1 block font-semibold" data-newcomer-stage>
+                            {% if item.has_paid %}<span class="text-emerald-700">Оплачено · спортсмен активен</span>
+                            {% elif item.child %}<span class="text-blue-700">Пробник в табеле · ждём оплату</span>
+                            {% elif item.trial_not_liked %}<span class="text-slate-600">Пришёл · не понравилось</span>
+                            {% elif item.lesson_cancelled %}<span class="text-slate-500">Пробное отменено</span>
+                            {% elif item.attended %}<span class="text-emerald-700">Пришёл · можно добавить в табель</span>
+                            {% elif item.trial_at %}<span class="text-blue-700">Пробное назначено</span>
+                            {% else %}<span class="text-amber-700">Нужно назначить дату и группу</span>{% endif %}
+                        </small>
                     </td>
                     <td>{{ item.application_date|date:"d.m.Y" }}</td><td>{{ item.age_display }}</td><td>{{ item.trainer|default:"—" }}<small class="block">{{ item.group|default:"—" }}</small></td>
                     <td>{{ item.trial_at|date:"d.m.Y H:i"|default:"Не назначено" }}</td>
@@ -74,7 +86,9 @@
                             <input type="hidden" name="newcomer_id" value="{{ item.pk }}">
                             <input type="hidden" name="field" value="attended">
                             <input type="checkbox" name="value" value="1" class="h-4 w-4"
-                                   aria-label="Был на пробном: {{ item.full_name }}"
+                                   aria-label="Пришёл на пробное: {{ item.full_name }}"
+                                   title="{% if item.trial_at %}Отметить приход на пробное{% else %}Сначала назначьте дату пробного{% endif %}"
+                                   {% if not item.trial_at %}disabled{% endif %}
                                    {% if item.attended %}checked{% endif %} onchange="this.form.submit()">
                         </form>
                     </td>
@@ -102,6 +116,8 @@
                             <input type="hidden" name="field" value="trial_not_liked">
                             <input type="checkbox" name="value" value="1" class="h-4 w-4"
                                    aria-label="Был, но не понравилось: {{ item.full_name }}"
+                                   title="{% if item.trial_at %}Отметить результат пробного{% else %}Сначала назначьте дату пробного{% endif %}"
+                                   {% if not item.trial_at %}disabled{% endif %}
                                    {% if item.trial_not_liked %}checked{% endif %} onchange="this.form.submit()">
                         </form>
                     </td>
@@ -113,22 +129,37 @@
                             <input type="hidden" name="field" value="lesson_cancelled">
                             <input type="checkbox" name="value" value="1" class="h-4 w-4"
                                    aria-label="Занятие отменено: {{ item.full_name }}"
+                                   title="{% if item.trial_at %}Отметить отмену пробного{% else %}Сначала назначьте дату пробного{% endif %}"
+                                   {% if not item.trial_at %}disabled{% endif %}
                                    {% if item.lesson_cancelled %}checked{% endif %} onchange="this.form.submit()">
                         </form>
                     </td>
                     <td class="max-w-xs">{{ item.comment|default:"—" }}</td>
                     <td>
-                        <div class="flex gap-2">
+                        <div class="flex flex-wrap gap-2">
                             <a href="?edit={{ item.pk }}" class="btn btn-soft">Изменить</a>
                             {% if not item.child %}
-                            <form method="post">
-                                {% csrf_token %}
-                                <input type="hidden" name="action" value="convert">
-                                <input type="hidden" name="newcomer_id" value="{{ item.pk }}">
-                                <button class="btn btn-soft">Создать карточку спортсмена</button>
-                            </form>
+                                {% if not item.trial_at or not item.group %}
+                                <span class="badge bg-amber-50 text-amber-700">Нужны дата и группа</span>
+                                {% elif not item.birth_date and not item.age_text %}
+                                <span class="badge bg-amber-50 text-amber-700">Нужен возраст</span>
+                                {% elif item.lesson_cancelled %}
+                                <span class="badge bg-slate-100 text-slate-600">Пробное отменено</span>
+                                {% elif item.trial_not_liked %}
+                                <span class="badge bg-slate-100 text-slate-600">Не конвертируется</span>
+                                {% elif not item.attended %}
+                                <span class="badge bg-blue-50 text-blue-700">Сначала подтвердите приход</span>
+                                {% else %}
+                                <form method="post">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="convert">
+                                    <input type="hidden" name="newcomer_id" value="{{ item.pk }}">
+                                    <input type="hidden" name="return_to_card" value="1">
+                                    <button class="btn btn-soft">Добавить в табель</button>
+                                </form>
+                                {% endif %}
                             {% else %}
-                            <span class="badge bg-emerald-50 text-emerald-700">Карточка создана</span>
+                            <a href="{% url 'child_card' item.child.pk %}" class="btn btn-soft">Открыть карточку</a>
                             {% endif %}
                         </div>
                     </td>

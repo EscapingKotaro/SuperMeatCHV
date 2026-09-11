@@ -275,10 +275,16 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
             ("", "— Не указан —"),
             *Child.Sex.choices,
         ]
+        self.fields["dispensary_region"].label = "Регион диспансеризации"
         self.fields["dispensary_region"].choices = [
             ("", "— Не указано —"),
-            *Child.DispensaryRegion.choices,
+            (Child.DispensaryRegion.MOSCOW, "Москва"),
+            (Child.DispensaryRegion.MOSCOW_REGION, "Московская область"),
+            (Child.DispensaryRegion.OTHER, "Другой регион"),
         ]
+        self.fields["dispensary_region"].help_text = (
+            "Поле хранит регион, а не конкретное медицинское учреждение."
+        )
         self.fields["group"].required = True
         self.fields["group"].empty_label = "— Выберите группу —"
         self.apply_styles()
