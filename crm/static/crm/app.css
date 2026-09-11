@@ -9,13 +9,17 @@ body{font-size:16px}.btn,.field,.nav-pill,.menu-item{font-size:.9rem;min-height:
 .attendance-grid tbody tr:last-child td{border-bottom:0}
 .attendance-grid .attendance-person-cell{position:sticky;width:256px;min-width:256px;max-width:256px;padding:.25rem .45rem;border-right-color:#c4ccd7}
 .attendance-grid .attendance-person-cell>a{padding:.3rem .45rem}
-.attendance-grid .attendance-date-cell{width:64px;min-width:64px;padding:.42rem .18rem;background:#f8fafc}
-.attendance-grid .attendance-mark-cell{width:64px;min-width:64px;height:52px;padding:0;background:#fff}
-.attendance-grid .attendance-cell{display:block;width:100%;height:100%;min-width:0;min-height:52px;border:0;border-radius:0;font-size:1rem;font-weight:850;transition:background-color .12s,color .12s,box-shadow .12s}
+.attendance-grid .attendance-date-cell{width:64px;min-width:64px;padding:.42rem .18rem;background:#f8fafc;text-align:center!important}
+.attendance-grid .attendance-date-cell>*{width:100%;text-align:center}
+.attendance-grid .attendance-mark-cell{position:relative;width:64px;min-width:64px;height:52px;padding:0;text-align:center}
+.attendance-grid .attendance-mark-cell.attendance-subscription-default{background:#fff}
+.attendance-grid .attendance-mark-cell.attendance-subscription-expired{background:#fecaca}
+.attendance-grid .attendance-mark-cell.attendance-subscription-renewed{background:#d9fdd3}
+.attendance-grid .attendance-mark-cell.attendance-today{box-shadow:inset 0 3px 0 #ff5c35}
+.attendance-grid .attendance-cell{display:flex;align-items:center;justify-content:center;width:100%;height:100%;min-width:0;min-height:52px;border:0;border-radius:0;background:transparent!important;font-size:1rem;font-weight:850;transition:color .12s,box-shadow .12s}
 .attendance-grid .attendance-cell:hover:not(:disabled){position:relative;z-index:1;transform:none;box-shadow:inset 0 0 0 2px #ff5c35}
 .attendance-grid .attendance-cell:disabled{opacity:1;color:#94a3b8}
-.attendance-grid .attendance-cell.bg-red-50{background:#fee2e2;color:#7f1d1d}
-.attendance-grid .attendance-cell.bg-emerald-50{background:#dcfce7;color:#14532d}
+.attendance-grid .attendance-mark-cell>div{position:absolute;right:2px;bottom:1px;left:2px;margin:0;pointer-events:none}
 .attendance-grid .attendance-present{color:#334155}
 .attendance-grid .attendance-absent{color:#64748b}
 .attendance-grid .attendance-row-action{position:absolute;right:.25rem;bottom:.2rem;z-index:3}

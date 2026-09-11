@@ -294,7 +294,7 @@
                         </td>
 
                         {% for entry in item.attendance_entries %}
-                            <td class="attendance-mark-cell text-center {% if attendance_visual.highlight_today and entry.date == today %}bg-orange-50/40{% endif %} {% if attendance_visual.show_subscription_boundary and item.subscription_end_before_window and forloop.first %}border-l-2 border-red-500{% endif %} {% if attendance_visual.show_subscription_boundary and forloop.counter0 == item.subscription_end_index %}border-r-2 border-red-500{% endif %}">
+                            <td class="attendance-mark-cell {% if entry.subscription_state == 'expired' %}attendance-subscription-expired{% elif entry.subscription_state == 'renewed' %}attendance-subscription-renewed{% else %}attendance-subscription-default{% endif %} {% if attendance_visual.highlight_today and entry.date == today %}attendance-today{% endif %} {% if attendance_visual.show_subscription_boundary and item.subscription_end_before_window and forloop.first %}border-l-2 border-red-500{% endif %} {% if attendance_visual.show_subscription_boundary and forloop.counter0 == item.subscription_end_index %}border-r-2 border-red-500{% endif %}">
                                 <button {% if not entry.is_future %}data-attendance{% endif %}
                                         {% if entry.is_future %}disabled aria-disabled="true" title="Будущее занятие — отметка недоступна"{% endif %}
                                         aria-label="{{ item.child }} · {{ entry.date|date:'d.m.Y' }} · отметка посещения"
@@ -304,7 +304,7 @@
                                         data-date="{{ entry.date|date:'Y-m-d' }}"
                                         data-state="{% if entry.status == 'present' %}1{% elif entry.status == 'absent' %}2{% elif entry.status == 'frozen' %}3{% elif entry.status == 'vacation' %}4{% elif entry.status == 'excused' %}5{% elif entry.status == 'sick' %}6{% else %}0{% endif %}"
                                         data-subscription-state="{{ entry.subscription_state }}"
-                                        class="attendance-cell text-sm {% if entry.is_future %}cursor-not-allowed {% endif %}{% if entry.subscription_state == 'expired' %}bg-red-50 border-red-300{% elif entry.subscription_state == 'renewed' %}bg-emerald-50 border-emerald-300{% else %}bg-white border-slate-200{% endif %} {% if entry.status == 'present' %}attendance-present{% elif entry.status == 'absent' %}attendance-absent{% elif entry.status == 'frozen' %}text-blue-700{% elif entry.status == 'vacation' %}text-amber-700{% elif entry.status == 'excused' %}text-yellow-700{% elif entry.status == 'sick' %}text-rose-700{% else %}text-slate-300{% endif %}">
+                                        class="attendance-cell text-sm {% if entry.is_future %}cursor-not-allowed {% endif %}{% if entry.status == 'present' %}attendance-present{% elif entry.status == 'absent' %}attendance-absent{% elif entry.status == 'frozen' %}text-blue-700{% elif entry.status == 'vacation' %}text-amber-700{% elif entry.status == 'excused' %}text-yellow-700{% elif entry.status == 'sick' %}text-rose-700{% else %}text-slate-300{% endif %}">
                                     {% if entry.status == 'present' %}+{% elif entry.status == 'absent' %}×{% elif entry.status == 'frozen' %}❄{% elif entry.status == 'vacation' %}О{% elif entry.status == 'excused' %}У{% elif entry.status == 'sick' %}Б{% endif %}
                                 </button>
                                 {% if entry.is_substitute_trainer %}
@@ -775,23 +775,10 @@
     };
 
     const ALL_CLASSES = [
-        "bg-white", "border-slate-200",
-        "bg-red-50", "border-red-300",
-        "bg-emerald-50", "border-emerald-300",
         "attendance-present", "attendance-absent",
         "text-slate-300", "text-slate-500", "text-slate-800",
         "text-blue-700", "text-amber-700", "text-yellow-700", "text-rose-700"
     ];
-
-    function subscriptionStateClasses(button) {
-        if (button.dataset.subscriptionState === "expired") {
-            return ["bg-red-50", "border-red-300"];
-        }
-        if (button.dataset.subscriptionState === "renewed") {
-            return ["bg-emerald-50", "border-emerald-300"];
-        }
-        return ["bg-white", "border-slate-200"];
-    }
 
     // =========================================================
     // CSRF
@@ -810,10 +797,7 @@
         const config = STATES[status];
         if (!config) return;
         button.classList.remove(...ALL_CLASSES);
-        button.classList.add(
-            ...subscriptionStateClasses(button),
-            config.textClass
-        );
+        button.classList.add(config.textClass);
         button.textContent = config.symbol;
         button.dataset.state = config.state;
     }

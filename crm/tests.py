@@ -8436,9 +8436,9 @@ class CrmWorkflowTests(TestCase):
         self.assertContains(response, 'data-subscription-state="active"')
         self.assertContains(response, 'data-subscription-state="expired"')
         self.assertContains(response, 'data-subscription-state="renewed"')
-        self.assertContains(response, "bg-white border-slate-200")
-        self.assertContains(response, "bg-red-50 border-red-300")
-        self.assertContains(response, "bg-emerald-50 border-emerald-300")
+        self.assertContains(response, "attendance-subscription-default")
+        self.assertContains(response, "attendance-subscription-expired")
+        self.assertContains(response, "attendance-subscription-renewed")
         self.assertNotContains(
             response,
             "bg-red-100 text-red-700",
@@ -8447,7 +8447,7 @@ class CrmWorkflowTests(TestCase):
             response,
             "bg-emerald-100 text-emerald-700",
         )
-        self.assertContains(response, "subscriptionStateClasses")
+        self.assertNotContains(response, "subscriptionStateClasses")
         self.assertContains(
             response,
             'data-attendance-choice="debt_present"',
