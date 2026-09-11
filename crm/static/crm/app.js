@@ -5,11 +5,37 @@ document.addEventListener("DOMContentLoaded", () => {
   const modalTriggers = document.querySelectorAll("[data-modal]");
   const dropdownToggles = document.querySelectorAll("[data-dropdown-target]");
   const dropdownMenus = document.querySelectorAll('[id^="dropdown-"]');
+  const legacyOverlayModals = [
+    ...document.querySelectorAll('.fixed.inset-0[id$="-modal"]:not(.modal)'),
+  ];
 
-  const syncBackdrop = () => {
-    backdrop?.classList.toggle(
-      "hidden",
-      !document.querySelector(".modal.open"),
+  legacyOverlayModals.forEach((modal) => {
+    modal.classList.add("crm-overlay-modal");
+    const panel = [...modal.children].find(
+      (child) => child.classList.contains("relative"),
+    );
+    panel?.classList.add("crm-overlay-panel");
+  });
+
+  const closeAllDropdowns = () => {
+    dropdownMenus.forEach((menu) => menu.classList.add("hidden"));
+    dropdownToggles.forEach((toggle) => toggle.setAttribute("aria-expanded", "false"));
+  };
+
+  const hasCommonModalOpen = () => Boolean(
+    document.querySelector(".modal.open"),
+  );
+
+  const hasLegacyModalOpen = () => legacyOverlayModals.some(
+    (modal) => !modal.classList.contains("hidden"),
+  );
+
+  const syncModalState = () => {
+    const commonOpen = hasCommonModalOpen();
+    backdrop?.classList.toggle("hidden", !commonOpen);
+    document.body.classList.toggle(
+      "modal-open",
+      commonOpen || hasLegacyModalOpen(),
     );
   };
 
@@ -17,14 +43,36 @@ document.addEventListener("DOMContentLoaded", () => {
     document
       .querySelectorAll(".modal.open")
       .forEach((modal) => modal.classList.remove("open"));
-    syncBackdrop();
+    legacyOverlayModals.forEach((modal) => modal.classList.add("hidden"));
+    syncModalState();
+  };
+
+  const openModal = (id) => {
+    const modal = document.getElementById(id);
+    if (!modal) return null;
+
+    closeAllDropdowns();
+    closeAllModals();
+
+    if (modal.classList.contains("modal")) {
+      modal.classList.add("open");
+    } else {
+      modal.classList.remove("hidden");
+    }
+
+    syncModalState();
+    return modal;
+  };
+
+  window.crmModal = {
+    open: openModal,
+    closeAll: closeAllModals,
+    sync: syncModalState,
   };
 
   modalTriggers.forEach((button) => {
     button.addEventListener("click", () => {
-      closeAllModals();
-      document.getElementById(button.dataset.modal)?.classList.add("open");
-      syncBackdrop();
+      openModal(button.dataset.modal);
     });
   });
 
@@ -32,12 +80,18 @@ document.addEventListener("DOMContentLoaded", () => {
     .querySelectorAll("[data-close]")
     .forEach((button) => button.addEventListener("click", closeAllModals));
   backdrop?.addEventListener("click", closeAllModals);
-  syncBackdrop();
 
-  const closeAllDropdowns = () => {
-    dropdownMenus.forEach((menu) => menu.classList.add("hidden"));
-    dropdownToggles.forEach((toggle) => toggle.setAttribute("aria-expanded", "false"));
-  };
+  if (legacyOverlayModals.length) {
+    const observer = new MutationObserver(syncModalState);
+    legacyOverlayModals.forEach((modal) => {
+      observer.observe(modal, {
+        attributes: true,
+        attributeFilter: ["class"],
+      });
+    });
+  }
+
+  syncModalState();
 
   const positionDropdown = (toggle, menu) => {
     const rect = toggle.getBoundingClientRect();
