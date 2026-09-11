@@ -1449,6 +1449,27 @@ def mark_attendance_view(request):
         .order_by("pk")
         .first()
     )
+
+    # Новую отметку можно создать только на фактическую дату занятия.
+    # Существующую историческую отметку разрешаем редактировать: расписание
+    # группы могло измениться уже после занятия.
+    if (
+        attendance is None
+        and mark_date not in effective_class_dates(
+            group,
+            mark_date,
+            mark_date,
+        )
+    ):
+        return JsonResponse(
+            {
+                "status": "error",
+                "code": "no_class_on_date",
+                "message": "На выбранную дату у группы нет занятия",
+            },
+            status=409,
+        )
+
     trainer_assignment = (
         LessonTrainerAssignment.objects
         .filter(
@@ -1474,60 +1495,96 @@ def mark_attendance_view(request):
     subscription_on_date = (
         child.subscriptions
         .filter(
+            is_active=True,
             cancelled_at__isnull=True,
             start_date__lte=mark_date,
             end_date__gte=mark_date,
         )
         .filter(subscription_scope)
-        .order_by("-is_active", "end_date", "pk")
+        .order_by("end_date", "pk")
         .first()
         if requires_subscription
         else None
     )
-    debt_already_formalized = (
-        requires_subscription
-        and attendance is not None
+
+    # Проверяем остаток именно на дату отметки. Иначе редактирование старого
+    # занятия могло бы ошибочно стать долгом после более позднего исчерпания.
+    subscription_has_session = not requires_subscription
+    if subscription_on_date is not None:
+        attendance_scope = Q(group_snapshot=group)
+        if child.group_id == group.pk:
+            attendance_scope |= Q(group_snapshot__isnull=True)
+
+        used_marks = (
+            child.attendances
+            .filter(
+                status__in=(
+                    Attendance.Status.PRESENT,
+                    Attendance.Status.ABSENT,
+                ),
+                date__gte=subscription_on_date.start_date,
+                date__lte=mark_date,
+            )
+            .filter(attendance_scope)
+        )
+        if attendance is not None:
+            used_marks = used_marks.exclude(pk=attendance.pk)
+
+        subscription_has_session = (
+            used_marks.count() < subscription_on_date.sessions_total
+        )
+
+    existing_present = (
+        attendance is not None
         and attendance.status == Attendance.Status.PRESENT
-        and subscription_on_date is None
     )
 
     charge = Decimal("0")
     if (
         requires_subscription
         and status == Attendance.Status.PRESENT
-        and subscription_on_date is None
     ):
-        if not allow_debt and not debt_already_formalized:
-            return JsonResponse(
-                {
-                    "status": "error",
-                    "code": "debt_required",
-                    "message": (
+        # Повторное сохранение PRESENT не должно менять уже зафиксированную
+        # финансовую историю, в том числе сумму ранее оформленного долга.
+        if existing_present:
+            charge = attendance.charge_amount
+
+        elif not subscription_has_session:
+            if not allow_debt:
+                debt_message = (
+                    (
+                        "Занятия по абонементу закончились. "
+                        "Сначала оформите занятие в долг."
+                    )
+                    if subscription_on_date is not None
+                    else (
                         "Абонемент не действует на эту дату. "
                         "Сначала оформите занятие в долг."
-                    ),
-                },
-                status=409,
-            )
+                    )
+                )
+                return JsonResponse(
+                    {
+                        "status": "error",
+                        "code": "debt_required",
+                        "message": debt_message,
+                    },
+                    status=409,
+                )
 
-        if allow_debt and group.single_session_price <= 0:
-            return JsonResponse(
-                {
-                    "status": "error",
-                    "code": "debt_price_required",
-                    "message": (
-                        "Сначала задайте стоимость занятия в долг "
-                        "в настройках группы."
-                    ),
-                },
-                status=409,
-            )
+            if group.single_session_price <= 0:
+                return JsonResponse(
+                    {
+                        "status": "error",
+                        "code": "debt_price_required",
+                        "message": (
+                            "Сначала задайте стоимость занятия в долг "
+                            "в настройках группы."
+                        ),
+                    },
+                    status=409,
+                )
 
-        charge = (
-            attendance.charge_amount
-            if debt_already_formalized and not allow_debt
-            else group.single_session_price
-        )
+            charge = group.single_session_price
 
     if attendance is None:
         created = True
@@ -1576,7 +1633,7 @@ def mark_attendance_view(request):
     debt_formalized = (
         requires_subscription
         and status == Attendance.Status.PRESENT
-        and subscription_on_date is None
+        and attendance.charge_amount > 0
     )
     if debt_formalized and allow_debt:
         log_action(

@@ -1161,6 +1161,11 @@ class CrmWorkflowTests(TestCase):
             trainer=self.trainer,
             single_session_price=Decimal("1000"),
         )
+        ScheduleSlot.objects.create(
+            group=second_group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
         ChildGroupMembership.objects.create(
             child=self.child,
             group=second_group,
@@ -2993,6 +2998,11 @@ class CrmWorkflowTests(TestCase):
 
     def test_attendance_mark_is_saved(self):
         today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
         Subscription.objects.create(
             child=self.child,
             start_date=today - timedelta(days=1),
@@ -3034,6 +3044,11 @@ class CrmWorkflowTests(TestCase):
         
     def test_attendance_present_requires_explicit_debt_formalization(self):
         today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
         self.group.single_session_price = Decimal("750")
         self.group.save(update_fields=["single_session_price"])
         self.client.login(
@@ -3096,6 +3111,11 @@ class CrmWorkflowTests(TestCase):
 
     def test_attendance_debt_requires_configured_price(self):
         today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
         self.client.login(
             username="admin",
             password="TestPass123!",
@@ -3125,6 +3145,11 @@ class CrmWorkflowTests(TestCase):
 
     def test_attendance_absence_without_subscription_remains_allowed(self):
         today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
         self.client.login(
             username="admin",
             password="TestPass123!",
@@ -3152,6 +3177,153 @@ class CrmWorkflowTests(TestCase):
             attendance.charge_amount,
             Decimal("0"),
         )
+
+    def test_attendance_rejects_new_mark_outside_schedule_but_allows_history_edit(self):
+        today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=(today.weekday() + 1) % 7,
+            start_time=time(18, 0),
+        )
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        blocked = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "group_id": self.group.pk,
+                "date": today.isoformat(),
+                "status": Attendance.Status.ABSENT,
+            },
+        )
+
+        self.assertEqual(blocked.status_code, 409)
+        self.assertEqual(blocked.json()["code"], "no_class_on_date")
+        self.assertFalse(
+            Attendance.objects.filter(
+                child=self.child,
+                date=today,
+            ).exists()
+        )
+
+        historical = Attendance.objects.create(
+            child=self.child,
+            date=today,
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+            salary_rate_snapshot=self.group.salary_rate,
+            status=Attendance.Status.ABSENT,
+        )
+
+        changed = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "group_id": self.group.pk,
+                "date": today.isoformat(),
+                "status": Attendance.Status.SICK,
+            },
+        )
+
+        self.assertEqual(changed.status_code, 200)
+        historical.refresh_from_db()
+        self.assertEqual(historical.status, Attendance.Status.SICK)
+
+    def test_attendance_exhausted_subscription_requires_debt_formalization(self):
+        today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
+        self.group.single_session_price = Decimal("900")
+        self.group.save(update_fields=["single_session_price"])
+
+        Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=today - timedelta(days=10),
+            end_date=today + timedelta(days=30),
+            sessions_total=2,
+            price=Decimal("5000"),
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=today - timedelta(days=2),
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+            status=Attendance.Status.PRESENT,
+        )
+        Attendance.objects.create(
+            child=self.child,
+            date=today - timedelta(days=1),
+            group_snapshot=self.group,
+            trainer_snapshot=self.trainer,
+            status=Attendance.Status.ABSENT,
+        )
+
+        self.assertEqual(self.child.sessions_left(self.group), 0)
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        blocked = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "group_id": self.group.pk,
+                "date": today.isoformat(),
+                "status": Attendance.Status.PRESENT,
+            },
+        )
+
+        self.assertEqual(blocked.status_code, 409)
+        self.assertEqual(blocked.json()["code"], "debt_required")
+        self.assertIn("закончились", blocked.json()["message"])
+        self.assertFalse(
+            Attendance.objects.filter(
+                child=self.child,
+                date=today,
+                group_snapshot=self.group,
+            ).exists()
+        )
+
+        allowed = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "group_id": self.group.pk,
+                "date": today.isoformat(),
+                "status": Attendance.Status.PRESENT,
+                "allow_debt": "1",
+            },
+        )
+
+        self.assertEqual(allowed.status_code, 200)
+        self.assertTrue(allowed.json()["debt_formalized"])
+        attendance = Attendance.objects.get(
+            child=self.child,
+            date=today,
+            group_snapshot=self.group,
+        )
+        self.assertEqual(attendance.charge_amount, Decimal("900"))
+
+        repeated = self.client.post(
+            reverse("mark_attendance"),
+            {
+                "child_id": self.child.pk,
+                "group_id": self.group.pk,
+                "date": today.isoformat(),
+                "status": Attendance.Status.PRESENT,
+            },
+        )
+        self.assertEqual(repeated.status_code, 200)
+        attendance.refresh_from_db()
+        self.assertEqual(attendance.charge_amount, Decimal("900"))
 
     def test_attendance_reason_period_creates_sick_marks_and_document(self):
         start = timezone.localdate()
@@ -7488,6 +7660,11 @@ class CrmWorkflowTests(TestCase):
 
     def test_audit_middleware_records_unlogged_successful_actions(self):
         today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=self.group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
         Subscription.objects.create(
             child=self.child,
             start_date=today - timedelta(days=1),
