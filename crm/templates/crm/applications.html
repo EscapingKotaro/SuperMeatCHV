@@ -95,7 +95,12 @@
                     <td>{% if lead.current_newcomer %}{% if lead.current_newcomer.lesson_cancelled %}Отменено{% elif lead.current_newcomer.attended %}Пришёл{% else %}Не подтверждён{% endif %}<small class="block">{% if lead.current_newcomer.has_paid %}Оплачено{% else %}Нет оплаты{% endif %}</small>{% else %}—{% endif %}</td>
                     <td class="max-w-xs whitespace-pre-line">{{ lead.current_trial.comment|default:"—" }}</td>
                     <td>
-                        <form method="post" class="min-w-36" data-lead-status-form>
+                        <form method="post" class="min-w-36" data-lead-status-form
+                              data-lead-id="{{ lead.pk }}"
+                              data-lead-name="{{ lead.full_name|escape }}"
+                              data-current-status="{% if lead.current_newcomer.has_paid and lead.status != 'lost' %}paid{% else %}{{ lead.status }}{% endif %}"
+                              data-closed-until="{{ lead.closed_until|date:'Y-m-d' }}"
+                              data-closed-reason="{{ lead.closed_reason|escape }}">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="quick_status">
                             <input type="hidden" name="lead_id" value="{{ lead.pk }}">
@@ -106,7 +111,7 @@
                                     {% elif lead.status == 'qualified' %}border-emerald-700 bg-emerald-700 text-white
                                     {% elif lead.status == 'contacted' %}border-amber-300 bg-amber-100 text-amber-900
                                     {% else %}border-slate-300 bg-white text-slate-700{% endif %}"
-                                    onchange="this.form.submit()">
+                                    onchange="handleLeadStatusChange(this)">
                                 {% if lead.current_newcomer.has_paid and lead.status != 'lost' %}
                                 <option value="paid" selected>Оплатил</option>
                                 {% endif %}
@@ -119,6 +124,22 @@
                                 <option value="lost" {% if lead.status == 'lost' %}selected{% endif %}>Закрыта</option>
                             </select>
                         </form>
+                        {% if lead.status == 'lost' %}
+                        <div class="mt-2 rounded-lg border border-red-200 bg-white/70 px-2 py-1.5 text-[11px] text-red-800"
+                             data-lead-closure>
+                            <b>Вернуться: {{ lead.closed_until|date:"d.m.Y"|default:"не указано" }}</b>
+                            <span class="mt-0.5 block">{{ lead.closed_reason|default:"Причина не указана" }}</span>
+                            <button type="button"
+                                    class="mt-1 font-bold underline underline-offset-2"
+                                    data-lead-id="{{ lead.pk }}"
+                                    data-lead-name="{{ lead.full_name|escape }}"
+                                    data-closed-until="{{ lead.closed_until|date:'Y-m-d' }}"
+                                    data-closed-reason="{{ lead.closed_reason|escape }}"
+                                    onclick="openLeadCloseModal(this)">
+                                Изменить закрытие
+                            </button>
+                        </div>
+                        {% endif %}
                         {% if lead.current_newcomer.has_paid and lead.status != 'lost' %}
                         <small class="mt-1 block font-semibold text-sky-700" data-paid-status-source>по фактической оплате</small>
                         {% endif %}
@@ -170,6 +191,7 @@
 </section>
 {% endblock %}
 {% block modals %}
+<button type="button" class="hidden" data-modal="lead-close-modal" data-lead-close-trigger tabindex="-1" aria-hidden="true"></button>
 <section id="lead-modal" class="modal {% if editing or form.errors or request.GET.create == "1" %}open{% endif %}">
     <form method="post">
         {% csrf_token %}
@@ -196,6 +218,36 @@
         <div class="modal-foot">
             <a href="{% url 'applications' %}" class="btn btn-soft">Отмена</a>
             <button class="btn btn-primary">Сохранить</button>
+        </div>
+    </form>
+</section>
+<section id="lead-close-modal" class="modal">
+    <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="close_lead">
+        <input type="hidden" name="lead_id" value="" data-lead-close-id>
+        <div class="modal-head">
+            <b>Закрыть заявку</b>
+            <button type="button" data-close aria-label="Закрыть">
+                <i data-lucide="x"></i>
+            </button>
+        </div>
+        <div class="modal-body space-y-4">
+            <p class="text-sm text-slate-600"><b data-lead-close-name>Заявка</b></p>
+            <label>
+                <span class="label">Закрыта до</span>
+                <input type="date" name="closed_until" class="field" required data-lead-close-until>
+                <small class="block text-slate-500">На эту дату создаётся задача вернуться к заявке.</small>
+            </label>
+            <label>
+                <span class="label">Причина закрытия</span>
+                <textarea name="closed_reason" class="field min-h-24" required data-lead-close-reason
+                          placeholder="Например: уехали до октября, попросили перезвонить позже"></textarea>
+            </label>
+        </div>
+        <div class="modal-foot">
+            <button type="button" data-close class="btn btn-soft">Отмена</button>
+            <button class="btn btn-primary">Закрыть и создать напоминание</button>
         </div>
     </form>
 </section>
@@ -235,6 +287,32 @@
     const dateFromFilter = document.querySelector('[data-lead-date-from]');
     const dateToFilter = document.querySelector('[data-lead-date-to]');
     const ageFilter = document.querySelector('[data-lead-age-filter]');
+    const closeTrigger = document.querySelector('[data-lead-close-trigger]');
+    const closeLeadId = document.querySelector('[data-lead-close-id]');
+    const closeLeadName = document.querySelector('[data-lead-close-name]');
+    const closeUntil = document.querySelector('[data-lead-close-until]');
+    const closeReason = document.querySelector('[data-lead-close-reason]');
+
+    window.openLeadCloseModal = (source) => {
+        if (!source || !closeLeadId || !closeUntil || !closeReason) return;
+        closeLeadId.value = source.dataset.leadId || '';
+        if (closeLeadName) closeLeadName.textContent = source.dataset.leadName || 'Заявка';
+        closeUntil.value = source.dataset.closedUntil || '';
+        closeReason.value = source.dataset.closedReason || '';
+        closeTrigger?.click();
+    };
+
+    window.handleLeadStatusChange = (select) => {
+        if (select.value !== 'lost') {
+            select.form.submit();
+            return;
+        }
+
+        const form = select.form;
+        select.value = form.dataset.currentStatus || 'new';
+        window.openLeadCloseModal(form);
+    };
+
     if (!buttons.length) return;
 
     const counts = {

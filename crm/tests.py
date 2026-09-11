@@ -5669,6 +5669,145 @@ class CrmWorkflowTests(TestCase):
             kind=Notification.Kind.LEAD_CREATED,
         ).exists())
                       
+    def test_closed_lead_requires_metadata_and_reuses_return_task(self):
+        lead = Lead.objects.create(
+            full_name="Вернуться позже",
+            phone="+79990000055",
+            status=Lead.Status.NEW,
+        )
+        first_due = timezone.localdate() + timedelta(days=7)
+        second_due = first_due + timedelta(days=5)
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+
+        blocked = self.client.post(
+            reverse("applications"),
+            {
+                "action": "quick_status",
+                "lead_id": lead.pk,
+                "status": Lead.Status.LOST,
+            },
+        )
+        self.assertRedirects(blocked, reverse("applications"))
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, Lead.Status.NEW)
+        self.assertFalse(ManagerTask.objects.filter(lead=lead).exists())
+
+        closed = self.client.post(
+            reverse("applications"),
+            {
+                "action": "close_lead",
+                "lead_id": lead.pk,
+                "closed_until": first_due.isoformat(),
+                "closed_reason": "Родители уехали, попросили перезвонить",
+            },
+        )
+        self.assertRedirects(closed, reverse("applications"))
+
+        lead.refresh_from_db()
+        self.assertEqual(lead.status, Lead.Status.LOST)
+        self.assertEqual(lead.closed_until, first_due)
+        self.assertEqual(
+            lead.closed_reason,
+            "Родители уехали, попросили перезвонить",
+        )
+
+        task = ManagerTask.objects.get(lead=lead, is_done=False)
+        self.assertEqual(task.assignee, self.admin)
+        self.assertEqual(task.created_by, self.admin)
+        self.assertEqual(task.due_date, first_due)
+        self.assertEqual(
+            task.title,
+            f"Вернуться к заявке: {lead.full_name}",
+        )
+        self.assertEqual(
+            task.description,
+            "Родители уехали, попросили перезвонить",
+        )
+
+        updated = self.client.post(
+            reverse("applications"),
+            {
+                "action": "close_lead",
+                "lead_id": lead.pk,
+                "closed_until": second_due.isoformat(),
+                "closed_reason": "Перенесли звонок ещё на несколько дней",
+            },
+        )
+        self.assertRedirects(updated, reverse("applications"))
+        self.assertEqual(
+            ManagerTask.objects.filter(lead=lead, is_done=False).count(),
+            1,
+        )
+
+        task.refresh_from_db()
+        lead.refresh_from_db()
+        self.assertEqual(task.due_date, second_due)
+        self.assertEqual(
+            task.description,
+            "Перенесли звонок ещё на несколько дней",
+        )
+        self.assertEqual(lead.closed_until, second_due)
+
+        page = self.client.get(
+            reverse("applications"),
+            {"state": "closed"},
+        )
+        self.assertContains(page, 'id="lead-close-modal"')
+        self.assertContains(page, "data-lead-closure")
+        self.assertContains(page, second_due.strftime("%d.%m.%Y"))
+        self.assertContains(
+            page,
+            "Перенесли звонок ещё на несколько дней",
+        )
+        self.assertContains(page, "Закрыть и создать напоминание")
+
+    def test_reopening_closed_lead_completes_return_task(self):
+        lead = Lead.objects.create(
+            full_name="Снова в работе",
+            status=Lead.Status.LOST,
+            closed_until=timezone.localdate() + timedelta(days=4),
+            closed_reason="Перезвонить позже",
+        )
+        task = ManagerTask.objects.create(
+            title=f"Вернуться к заявке: {lead.full_name}",
+            description=lead.closed_reason,
+            lead=lead,
+            assignee=self.admin,
+            created_by=self.admin,
+            due_date=lead.closed_until,
+        )
+
+        self.client.login(
+            username="admin",
+            password="TestPass123!",
+        )
+        response = self.client.post(
+            reverse("applications"),
+            {
+                "action": "quick_status",
+                "lead_id": lead.pk,
+                "status": Lead.Status.CONTACTED,
+            },
+        )
+        self.assertRedirects(response, reverse("applications"))
+
+        lead.refresh_from_db()
+        task.refresh_from_db()
+        self.assertEqual(lead.status, Lead.Status.CONTACTED)
+        self.assertIsNone(lead.closed_until)
+        self.assertEqual(lead.closed_reason, "")
+        self.assertTrue(task.is_done)
+        self.assertIsNotNone(task.done_at)
+        self.assertEqual(task.completed_by, self.admin)
+        self.assertEqual(
+            task.completion_comment,
+            "Заявка возвращена в работу",
+        )
+
     def test_newcomer_trial_creates_notification(self):
         trial_at = timezone.now() + timedelta(days=1)
 

@@ -2009,6 +2009,15 @@ class ManagerTask(models.Model):
         verbose_name="Спортсмен",
     )
 
+    lead = models.ForeignKey(
+        "Lead",
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="manager_tasks",
+        verbose_name="Заявка",
+    )
+
     assignee = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.SET_NULL,
@@ -2159,6 +2168,8 @@ class Lead(models.Model):
                               related_name="leads", verbose_name="группа")
     status = models.CharField("Статус", max_length=20, choices=Status.choices, default=Status.NEW)
     comment = models.TextField("Комментарий", blank=True)
+    closed_until = models.DateField("Закрыта до", blank=True, null=True)
+    closed_reason = models.TextField("Причина закрытия", blank=True)
     imported_from_ad = models.BooleanField("Автоматически из рекламы", default=False)
     child = models.OneToOneField(Child, on_delete=models.SET_NULL, blank=True, null=True,
                                  related_name="source_lead", verbose_name="карточка спортсмена")
