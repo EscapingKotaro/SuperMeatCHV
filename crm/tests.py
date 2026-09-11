@@ -624,7 +624,7 @@ class CrmWorkflowTests(TestCase):
         self.assertTrue(membership.is_primary)
         self.assertIsNone(membership.archived_at)
 
-    def test_child_card_repairs_primary_membership_for_legacy_child(self):
+    def test_child_card_legacy_membership_fallback_is_read_only(self):
         self.child.group_memberships.all().delete()
         self.client.login(
             username="admin",
@@ -636,18 +636,94 @@ class CrmWorkflowTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 200)
+        self.assertFalse(
+            ChildGroupMembership.objects.filter(
+                child=self.child,
+                group=self.group,
+            ).exists()
+        )
+        self.assertContains(response, "data-group-memberships")
+        self.assertContains(
+            response,
+            'data-group-membership="legacy"',
+        )
+        self.assertContains(response, "Только чтение")
+        self.assertContains(
+            response,
+            'name="action" value="repair_primary_membership"',
+        )
+
+        repaired = self.client.post(
+            reverse("child_card", args=[self.child.pk]),
+            {"action": "repair_primary_membership"},
+        )
+        self.assertRedirects(
+            repaired,
+            reverse("child_card", args=[self.child.pk]),
+        )
+
         membership = ChildGroupMembership.objects.get(
             child=self.child,
             group=self.group,
         )
         self.assertTrue(membership.is_primary)
         self.assertIsNone(membership.archived_at)
-        self.assertContains(response, "data-group-memberships")
-        self.assertContains(
-            response,
-            f'data-group-membership="{membership.pk}"',
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                actor=self.admin,
+                action="child.group_membership.repair",
+                object_id=str(self.child.pk),
+            ).exists()
         )
-        self.assertContains(response, "Основная")
+
+    def test_child_admin_status_actions_use_domain_transitions(self):
+        from django.contrib.admin.sites import AdminSite
+        from django.test import RequestFactory
+
+        from .admin import ChildAdmin
+
+        today = timezone.localdate()
+        mark = Attendance.objects.create(
+            child=self.child,
+            date=today,
+            status=Attendance.Status.ABSENT,
+        )
+        model_admin = ChildAdmin(Child, AdminSite())
+        request = RequestFactory().post("/admin/crm/child/")
+        request.user = self.boss
+
+        model_admin.to_archive(
+            request,
+            Child.objects.filter(pk=self.child.pk),
+        )
+        self.child.refresh_from_db()
+        mark.refresh_from_db()
+        self.assertEqual(self.child.status, Child.Status.ARCHIVED)
+        self.assertEqual(self.child.archived_at, today)
+        self.assertEqual(self.child.departure_group, self.group)
+        self.assertEqual(self.child.departure_trainer, self.trainer)
+        self.assertEqual(mark.group_snapshot, self.group)
+        self.assertEqual(mark.trainer_snapshot, self.trainer)
+
+        model_admin.to_active(
+            request,
+            Child.objects.filter(pk=self.child.pk),
+        )
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.status, Child.Status.ACTIVE)
+        self.assertIsNone(self.child.archived_at)
+        self.assertIsNone(self.child.departure_group)
+        self.assertIsNone(self.child.departure_trainer)
+
+        model_admin.to_lost(
+            request,
+            Child.objects.filter(pk=self.child.pk),
+        )
+        self.child.refresh_from_db()
+        self.assertEqual(self.child.status, Child.Status.LOST)
+        self.assertEqual(self.child.archived_at, today)
+        self.assertEqual(self.child.departure_group, self.group)
+        self.assertEqual(self.child.departure_trainer, self.trainer)
 
     def test_child_can_have_multiple_groups_and_change_primary(self):
         substitute_trainer = Trainer.objects.create(

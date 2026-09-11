@@ -4916,31 +4916,37 @@ def child_card_view(request, child_id):
     debt = child.debt()
     promos = child.active_promos()
 
-    if child.group_id:
-        has_other_primary = child.group_memberships.filter(
-            is_primary=True,
-            archived_at__isnull=True,
-        ).exclude(group_id=child.group_id).exists()
-        primary_membership, _ = ChildGroupMembership.objects.get_or_create(
-            child=child,
-            group=child.group,
-            defaults={"is_primary": not has_other_primary},
-        )
-        changed_fields = []
-        if primary_membership.archived_at is not None:
-            primary_membership.archived_at = None
-            changed_fields.append("archived_at")
-        if not has_other_primary and not primary_membership.is_primary:
-            primary_membership.is_primary = True
-            changed_fields.append("is_primary")
-        if changed_fields:
-            primary_membership.save(update_fields=changed_fields)
-
     memberships = list(
         child.group_memberships
         .select_related("group__trainer")
         .order_by("-is_primary", "archived_at", "joined_at", "pk")
     )
+    has_current_group_membership = any(
+        membership.group_id == child.group_id
+        and membership.archived_at is None
+        for membership in memberships
+    )
+    if child.group_id and not has_current_group_membership:
+        # Legacy/inconsistent data stays visible on GET, but GET must not
+        # create or reactivate membership rows. Repair is an explicit POST.
+        from types import SimpleNamespace
+
+        memberships.insert(
+            0,
+            SimpleNamespace(
+                id=None,
+                pk=None,
+                child=child,
+                group=child.group,
+                group_id=child.group_id,
+                joined_at=None,
+                archived_at=None,
+                is_primary=True,
+                requires_subscription=True,
+                is_legacy_fallback=True,
+            ),
+        )
+
     for membership in memberships:
         membership.has_active_subscription = (
             membership.archived_at is None
@@ -5086,6 +5092,30 @@ def child_card_view(request, child_id):
             )
             stay.delete()
             messages.success(request, "Поездка удалена")
+            return redirect("child_card", child_id=child.pk)
+
+        elif action == "repair_primary_membership":
+            if not child.group_id:
+                messages.error(
+                    request,
+                    "У спортсмена не указана основная группа",
+                )
+                return redirect("child_card", child_id=child.pk)
+
+            child._sync_primary_group_membership(
+                previous_group_id=child.group_id,
+                archive_previous=False,
+            )
+            log_action(
+                request,
+                "child.group_membership.repair",
+                child,
+                f"{child}: восстановлена связь с основной группой {child.group}",
+            )
+            messages.success(
+                request,
+                "Связь с основной группой восстановлена",
+            )
             return redirect("child_card", child_id=child.pk)
 
         elif action == "add_group_membership":

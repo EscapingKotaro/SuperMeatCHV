@@ -249,15 +249,26 @@ class ChildAdmin(admin.ModelAdmin):
 
     @admin.action(description="🗄 В архив")
     def to_archive(self, request, queryset):
-        queryset.update(status=Child.Status.ARCHIVED)
+        for child in queryset:
+            if child.status != Child.Status.ARCHIVED:
+                child.archive()
 
     @admin.action(description="😴 В потерянные")
     def to_lost(self, request, queryset):
-        queryset.update(status=Child.Status.LOST)
+        for child in queryset:
+            child.mark_as_lost()
 
     @admin.action(description="✅ В активные")
     def to_active(self, request, queryset):
-        queryset.update(status=Child.Status.ACTIVE)
+        for child in queryset:
+            if child.status in (
+                Child.Status.ARCHIVED,
+                Child.Status.LOST,
+            ):
+                child.restore_from_archive()
+            elif child.status != Child.Status.ACTIVE:
+                child.status = Child.Status.ACTIVE
+                child.save(update_fields=["status"])
 
 
 @admin.register(Group)
