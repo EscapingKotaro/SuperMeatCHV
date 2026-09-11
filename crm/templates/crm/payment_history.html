@@ -35,7 +35,13 @@
                             {{ p.child }}
                         </a>
                     </td>
-                    <td class="text-slate-500">{{ p.child.group|default:"—" }}</td>
+                    <td class="text-slate-500">
+                        {% if p.subscription %}
+                            {{ p.subscription.group|default:"—" }}
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
                     <td class="text-slate-500">
                         {% if p.subscription %}
                             {{ p.subscription.start_date|date:"d.m" }}–{{ p.subscription.end_date|date:"d.m.Y" }}
