@@ -1,0 +1,8 @@
+{% extends 'crm/base.html' %}
+{% block content %}
+<section class="card p-6 max-w-xl mx-auto">
+  <h2 class="text-lg font-bold">Управление сотрудниками перенесено</h2>
+  <p class="text-sm text-slate-500 my-3">Создание, изменение данных и смена пароля сотрудника доступны в едином разделе «Пользователи». Эта старая форма больше не используется.</p>
+  {% if is_senior %}<a class="btn btn-primary" href="{% url 'users' %}">Открыть пользователей</a>{% else %}<p class="text-sm">Для управления сотрудниками обратитесь к старшему администратору или начальнику.</p><a class="btn btn-soft mt-3" href="{% url 'profile' %}">Мой профиль</a>{% endif %}
+</section>
+{% endblock %}

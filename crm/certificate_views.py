@@ -5,7 +5,7 @@ from django import forms
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import FileResponse, Http404, HttpResponseBadRequest
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_POST
 
@@ -43,15 +43,17 @@ def _add_calendar_months(value, months):
 
 
 class ChildDocumentUploadForm(forms.Form):
-    document = forms.FileField(required=True)
-    valid_from = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
-    valid_until = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
-    note = forms.CharField(max_length=255, required=False)
+    document = forms.FileField(label="Файл", required=True)
+    valid_from = forms.DateField(label="Действует с", required=False, input_formats=["%Y-%m-%d"], widget=forms.DateInput(attrs={"type": "date"}))
+    valid_until = forms.DateField(label="Действует до", required=False, input_formats=["%Y-%m-%d"], widget=forms.DateInput(attrs={"type": "date"}))
+    note = forms.CharField(label="Комментарий к справке", max_length=255, required=False)
 
     def __init__(self, *args, document_kind="certificate", has_document=False, **kwargs):
         self.document_kind = document_kind
         super().__init__(*args, **kwargs)
         self.fields["document"].required = not has_document
+        for field in self.fields.values():
+            field.widget.attrs["class"] = "field"
 
     def clean_document(self):
         uploaded = self.cleaned_data["document"]
@@ -118,7 +120,11 @@ def child_certificate_manage_view(request, child_id):
                     str(error) for errors in form.errors.values() for error in errors
                 ),
             )
-            return redirect("child_card", child_id=child.pk)
+            return render(request, "crm/document_retry.html", {
+                "form": form, "child": child, "document_label": label,
+                "document_kind": kind, "has_document": bool(getattr(child, file_field)),
+                "title": "Исправить документ", "page": "clients",
+            })
 
         current_file = getattr(child, file_field)
         old_name = current_file.name if current_file else ""
@@ -211,7 +217,8 @@ def child_document_view(request, child_id, kind):
         mimetypes.guess_type(file_field.name)[0]
         or "application/octet-stream"
     )
-    return FileResponse(
-        file_field.open("rb"),
-        content_type=content_type,
-    )
+    try:
+        return FileResponse(file_field.open("rb"), content_type=content_type)
+    except FileNotFoundError:
+        messages.error(request, "Файл документа отсутствует в хранилище. Загрузите его повторно в карточке спортсмена.")
+        return redirect("child_card", child_id=child.pk)

@@ -163,7 +163,7 @@
             </td>
             <td>{{ item.start_date|date:"d.m" }}–{{ item.end_date|date:"d.m.Y" }}</td>
             <td>
-              <a class="btn btn-soft" href="?edit_subscription={{ item.pk }}">Изменить</a>
+              <a class="btn btn-soft" href="?edit_subscription={{ item.pk }}">{% if item.cancelled_at %}Просмотреть{% else %}Изменить{% endif %}</a>
             </td>
           </tr>
           {% empty %}
@@ -184,6 +184,7 @@
   <form method="post" data-payment-form data-subscriptions-url="{% url 'payment_subscriptions' %}" data-initial-subscription="{{ payment_form.subscription_id.value|default_if_none:'' }}">
     {% csrf_token %}
     <input type="hidden" name="action" value="payment">
+    <input type="hidden" name="submission_token" value="{{ payment_token }}">
     <div class="modal-head">
       <b>Принять оплату</b>
       <button type="button" data-close>
@@ -194,6 +195,7 @@
     <div class="modal-body grid gap-4 sm:grid-cols-2">
       {% if payment_form.errors %}<p class="sm:col-span-2 rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">Оплата не сохранена. Исправьте поля ниже — остальные данные сохранены в форме.</p>{% endif %}
       {{ payment_form.non_field_errors }}
+      {% if payment_form.non_field_errors %}<a class="text-sm underline" href="{% url 'payments' %}?new_payment=1{% if payment_child_id %}&child={{ payment_child_id }}{% endif %}">Открыть новую форму оплаты</a>{% endif %}
       <label class="sm:col-span-2">
         <p class="text-sm text-slate-500 mb-3">Оплата пополняет баланс. Для нового периода занятий отдельно оформите абонемент — сама оплата его не продлевает.</p>
         <span class="label">Спортсмен</span>
@@ -283,7 +285,7 @@
     {% endif %}
     <div class="modal-head">
       <b>
-        {% if editing_subscription %}Изменить абонемент{% else %}Оформить / продлить абонемент{% endif %}
+        {% if editing_subscription.cancelled_at %}Отменённый абонемент{% elif editing_subscription %}Изменить абонемент{% else %}Оформить / продлить абонемент{% endif %}
       </b>
       <button type="button" data-close>
         <i data-lucide="x">
@@ -292,6 +294,7 @@
     </div>
     <div class="modal-body grid max-h-[65vh] gap-4 overflow-y-auto sm:grid-cols-2">
       {{ subscription_form.non_field_errors }}
+      {% if editing_subscription.cancelled_at %}<p class="sm:col-span-2 text-sm text-slate-600">Историческая запись доступна только для просмотра. Оплаты сохранены. Чтобы продолжить занятия, оформите новый абонемент.</p>{% endif %}
       {% for field in subscription_form %}{% if field.name != 'end_date' and field.name != 'sessions_total' and field.name != 'price' and field.name != 'manual_override' %}
       <label><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>
       {% endif %}{% endfor %}
@@ -304,10 +307,10 @@
       <p class="sm:col-span-2 text-sm text-slate-500">По тарифу срок, занятия и цена рассчитываются автоматически. Сначала применяется индивидуальная скидка, затем процент акции.</p>
     </div>
     <div class="modal-foot">
-      {% if editing_subscription %}
+      {% if editing_subscription and not editing_subscription.cancelled_at %}
       <button name="action" value="cancel_subscription" formnovalidate onclick="return confirm('Отменить абонемент и его начисление? История оплат сохранится.')" class="btn btn-soft text-red-600">Отменить абонемент</button>
       {% endif %}
-      <button class="btn btn-primary">{% if editing_subscription %}Сохранить изменения{% else %}Оформить абонемент{% endif %}</button>
+      {% if editing_subscription.cancelled_at %}<a class="btn btn-primary" href="?child={{ editing_subscription.child_id }}&new_subscription=1">Оформить новый абонемент</a>{% else %}<button class="btn btn-primary">{% if editing_subscription %}Сохранить изменения{% else %}Оформить абонемент{% endif %}</button>{% endif %}
     </div>
   </form>
 </section>

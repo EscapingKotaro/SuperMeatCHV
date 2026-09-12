@@ -70,6 +70,8 @@ class SubscriptionInline(admin.TabularInline):
 
 class PaymentInline(admin.TabularInline):
     model = Payment
+    can_delete = False
+    readonly_fields = ("created_by",)
     extra = 0
     fields = ("date", "amount", "subscription", "created_by")
 
@@ -367,9 +369,14 @@ class PaymentAdmin(admin.ModelAdmin):
     list_display = ("date", "child", "amount", "created_by")
     list_filter = ("date",)
     search_fields = ("child__last_name",)
+    readonly_fields = ("created_by",)
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
     def save_model(self, request, obj, form, change):
-        obj.created_by = request.user
+        if not change:
+            obj.created_by = request.user
         super().save_model(request, obj, form, change)
 
 

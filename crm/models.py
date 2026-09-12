@@ -1513,12 +1513,14 @@ def extend_subscriptions_for_schedule_move(
 
 class Payment(models.Model):
     """Оплата абонемента (из них считаем выручку и долг)."""
-    child = models.ForeignKey(Child, on_delete=models.CASCADE,
+    child = models.ForeignKey(Child, on_delete=models.PROTECT,
                               related_name="payments", verbose_name="ребёнок")
     subscription = models.ForeignKey(Subscription, on_delete=models.SET_NULL,
                                      blank=True, null=True, verbose_name="абонемент")
     amount = models.DecimalField("Сумма", max_digits=10, decimal_places=2)
     date = models.DateField("Дата", default=timezone.localdate)
+    submission_key = models.UUIDField("Ключ операции", unique=True, null=True, blank=True, editable=False)
+    submission_hash = models.CharField("Параметры операции", max_length=64, blank=True, editable=False)
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
                                    null=True, blank=True, verbose_name="принял")
 

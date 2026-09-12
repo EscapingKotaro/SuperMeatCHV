@@ -523,7 +523,7 @@ class IntakeEditRegressionTests(TestCase):
         blocked = self.client.post(
             reverse("payments"),
             {
-                "action": "payment",
+                "action": "payment", "submission_token": self.client.get(reverse("payments")).context["payment_token"],
                 "child_id": str(child.pk),
                 "subscription_id": "",
                 "amount": "1500",
@@ -539,7 +539,7 @@ class IntakeEditRegressionTests(TestCase):
         paid = self.client.post(
             reverse("payments"),
             {
-                "action": "payment",
+                "action": "payment", "submission_token": self.client.get(reverse("payments")).context["payment_token"],
                 "child_id": str(child.pk),
                 "subscription_id": "",
                 "amount": "1500",

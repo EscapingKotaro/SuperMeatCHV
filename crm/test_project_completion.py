@@ -342,7 +342,7 @@ class ProjectCompletionTests(TestCase):
     def test_bad_payment_is_rejected_without_crashing_or_writing(self):
         for amount,day in [('NaN',self.today),('Infinity',self.today),('123','not-a-date'),('-1',self.today)]:
             with self.subTest(amount=amount,day=day):
-                response=self.client.post(reverse('payments'),{'action':'payment','child_id':self.child.pk,'amount':amount,'date':day})
+                response=self.client.post(reverse('payments'),{'action':'payment', "submission_token": self.client.get(reverse("payments")).context["payment_token"],'child_id':self.child.pk,'amount':amount,'date':day})
                 self.assertEqual(response.status_code,200)
                 self.assertTrue(response.context['payment_form'].errors)
         self.assertFalse(self.child.payments.exists())

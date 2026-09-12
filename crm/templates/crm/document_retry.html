@@ -1,0 +1,14 @@
+{% extends 'crm/base.html' %}
+{% block content %}
+<section class="card p-5 max-w-xl mx-auto">
+  <h2 class="font-bold text-lg">{{ document_label }} · {{ child }}</h2>
+  <p class="my-3 text-sm text-red-700" role="alert">Документ не сохранён. Исправьте отмеченные поля. Даты и комментарий остались в форме.</p>
+  <p class="my-3 text-sm text-slate-500">{% if has_document %}Старый файл не изменён. Для замены выберите новый файл ещё раз.{% else %}Выберите файл ещё раз: браузер не может восстановить выбор после отправки.{% endif %}</p>
+  <form method="post" enctype="multipart/form-data" data-guard-draft>
+    {% csrf_token %}<input type="hidden" name="action" value="upload"><input type="hidden" name="kind" value="{{ document_kind }}">
+    {{ form.non_field_errors }}
+    {% for field in form %}{% if field.name != 'note' or document_kind == 'certificate' %}<label class="block my-3"><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endif %}{% endfor %}
+    <div class="flex gap-3 mt-4"><button class="btn btn-primary">Сохранить</button><a class="btn btn-soft" href="{% url 'child_card' child.pk %}">Отмена</a></div>
+  </form>
+</section>
+{% endblock %}

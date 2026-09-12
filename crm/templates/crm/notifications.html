@@ -2,7 +2,11 @@
 
 
 {% block content %}
-<form method="post" class="mb-4">{% csrf_token %}<button class="btn btn-soft" name="action" value="mark_read">Отметить уведомления прочитанными ({{ unread_count }})</button></form>
+<div class="mb-4 flex flex-wrap gap-2">
+<form method="post">{% csrf_token %}{% for notification in event_notifications %}<input type="hidden" name="notification_ids" value="{{ notification.pk }}">{% endfor %}<button class="btn btn-soft" name="action" value="mark_page_read">Прочитано на этой странице</button></form>
+<form method="post">{% csrf_token %}<button class="btn btn-soft" name="action" value="mark_read" onclick="return confirm('Отметить все уведомления прочитанными, включая другие страницы?')">Прочитаны все уведомления</button></form>
+</div>
+<nav class="mb-4 flex flex-wrap items-center gap-3" aria-label="Страницы уведомлений"><span class="text-sm text-slate-500">{{ event_page.paginator.count }} уведомлений · страница {{ event_page.number }} из {{ event_page.paginator.num_pages }}</span>{% if event_previous_url %}<a class="btn btn-soft" href="{{ event_previous_url }}">← Назад</a>{% endif %}{% if event_next_url %}<a class="btn btn-soft" href="{{ event_next_url }}">Далее →</a>{% endif %}</nav>
 
 <div class="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
 
@@ -636,9 +640,9 @@
 
 
                         {% elif notification.task %}
-
+                        {% with task_day=notification.task.scheduled_at|default:notification.task.due_date %}
                         <a
-                            href="{% url 'calendar' %}"
+                            href="{% url 'calendar' %}{% if task_day %}?start={{ task_day|date:'Y-m-01' }}&day={{ task_day|date:'Y-m-d' }}{% endif %}"
                             class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[#315EBC] hover:underline"
                         >
                             Открыть календарь
@@ -648,6 +652,7 @@
                                 class="h-3 w-3"
                             ></i>
                         </a>
+                        {% endwith %}
 
                         {% endif %}
 

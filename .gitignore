@@ -66,3 +66,9 @@ htmlcov/
 .pytest_cache/
 .mypy_cache/
 *.patch
+UX_FIXES.md
+UX_FIXES.md
+MIGRATION_NOTES.md
+UX_FIXES.md
+UX_FIXES.md
+UX_RESCAN.md

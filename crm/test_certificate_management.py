@@ -134,7 +134,9 @@ class CertificateManagementTests(TestCase):
                 "note": "Не сохранять",
             },
         )
-        self.assertRedirects(response, reverse("child_card", args=[self.child.pk]))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Не сохранять")
+        self.assertTrue(response.context["form"].errors)
 
         self.child.refresh_from_db()
         self.assertEqual(self.child.certificate.name, old_name)

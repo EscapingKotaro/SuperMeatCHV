@@ -309,6 +309,10 @@ def payments_page(request):
     Саму оплату по-прежнему создаёт исходный views.payments_page:
     здесь не дублируется финансовая логика и валидация абонемента.
     """
+    from .payment_submission import prepare_submission
+    replay = prepare_submission(request)
+    if replay is not None:
+        return replay
     if (
         request.method != "POST"
         or request.POST.get("action", "payment") != "payment"

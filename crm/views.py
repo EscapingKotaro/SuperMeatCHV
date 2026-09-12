@@ -1883,6 +1883,10 @@ def _deactivate_overlapping_subscriptions(subscription):
 @login_required
 @transaction.atomic
 def payments_page(request):
+    from .payment_submission import prepare_submission
+    replay = prepare_submission(request)
+    if replay is not None:
+        return replay
     from .payment_forms import PaymentEntryForm
     payment_form = getattr(request, "payment_form", None)
     if payment_form is None:
@@ -1890,6 +1894,8 @@ def payments_page(request):
             request.POST if request.method == "POST" and request.POST.get("action", "payment") == "payment" else None,
             initial={"child_id": request.GET.get("child")},
         )
+    if getattr(request, "payment_submission_error", None):
+        payment_form.add_error(None, request.payment_submission_error)
     from .finance_ui import subscription_history_context
     from .navigation import list_url
     editing_tariff = Tariff.objects.filter(pk=_optional_pk(request.GET.get("edit_tariff"))).first()
@@ -1920,7 +1926,9 @@ def payments_page(request):
                     if len(covering) == 1:
                         subscription = covering[0]
                 payment = Payment.objects.create(child=child, subscription=subscription,
-                    amount=amount, date=payment_date, created_by=request.user)
+                    amount=amount, date=payment_date, created_by=request.user,
+                    submission_key=request.payment_submission_key,
+                    submission_hash=request.payment_submission_hash)
                 log_action(request, "payment.create", payment, f"Принята оплата {amount} ₽ от {child}")
                 messages.success(request, "Оплата сохранена")
             else:
@@ -1977,6 +1985,7 @@ def payments_page(request):
         children=Child.objects.all().order_by("last_name", "first_name", "pk"),
         payment_child_id=_optional_pk(payment_form["child_id"].value()),
         payment_form=payment_form,
+        payment_token=request.payment_token,
         urgent_count=sum(
             1 for row in rows
             if row["status"] == "Срочно"
@@ -3253,11 +3262,17 @@ def toggle_manager_task(task, user, completion_comment=""):
 
 @login_required
 def notifications_page(request):
+    from django.core.paginator import Paginator
+    from .navigation import list_url
     if request.method == "POST":
         action = request.POST.get("action", "toggle_task")
         if action == "mark_read":
             Notification.objects.filter(recipient=request.user, read_at__isnull=True).update(read_at=timezone.now())
-            return redirect("notifications")
+            return redirect(list_url(request, "notifications"))
+        if action == "mark_page_read":
+            ids = [_optional_pk(value) for value in request.POST.getlist("notification_ids")[:50]]
+            Notification.objects.filter(recipient=request.user, pk__in=[pk for pk in ids if pk], read_at__isnull=True).update(read_at=timezone.now())
+            return redirect(list_url(request, "notifications"))
 
         if action == "confirm_trial":
             newcomer = get_object_or_404(
@@ -3270,7 +3285,7 @@ def notifications_page(request):
                     request,
                     "У пробного занятия не указана дата",
                 )
-                return redirect("notifications")
+                return redirect(f"{reverse('newcomers')}?edit={newcomer.pk}")
 
             trial_date = timezone.localtime(
                 newcomer.trial_at
@@ -3281,7 +3296,7 @@ def notifications_page(request):
                     request,
                     "Подтверждать можно пробное занятие на сегодня",
                 )
-                return redirect("notifications")
+                return redirect(f"{reverse('newcomers')}?edit={newcomer.pk}")
 
             newcomer.attended = True
             newcomer.lesson_cancelled = False
@@ -3388,11 +3403,12 @@ def notifications_page(request):
         return redirect("notifications")
 
     # Последние уведомления пользователя
-    event_notifications = list(
+    event_page = Paginator(
         Notification.objects
         .filter(recipient=request.user, resolved_at__isnull=True)
-        .select_related("actor", "task")[:50]
-    )
+        .select_related("actor", "task").order_by("-created_at", "-pk"), 50,
+    ).get_page(request.GET.get("page"))
+    event_notifications = list(event_page)
     
 
     unread_count = Notification.objects.filter(recipient=request.user, read_at__isnull=True, resolved_at__isnull=True).count()
@@ -3448,6 +3464,9 @@ def notifications_page(request):
         request, "notifications",
         subscription_count=subscription_count,
         event_notifications=event_notifications,
+        event_page=event_page,
+        event_previous_url=list_url(request, "notifications", page=event_page.previous_page_number()) if event_page.has_previous() else "",
+        event_next_url=list_url(request, "notifications", page=event_page.next_page_number()) if event_page.has_next() else "",
         unread_count=unread_count,
         debt_count=debt_count,
         today_trials=today_trials,

@@ -2319,10 +2319,8 @@ class CrmWorkflowTests(TestCase):
                 ),
             },
         )
-        self.assertRedirects(
-            response,
-            reverse("child_card", args=[self.child.pk]),
-        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["form"].errors.get("valid_until"))
         self.child.refresh_from_db()
         self.assertFalse(self.child.insurance)
         self.assertIsNone(self.child.insurance_valid_from)
@@ -6187,7 +6185,7 @@ class CrmWorkflowTests(TestCase):
         response = self.client.post(
             reverse("payments"),
             {
-                "action": "payment",
+                "action": "payment", "submission_token": self.client.get(reverse("payments")).context["payment_token"],
                 "child_id": child.pk,
                 "amount": "1500",
                 "working_group_id": self.group.pk,
@@ -7830,7 +7828,7 @@ class CrmWorkflowTests(TestCase):
         response = self.client.post(
             reverse("payments"),
             {
-                "action": "payment",
+                "action": "payment", "submission_token": self.client.get(reverse("payments")).context["payment_token"],
                 "child_id": self.child.pk,
                 "amount": "1500",
                 "date": today.isoformat(),
@@ -7887,7 +7885,7 @@ class CrmWorkflowTests(TestCase):
         response = self.client.post(
             reverse("payments"),
             {
-                "action": "payment",
+                "action": "payment", "submission_token": self.client.get(reverse("payments")).context["payment_token"],
                 "child_id": self.child.pk,
                 "subscription_id": target_subscription.pk,
                 "amount": "1700",
@@ -7963,7 +7961,7 @@ class CrmWorkflowTests(TestCase):
         response = self.client.post(
             reverse("payments"),
             {
-                "action": "payment",
+                "action": "payment", "submission_token": self.client.get(reverse("payments")).context["payment_token"],
                 "child_id": self.child.pk,
                 "amount": "1500",
                 "date": timezone.localdate().isoformat(),

@@ -46,11 +46,11 @@
                         {% if p.subscription %}
                             {{ p.subscription.start_date|date:"d.m" }}–{{ p.subscription.end_date|date:"d.m.Y" }}
                         {% else %}
-                            —
+                            Без привязки к абонементу
                         {% endif %}
                     </td>
                     <td class="text-slate-500">{{ p.created_by|default:"—" }}</td>
-                    <td class="text-right font-bold">{{ p.amount|floatformat:0 }} ₽</td>
+                    <td class="text-right font-bold">{{ p.amount|floatformat:2 }} ₽</td>
                 </tr>
             {% empty %}
                 <tr>
@@ -62,7 +62,7 @@
 
                 <tr class="bg-slate-50 font-extrabold">
                     <td colspan="5">Итого</td>
-                    <td class="text-right">{{ total|floatformat:0 }} ₽</td>
+                    <td class="text-right">{{ total|floatformat:2 }} ₽</td>
                 </tr>
             </tbody>
         </table>

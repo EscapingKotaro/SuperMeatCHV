@@ -542,11 +542,16 @@ class SubscriptionForm(StyledFormMixin, forms.ModelForm):
         self.fields["end_date"].required = False
         self.fields["sessions_total"].required = False
         self.fields["price"].required = False
+        if self.instance.pk and self.instance.cancelled_at:
+            for field in self.fields.values():
+                field.disabled = True
         self.apply_styles()
 
     def clean(self):
         cleaned = super().clean()
         tariff = cleaned.get("tariff")
+        if self.instance.pk and self.instance.cancelled_at:
+            raise forms.ValidationError("Отменённый абонемент доступен только для просмотра. Для нового периода оформите новый абонемент.")
         percent = cleaned.get("promo_percent") or 0
         cleaned["promo_percent"] = percent
         child = cleaned.get("child")

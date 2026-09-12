@@ -191,7 +191,7 @@ class SmallUIFlowTests(TestCase):
         child.save(update_fields=["status"])
         today = timezone.localdate()
         sub = Subscription.objects.create(child=child, group=child.group, start_date=today, end_date=today, price=100)
-        data = {"action": "payment", "child_id": child.pk, "subscription_id": sub.pk,
+        data = {"action": "payment", "submission_token": self.client.get(reverse("payments")).context["payment_token"], "child_id": child.pk, "subscription_id": sub.pk,
                 "working_group_id": child.group_id, "amount": "-15", "date": today.isoformat()}
         response = self.client.post(reverse("payments") + "?sub_page=2", data)
         self.assertEqual(response.status_code, 200)
@@ -214,7 +214,7 @@ class SmallUIFlowTests(TestCase):
         today = timezone.localdate()
         sub = Subscription.objects.create(child=other, start_date=today, end_date=today, price=100)
         for child_id, field in [("wrong", "child_id"), (child.pk, "subscription_id")]:
-            response = self.client.post(reverse("payments"), {"action": "payment", "child_id": child_id,
+            response = self.client.post(reverse("payments"), {"action": "payment", "submission_token": self.client.get(reverse("payments")).context["payment_token"], "child_id": child_id,
                 "subscription_id": sub.pk, "amount": "1500", "date": today.isoformat()})
             self.assertEqual(response.status_code, 200)
             self.assertTrue(response.context["payment_form"].errors.get(field))
@@ -419,3 +419,64 @@ class SmallUIFlowTests(TestCase):
         self.user.is_superuser = False
         self.user.save(update_fields=["is_superuser"])
         self.assertEqual(self.client.get(reverse("salaries") + f"?month=2026-08&edit={item.pk}").status_code, 403)
+
+    def test_payment_replay_is_noop_and_changed_payload_is_rejected(self):
+        self.client.force_login(self.user)
+        child = self.make_child()
+        token = self.client.get(reverse("payments")).context["payment_token"]
+        data = {"action": "payment", "submission_token": token, "child_id": child.pk,
+                "amount": "100", "date": timezone.localdate().isoformat()}
+        for _ in range(2):
+            response = self.client.post(reverse("payments"), data)
+            self.assertEqual(response.status_code, 302)
+        self.assertEqual(child.payments.count(), 1)
+        data["amount"] = "200"
+        response = self.client.post(reverse("payments"), data)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["payment_form"].non_field_errors())
+        self.assertEqual(child.payments.count(), 1)
+        self.assertEqual(child.payments.get().amount, 100)
+
+    def test_payment_requires_valid_actor_bound_token(self):
+        from .payment_submission import issue_token
+        self.client.force_login(self.user)
+        child = self.make_child()
+        for token in ["", "forged", issue_token(self.user.pk + 100)]:
+            response = self.client.post(reverse("payments"), {"action": "payment", "submission_token": token,
+                "child_id": child.pk, "amount": "100", "date": timezone.localdate().isoformat()})
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(response.context["payment_form"].non_field_errors())
+        self.assertFalse(child.payments.exists())
+
+    def test_separate_payment_tokens_allow_legitimate_equal_payments(self):
+        from .payment_submission import issue_token
+        self.client.force_login(self.user)
+        child = self.make_child()
+        for _ in range(2):
+            self.client.post(reverse("payments"), {"action": "payment", "submission_token": issue_token(self.user.pk),
+                "child_id": child.pk, "amount": "100", "date": timezone.localdate().isoformat()})
+        self.assertEqual(child.payments.count(), 2)
+
+    def test_payment_admin_keeps_original_author_and_disallows_delete(self):
+        from django.contrib.admin.sites import AdminSite
+        from .admin import PaymentAdmin
+        from .models import Payment
+        child = self.make_child()
+        other = get_user_model().objects.create_user(username="payment-editor")
+        payment = Payment.objects.create(child=child, amount=100, created_by=self.user)
+        request = RequestFactory().post("/admin/")
+        request.user = other
+        admin = PaymentAdmin(Payment, AdminSite())
+        admin.save_model(request, payment, None, change=True)
+        payment.refresh_from_db()
+        self.assertEqual(payment.created_by_id, self.user.pk)
+        self.assertFalse(admin.has_delete_permission(request, payment))
+
+    def test_deleting_child_cannot_cascade_into_payment_history(self):
+        from django.db.models.deletion import ProtectedError
+        from .models import Payment
+        child = self.make_child()
+        payment = Payment.objects.create(child=child, amount=100)
+        with self.assertRaises(ProtectedError):
+            child.delete()
+        self.assertTrue(Payment.objects.filter(pk=payment.pk).exists())
