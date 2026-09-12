@@ -83,11 +83,11 @@
     {% empty %}
     <div class="col-span-full text-center py-12 text-slate-500">
         <i data-lucide="users" class="h-12 w-12 mx-auto mb-3 text-slate-300"></i>
-        <p>Тренеры ещё не добавлены</p>
+        <p>{% if trainer_state == 'archive' %}В архиве тренеров нет{% elif trainer_state == 'active' %}Активных тренеров нет{% else %}Тренеры ещё не добавлены{% endif %}</p>
     </div>
     {% endfor %}
 </div>
 {% endblock %}
 
-{% block modals %}{% if form %}<section id="trainer-modal" class="modal open"><form method="post">{% csrf_token %}<div class="modal-head"><b>{{ form_title }}</b><a href="{% url 'trainer_list' %}" aria-label="Закрыть">×</a></div><div class="modal-body space-y-4">{{ form.non_field_errors }}{% for field in form %}<label class="block"><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}</div><div class="modal-foot"><a class="btn btn-soft" href="{% url 'trainer_list' %}">Отмена</a><button class="btn btn-primary">Сохранить</button></div></form></section>{% endif %}{% endblock %}
+{% block modals %}{% if form %}<section id="trainer-modal" class="modal open"><form method="post">{% csrf_token %}<div class="modal-head"><b>{{ form_title }}</b><a href="{{ workflow_list_url }}" aria-label="Закрыть">×</a></div><div class="modal-body space-y-4">{{ form.non_field_errors }}{% for field in form %}<label class="block"><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}</div><div class="modal-foot"><a class="btn btn-soft" href="{{ workflow_list_url }}">Отмена</a><button class="btn btn-primary">Сохранить</button></div></form></section>{% endif %}{% endblock %}
 {% block scripts %}{% if form %}<script>document.querySelector('[data-modal-backdrop]').classList.remove('hidden');</script>{% endif %}{% endblock %}

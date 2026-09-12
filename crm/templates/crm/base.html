@@ -66,14 +66,14 @@
     </a>
 
     <div class="relative" data-dropdown>
-        <button type="button" data-dropdown-toggle data-dropdown-target="dropdown-finance" aria-haspopup="menu" aria-expanded="false" class="nav-pill cursor-pointer {% if page in 'revenue_forecast,payments,expenses' %}active{% endif %}">
+        <button type="button" data-dropdown-toggle data-dropdown-target="dropdown-finance" aria-haspopup="menu" aria-expanded="false" class="nav-pill cursor-pointer {% if page in 'revenue_forecast,payments,expenses,payment_history,salaries' %}active{% endif %}">
             <i data-lucide="wallet"></i> Финансы
             <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
         </button>
     </div>
 
     <div class="relative" data-dropdown>
-        <button type="button" data-dropdown-toggle data-dropdown-target="dropdown-stats" aria-haspopup="menu" aria-expanded="false" class="nav-pill cursor-pointer {% if page in 'statistics,payment_history,salaries' %}active{% endif %}">
+        <button type="button" data-dropdown-toggle data-dropdown-target="dropdown-stats" aria-haspopup="menu" aria-expanded="false" class="nav-pill cursor-pointer {% if page == 'statistics' %}active{% endif %}">
             <i data-lucide="chart-no-axes-combined"></i> Статистика
             <i data-lucide="chevron-down" class="h-3 w-3 opacity-60"></i>
         </button>
@@ -176,7 +176,7 @@
         <i data-lucide="inbox" class="h-4 w-4"></i> Заявки
     </a>
     <a href="{% url 'newcomers' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'newcomers' %}bg-slate-100 font-semibold{% endif %}">
-        <i data-lucide="user-round-plus" class="h-4 w-4"></i> Новички
+        <i data-lucide="user-round-plus" class="h-4 w-4"></i> Новички · пробные занятия
     </a>
 </div>
 
@@ -199,12 +199,6 @@
     <a href="{% url 'expenses' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'expenses' %}bg-slate-100 font-semibold{% endif %}">
         <i data-lucide="receipt-text" class="h-4 w-4"></i> Расходы
     </a>
-</div>
-
-<div id="dropdown-stats" class="fixed z-[100] hidden min-w-[220px] flex-col gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
-    <a href="{% url 'statistics' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'statistics' %}bg-slate-100 font-semibold{% endif %}">
-        <i data-lucide="chart-no-axes-combined" class="h-4 w-4"></i> Общая статистика
-    </a>
     <a href="{% url 'payment_history' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'payment_history' %}bg-slate-100 font-semibold{% endif %}">
         <i data-lucide="history" class="h-4 w-4"></i> История оплат
     </a>
@@ -213,6 +207,10 @@
         <i data-lucide="banknote" class="h-4 w-4"></i> ЗП тренеров
     </a>
     {% endif %}
+</div>
+
+<div id="dropdown-stats" class="fixed z-[100] hidden min-w-[220px] flex-col gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
+    <a href="{% url 'statistics' %}" class="menu-item">Общая статистика</a>
 </div>
 
 <div id="dropdown-events" class="fixed z-[100] hidden min-w-[210px] flex-col gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-xl">
@@ -244,7 +242,8 @@
     
     {% block modals %}{% endblock %}
 
-    <script src="{% static 'crm/app.js' %}?v=4"></script>
+    <script src="{% static 'crm/form-guard.js' %}?v=2"></script>
+    <script src="{% static 'crm/app.js' %}?v=6"></script>
 
     {% block scripts %}{% endblock %}
 

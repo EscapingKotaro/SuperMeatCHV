@@ -2,6 +2,8 @@
 
 {% block actions %}
 <div class="flex flex-wrap gap-2">
+    <a class="btn btn-soft" href="{% if workflow_return_url %}{{ workflow_return_url }}{% else %}{% url 'clients' %}{% endif %}">Вернуться к списку</a>
+    <a class="btn btn-primary" href="{% url 'payments' %}?child={{ child.pk }}&new_payment=1">Принять оплату</a>
     <button type="button"
             data-modal="child-task-modal"
             class="btn btn-primary px-4 py-2.5 text-sm font-extrabold shadow-sm"
@@ -228,7 +230,7 @@
                 {% endif %}
             </div>
 
-            <form method="post"
+            <form method="post" data-guard-draft
                   action="{% url 'child_certificate_manage' child.id %}"
                   enctype="multipart/form-data"
                   class="mt-3 grid gap-2">
@@ -238,8 +240,9 @@
                 <input type="file"
                        name="document"
                        {% if document.key == 'certificate' %}accept="image/*"{% else %}accept="image/*,.pdf,.doc,.docx"{% endif %}
-                       required
+                       {% if not document.present %}required{% endif %}
                        class="field">
+                {% if document.present %}<p class="text-xs text-slate-500">Для изменения срока оставьте выбор файла пустым. Новый файл заменит текущий.</p>{% endif %}
                 <div class="grid grid-cols-2 gap-2" data-document-period>
                     <label>
                         <span class="text-[10px] font-bold uppercase text-slate-400">Действует с</span>
@@ -269,12 +272,12 @@
                        placeholder="Комментарий к справке">
                 {% endif %}
                 <button type="submit" class="btn btn-soft w-full text-xs">
-                    {% if document.present %}Заменить{% else %}Загрузить{% endif %} {{ document.label|lower }}
+                    {% if document.present %}Сохранить изменения{% else %}Загрузить {{ document.label|lower }}{% endif %}
                 </button>
             </form>
 
             {% if document.present %}
-            <form method="post"
+            <form method="post" data-guard-draft
                   action="{% url 'child_certificate_manage' child.id %}"
                   class="mt-2"
                   onsubmit="return confirm('Удалить документ «{{ document.label }}»?')">
@@ -304,7 +307,7 @@
                     <span class="text-slate-500 text-xs">{{ rank.year }} г.</span>
                     <div class="flex items-center gap-2">
                         <b class="text-slate-900">{{ rank.rank }}</b>
-                        <form method="post" onsubmit="return confirm('Удалить этот разряд?')">
+                        <form method="post" data-guard-draft onsubmit="return confirm('Удалить этот разряд?')">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="delete_rank">
                             <input type="hidden" name="rank_id" value="{{ rank.id }}">
@@ -318,7 +321,7 @@
             <p class="text-xs text-slate-400 italic">Разряды не присвоены</p>
             {% endif %}
 
-            <form method="post" class="mt-4 grid grid-cols-[90px_1fr] gap-2">
+            <form method="post" data-guard-draft class="mt-4 grid grid-cols-[90px_1fr] gap-2">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="add_rank">
                 {{ rank_form.year }}
@@ -443,7 +446,7 @@
                         </div>
 
                         {% if membership.is_legacy_fallback %}
-                        <form method="post" class="shrink-0">
+                        <form method="post" data-guard-draft class="shrink-0">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="repair_primary_membership">
                             <button type="submit"
@@ -454,7 +457,7 @@
                         </form>
                         {% elif not membership.archived_at %}
                         <div class="flex shrink-0 flex-wrap justify-end gap-1">
-                            <form method="post" data-membership-subscription-mode>
+                            <form method="post" data-guard-draft data-membership-subscription-mode onsubmit="return confirm('Изменить правила учёта для этой группы? Режим «Без абонемента» разрешает отметки без абонемента и без оформления долга.')">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="set_membership_subscription_mode">
                                 <input type="hidden" name="membership_id" value="{{ membership.id }}">
@@ -462,11 +465,11 @@
                                 <button type="submit"
                                         class="btn px-2 py-1 text-[10px] {% if membership.requires_subscription %}bg-emerald-50 text-emerald-700 hover:bg-emerald-100{% else %}bg-slate-100 text-slate-600 hover:bg-slate-200{% endif %}"
                                         title="Переключить, используется ли абонемент для этой группы">
-                                    {% if membership.requires_subscription %}Абонемент{% else %}Без абонемента{% endif %}
+                                    {% if membership.requires_subscription %}Учёт: абонемент{% else %}Учёт: без абонемента{% endif %} · изменить
                                 </button>
                             </form>
                             {% if not membership.is_primary %}
-                            <form method="post">
+                            <form method="post" data-guard-draft>
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="set_primary_group">
                                 <input type="hidden" name="membership_id" value="{{ membership.id }}">
@@ -477,7 +480,7 @@
                                 </button>
                             </form>
                             {% endif %}
-                            <form method="post"
+                            <form method="post" data-guard-draft
                                   onsubmit="return confirm('Убрать группу «{{ membership.group.name }}» в архив? История посещений сохранится.')">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="archive_group_membership">
@@ -499,7 +502,7 @@
 
             {% if groups_list %}
             {% regroup groups_list by trainer as trainer_groups %}
-            <form method="post" class="mt-4 rounded-xl border border-dashed border-slate-300 p-3">
+            <form method="post" data-guard-draft class="mt-4 rounded-xl border border-dashed border-slate-300 p-3">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="add_group_membership">
                 <div class="label">Добавить ещё группу</div>
@@ -572,6 +575,7 @@
             <div class="space-y-2">
                 {% for sub in subscriptions %}
                 <div class="border border-slate-200 rounded-xl p-3 {% if sub.pk in active_subscription_ids %}bg-emerald-50 border-emerald-200{% endif %}">
+                    {% if not sub.cancelled_at %}<a href="{% url 'payments' %}?edit_subscription={{ sub.pk }}" class="block text-xs font-bold text-blue-700 mb-2">Изменить / отменить этот абонемент</a>{% endif %}
                     <div class="flex items-center justify-between mb-1">
                         <div class="flex items-center gap-2">
                             <b class="text-sm">{{ sub.start_date|date:"d.m" }} — {{ sub.end_date|date:"d.m" }}</b>
@@ -746,6 +750,27 @@
             <p class="text-sm text-slate-600 whitespace-pre-wrap">{{ child.note }}</p>
         </div>
         {% endif %}
+
+<!-- История посещений (heat-map) -->
+<section id="absence-reasons" class="card p-5 mb-5">
+    <h3 class="font-extrabold">Причины пропусков и документы</h3>
+    <p class="text-xs text-slate-500 mt-1">Здесь можно открыть документ, изменить даты и комментарий или отменить отметки периода, в том числе будущие. Документы сохраняются в истории.</p>
+    {% for reason in child.attendance_reasons.all %}
+    <div class="border-t mt-3 pt-3">
+        <b>{{ reason.get_kind_display }} · {{ reason.date_from|date:'d.m.Y' }}–{{ reason.date_to|date:'d.m.Y' }}</b>
+        <p class="text-sm whitespace-pre-line">{{ reason.comment|default:'Без комментария' }}</p>
+        <div class="flex flex-wrap gap-2 mt-2">
+            {% if reason.document %}<a download class="btn btn-soft" href="{% url 'reason_document' reason.pk %}">Скачать документ</a>{% endif %}
+            {% if reason.attendances.exists %}
+            <a class="btn btn-soft" href="{% url 'edit_reason' reason.pk %}">Изменить период / комментарий</a>
+            <form method="post" data-guard-draft action="{% url 'cancel_reason' reason.pk %}" onsubmit="return confirm('Отменить отметки этой причины за весь период? Документ останется в истории.')">
+                {% csrf_token %}<button class="btn btn-soft text-red-600">Отменить отметки периода</button>
+            </form>
+            {% else %}<span class="text-xs text-slate-500">Нет действующих отметок</span>{% endif %}
+        </div>
+    </div>
+    {% empty %}<p class="text-sm text-slate-500 mt-3">Причины пропусков пока не оформлены.</p>{% endfor %}
+</section>
 
 <!-- История посещений (heat-map) -->
 <div class="card p-5">
@@ -987,7 +1012,7 @@
                         </div>
                         <div class="flex flex-wrap gap-1.5">
                             {% for document in entry.card_documents %}
-                            <a href="{% url 'competition_document_download' document.pk %}"
+                            <a download href="{% url 'competition_document_download' document.pk %}"
                                class="inline-flex max-w-full items-center gap-1 rounded-lg bg-slate-50 px-2 py-1 text-[10px] font-semibold text-slate-700 hover:bg-slate-100"
                                title="Открыть {{ document.title }}">
                                 <i data-lucide="file-down" class="h-3 w-3 shrink-0"></i>
@@ -1026,7 +1051,7 @@
                                 {{ stay.camp.get_kind_display }}
                             </span>
                         </div>
-                        <form method="post" onsubmit="return confirm('Удалить эту поездку?')">
+                        <form method="post" data-guard-draft onsubmit="return confirm('Удалить эту поездку?')">
                             {% csrf_token %}
                             <input type="hidden" name="action" value="delete_camp">
                             <input type="hidden" name="stay_id" value="{{ stay.id }}">
@@ -1046,7 +1071,7 @@
             <p class="text-xs text-slate-400 italic">Нет поездок в лагеря и на сборы</p>
             {% endif %}
 
-            <form method="post" class="mt-4 space-y-2">
+            <form method="post" data-guard-draft class="mt-4 space-y-2">
                 {% csrf_token %}
                 <input type="hidden" name="action" value="add_camp">
                 <div class="grid grid-cols-[9rem_1fr] gap-2">
@@ -1084,7 +1109,7 @@
 
 {% block modals %}
 <section id="child-edit-modal" class="modal {% if editing_child_inline %}open{% endif %}">
-<form method="post" enctype="multipart/form-data" action="{% url 'child_edit' child.pk %}">
+<form method="post" data-guard-draft enctype="multipart/form-data" action="{% url 'child_edit' child.pk %}">
 {% csrf_token %}<input type="hidden" name="inline" value="1">
 <div class="modal-head"><b>Данные спортсмена</b><button type="button" data-close aria-label="Закрыть">×</button></div>
 <div class="modal-body grid gap-4 sm:grid-cols-2 max-h-[70vh] overflow-y-auto">{{ child_form.non_field_errors }}{% for field in child_form %}<label><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}</div>
@@ -1093,7 +1118,7 @@
 
 <section id="child-task-modal"
          class="modal {% if task_form.errors %}open{% endif %}">
-<form method="post">
+<form method="post" data-guard-draft>
 {% csrf_token %}
 <input type="hidden" name="action" value="create_child_task">
 <div class="modal-head">

@@ -9,6 +9,7 @@
         {% if group.children.exists or group.child_memberships.exists %}
         <div class="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
             ⚠️ С группой уже связана история спортсменов. Удаление недоступно: переведите действующих спортсменов и сделайте группу неактивной, чтобы сохранить историю.
+            <a class="block mt-2 underline font-bold" href="{% url 'group_list' %}?edit={{ group.pk }}">Открыть настройки группы</a>
         </div>
         {% endif %}
 
@@ -18,7 +19,7 @@
                 <button type="submit" class="btn bg-red-600 text-white hover:bg-red-700" {% if group.children.exists or group.child_memberships.exists %}disabled{% endif %}>
                     <i data-lucide="trash-2"></i>Удалить
                 </button>
-                <a href="{% url 'group_list' %}" class="btn btn-soft">Отмена</a>
+                <a href="{{ workflow_list_url }}" class="btn btn-soft">Отмена</a>
             </div>
         </form>
     </div>

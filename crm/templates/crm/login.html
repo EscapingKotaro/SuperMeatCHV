@@ -171,6 +171,7 @@
                 >
 
                     {% csrf_token %}
+                    <input type="hidden" name="next" value="{% firstof request.POST.next request.GET.next '' %}">
 
                     <label class="block">
 

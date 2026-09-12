@@ -10,6 +10,7 @@ from django.utils import timezone
 
 from . import views
 from .models import Lead, ManagerTask, Newcomer, Notification
+from .navigation import list_url
 
 
 LEAD_RETURN_TASK_PREFIX = "Вернуться к заявке:"
@@ -310,42 +311,25 @@ def payments_page(request):
     """
     if (
         request.method != "POST"
-        or request.POST.get("action") != "payment"
+        or request.POST.get("action", "payment") != "payment"
     ):
         return views.payments_page(request)
 
-    from .models import Child, Group
+    from .models import Child
+    from .payment_forms import PaymentEntryForm
 
-    child = get_object_or_404(
-        Child.objects.select_for_update().select_related("group__trainer"),
-        pk=views._optional_pk(request.POST.get("child_id")),
+    request.payment_form = PaymentEntryForm(request.POST)
+    if not request.payment_form.is_valid():
+        return views.payments_page(request)
+    child = Child.objects.select_for_update().select_related("group__trainer").get(
+        pk=request.payment_form.cleaned_data["child_id"].pk,
     )
+    # Re-read validation after acquiring the child lock: status may have changed.
+    request.payment_form = PaymentEntryForm(request.POST)
+    if not request.payment_form.is_valid():
+        return views.payments_page(request)
     was_trial = child.status == Child.Status.TRIAL
-
-    working_group = None
-    if was_trial:
-        working_group_id = views._optional_pk(
-            request.POST.get("working_group_id"),
-        )
-        if working_group_id is None:
-            messages.error(
-                request,
-                "Для пробника выберите рабочую группу после оплаты",
-            )
-            return redirect("payments")
-
-        working_group = (
-            Group.objects
-            .select_related("trainer")
-            .filter(pk=working_group_id, is_active=True)
-            .first()
-        )
-        if working_group is None:
-            messages.error(
-                request,
-                "Выбранная рабочая группа недоступна",
-            )
-            return redirect("payments")
+    working_group = request.payment_form.cleaned_data["working_group_id"] if was_trial else None
 
     payments_before = set(
         child.payments.values_list("pk", flat=True)
@@ -471,25 +455,25 @@ def newcomers_page(request):
                 request,
                 "Сначала назначьте новичку группу",
             )
-            return redirect("newcomers")
+            return redirect(list_url(request, "newcomers", edit=newcomer.pk))
         if return_to_card and newcomer.trial_at is None:
             messages.error(
                 request,
                 "Сначала назначьте дату и время пробного занятия",
             )
-            return redirect(f"{reverse('newcomers')}?edit={newcomer.pk}")
+            return redirect(list_url(request, "newcomers", edit=newcomer.pk))
         if return_to_card and not newcomer.attended:
             messages.error(
                 request,
                 "Сначала подтвердите, что новичок пришёл на пробное",
             )
-            return redirect(f"{reverse('newcomers')}?edit={newcomer.pk}")
+            return redirect(list_url(request, "newcomers", edit=newcomer.pk))
         if return_to_card and _newcomer_birth_year(newcomer) is None:
             messages.error(
                 request,
                 "Укажите дату рождения или возраст новичка",
             )
-            return redirect(f"{reverse('newcomers')}?edit={newcomer.pk}")
+            return redirect(list_url(request, "newcomers", edit=newcomer.pk))
         convert_target = newcomer
 
     if request.method == "POST" and action == "save":
@@ -498,6 +482,8 @@ def newcomers_page(request):
         _start_clean_create(request)
 
     response = views.newcomers_page(request)
+    if response.status_code == 302 and response.get("Location") == reverse("newcomers"):
+        response["Location"] = list_url(request, "newcomers")
 
     if convert_target is not None:
         convert_target.refresh_from_db()

@@ -13,13 +13,13 @@
     </a>
     {% endif %}
 
-    <button
-        data-modal="competition-modal"
+    <a
+        href="?new_competition=1{% if selected %}&competition={{ selected.pk }}{% endif %}"
         class="btn btn-primary"
     >
         <i data-lucide="plus"></i>
         Соревнование
-    </button>
+    </a>
 
 </div>
 {% endblock %}
@@ -90,21 +90,21 @@
         </a>
 
 
-        <button
-            data-modal="apparatus-modal"
+        <a
+            href="?competition={{ selected.pk }}&new_apparatus=1"
             class="btn btn-soft"
         >
             Добавить дисциплину
-        </button>
+        </a>
 
 
-        <button
-            data-modal="athlete-modal"
+        <a
+            href="?competition={{ selected.pk }}&new_entry=1"
             class="btn btn-dark ml-auto"
         >
             <i data-lucide="user-plus"></i>
             Добавить участника
-        </button>
+        </a>
 
 
         <form
@@ -476,7 +476,7 @@
 <section
     id="competition-modal"
     class="modal
-        {% if editing_competition or competition_form.errors %}
+        {% if editing_competition or competition_form.errors or request.GET.new_competition %}
             open
         {% endif %}
     "
@@ -566,13 +566,7 @@
 
         <div class="modal-foot">
 
-            <button
-                type="button"
-                data-close
-                class="btn btn-soft"
-            >
-                Отмена
-            </button>
+            <a href="{{ workflow_list_url }}" class="btn btn-soft">Отмена</a>
 
             <button class="btn btn-primary">
                 Сохранить
@@ -591,7 +585,7 @@
 <section
     id="apparatus-modal"
     class="modal
-        {% if editing_apparatus or apparatus_form.errors %}
+        {% if editing_apparatus or apparatus_form.errors or request.GET.new_apparatus %}
             open
         {% endif %}
     "
@@ -685,7 +679,7 @@
 <section
     id="athlete-modal"
     class="modal
-        {% if editing_entry or entry_form.errors %}
+        {% if editing_entry or entry_form.errors or request.GET.new_entry %}
             open
         {% endif %}
     "
@@ -786,7 +780,7 @@
 
 {% block scripts %}
 
-{% if editing_competition or editing_apparatus or editing_entry or competition_form.errors or apparatus_form.errors or entry_form.errors %}
+{% if editing_competition or editing_apparatus or editing_entry or competition_form.errors or apparatus_form.errors or entry_form.errors or request.GET.new_competition or request.GET.new_apparatus or request.GET.new_entry %}
 
 <script>
     document

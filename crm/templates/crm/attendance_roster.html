@@ -1,0 +1,28 @@
+<section class="card overflow-hidden" data-attendance-roster>
+  <div class="border-b p-4 flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 class="font-bold text-lg">{% if show_archived %}Архив группы{% else %}Состав группы{% endif %} · {{ children_data|length }}</h2>
+      <p class="text-sm text-slate-500">{{ selected_group.name }} · {{ trainer.full_name }}</p>
+      <p class="text-sm text-slate-500 mt-1">{% if error %}Добавьте расписание, чтобы появились даты и клетки для отметок.{% else %}В этом периоде нет занятий. Выберите другой период сверху.{% endif %} Карточки спортсменов доступны ниже.</p>
+    </div>
+    {% if error %}<a href="{% url 'group_list' %}?edit={{ selected_group.pk }}" class="btn btn-primary">Настроить расписание</a>{% endif %}
+  </div>
+  <div class="table-wrap">
+    <table class="data-table">
+      <thead><tr><th>Спортсмен</th><th>Абонемент группы</th><th>Общий долг</th><th>Документы</th><th>Действие</th></tr></thead>
+      <tbody>
+        {% for item in children_data %}
+        <tr>
+          <td><a href="{% url 'child_card' item.child.pk %}" class="font-bold hover:underline">{{ item.child }}</a><small class="block text-slate-500">{{ item.age }}{% if item.is_trial %} · Пробник{% endif %}</small></td>
+          <td>{% if not item.requires_subscription %}Без абонемента{% elif item.subscription_id %}{{ item.sessions_used }}/{{ item.sessions_total }} занятий<small class="block text-slate-500">до {{ item.subscription_end|date:'d.m.Y' }}</small>{% else %}<span class="text-slate-500">Нет действующего абонемента</span>{% endif %}</td>
+          <td>{% if item.debt > 0 %}<span class="font-bold text-red-600">{{ item.debt|floatformat:2 }} ₽</span>{% else %}Нет{% endif %}</td>
+          <td>{% if item.document_alert_count %}<span class="text-amber-700">{{ item.document_alert_text }}</span>{% else %}<span class="text-emerald-700">В порядке</span>{% endif %}</td>
+          <td><a href="{% url 'child_card' item.child.pk %}" class="btn btn-soft">Карточка</a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="5" class="text-center py-8 text-slate-500">{% if show_archived %}В архиве этой группы никого нет.{% else %}В группе пока нет спортсменов. Добавьте спортсмена кнопкой «Добавить» сверху.{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>

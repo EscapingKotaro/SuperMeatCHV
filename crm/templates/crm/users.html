@@ -45,10 +45,14 @@
                         {% elif current_role == "senior" and target_role == "boss" or current_role == "senior" and target_role == "admin" or current_role == "boss" and target_role == "admin" %}
                         <span class="text-xs text-slate-400">Недостаточно прав</span>
                         {% else %}
-                        <details class="mb-2">
+                        <details class="mb-2" {% if item.pk == staff_edit_id %}open{% endif %}>
                             <summary class="btn btn-soft cursor-pointer">Изменить</summary>
                             <form method="post" action="{% url 'user_update' item.pk %}" class="mt-2 grid gap-2 rounded-xl border p-3">
                                 {% csrf_token %}
+                                {% if item.pk == staff_edit_id %}
+                                {{ staff_edit_form.non_field_errors }}
+                                {% for field in staff_edit_form %}<label><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}
+                                {% else %}
                                 <input class="field" name="first_name" value="{{ item.first_name }}" placeholder="Имя">
                                 <input class="field" name="last_name" value="{{ item.last_name }}" placeholder="Фамилия">
                                 <input class="field" name="username" value="{{ item.username }}" placeholder="Логин" required>
@@ -63,6 +67,7 @@
                                     <option value="admin" {% if target_role == "admin" %}selected{% endif %}>Админ</option>
                                     {% endif %}
                                 </select>
+                                {% endif %}
                                 <button class="btn btn-primary">Сохранить</button>
                             </form>
                         </details>

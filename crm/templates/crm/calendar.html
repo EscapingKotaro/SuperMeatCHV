@@ -1,10 +1,12 @@
 {% extends 'crm/base.html' %}
 
 {% block actions %}
+{% if editing %}<a class="btn btn-primary" href="?start={{ month_start|date:'Y-m-d' }}&day={{ selected_day|date:'Y-m-d' }}&scope={{ scope }}&state={{ state }}&create=1">{% if can_manage_team_tasks %}Новая задача{% else %}Напоминание{% endif %}</a>{% else %}
 <button data-modal="task-modal" class="btn btn-primary">
     <i data-lucide="plus"></i>
     {% if can_manage_team_tasks %}Новая задача{% else %}Напоминание{% endif %}
 </button>
+{% endif %}
 {% endblock %}
 
 {% block content %}
@@ -310,6 +312,7 @@
                             {% endif %}
                         </div>
 
+                        {% if item.child_id %}<a class="btn btn-soft mt-2" href="{% url 'child_card' item.child_id %}">Карточка: {{ item.child }}</a>{% endif %}
                         {% if item.description %}
                         <p class="mt-2 break-words text-sm leading-5 text-slate-600">
                             {{ item.description }}
@@ -470,7 +473,7 @@
 
 
 {% block modals %}
-<section id="task-modal" class="modal {% if editing %}open{% endif %}">
+<section id="task-modal" class="modal {% if editing or form.errors or request.GET.create %}open{% endif %}">
     <form method="post">
         {% csrf_token %}
         <input type="hidden" name="action" value="save">
@@ -483,9 +486,9 @@
                 </p>
             </div>
 
-            <button type="button" data-close>
+            <a href="{{ workflow_list_url }}" aria-label="Закрыть">
                 <i data-lucide="x"></i>
-            </button>
+            </a>
         </div>
 
         <div class="modal-body grid gap-4">
@@ -518,9 +521,9 @@
         </div>
 
         <div class="modal-foot">
-            <button type="button" data-close class="btn btn-soft">
+            <a href="{{ workflow_list_url }}" class="btn btn-soft">
                 Отмена
-            </button>
+            </a>
 
             <button class="btn btn-primary">
                 {% if editing %}Сохранить{% else %}Создать задачу{% endif %}
@@ -532,7 +535,7 @@
 
 
 {% block scripts %}
-{% if editing %}
+{% if editing or form.errors %}
 <script>
     document
         .querySelector("[data-modal-backdrop]")

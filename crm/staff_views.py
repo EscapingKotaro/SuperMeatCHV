@@ -3,11 +3,12 @@ from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponseForbidden
-from django.shortcuts import get_object_or_404, redirect
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_POST
 
 from .models import Role, StaffProfile, has_min_role, role_rank, user_rank, user_role
-from .views import can_manage_staff_account, log_action
+from .views import can_manage_staff_account, log_action, page_context
+from .forms import StaffCreateForm
 
 
 class StaffEditForm(forms.ModelForm):
@@ -66,7 +67,11 @@ def staff_update_view(request, user_id):
     form = StaffEditForm(request.POST, instance=user, actor=request.user)
     if not form.is_valid():
         messages.error(request, "Проверьте данные пользователя")
-        return redirect("users")
+        return render(request, "crm/users.html", page_context(
+            request, "users", staff_edit_form=form, staff_edit_id=user.pk,
+            form=StaffCreateForm(actor=request.user),
+            users=get_user_model().objects.select_related("profile").filter(is_staff=True).order_by("-is_active", "last_name", "username"),
+        ))
 
     old_role = user_role(user)
     old_username = user.username

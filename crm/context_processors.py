@@ -4,8 +4,10 @@ from decimal import Decimal
 from django.db.models import Q, Sum
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 
 from .models import Attendance, Child, Newcomer, Notification, Payment, Subscription, has_min_role, user_role
+from .navigation import current_list_url
 
 
 def _sync_events(user, scope, desired):
@@ -83,7 +85,12 @@ def sync_today_trials(user):
 def crm_role_context(request):
     if not request.user.is_authenticated:
         return {"current_role": None, "is_boss": False, "is_senior": False, "notification_count": 0}
+    return_url = request.GET.get("next", "")
+    if not url_has_allowed_host_and_scheme(return_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return_url = ""
     return {
+        "workflow_return_url": return_url,
+        "workflow_list_url": current_list_url(request),
         "current_role": user_role(request.user),
         "is_boss": has_min_role(request.user, 2),
         "is_senior": has_min_role(request.user, 1),

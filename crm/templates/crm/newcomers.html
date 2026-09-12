@@ -155,7 +155,7 @@
                                     <input type="hidden" name="action" value="convert">
                                     <input type="hidden" name="newcomer_id" value="{{ item.pk }}">
                                     <input type="hidden" name="return_to_card" value="1">
-                                    <button class="btn btn-soft">Добавить в табель</button>
+                                    <button class="btn btn-soft">Создать и открыть карточку пробника</button>
                                 </form>
                                 {% endif %}
                             {% else %}
@@ -190,7 +190,7 @@
             <b>
                 {% if editing %}Изменить новичка{% else %}Новый новичок{% endif %}
             </b>
-            <a href="{% url 'newcomers' %}" aria-label="Закрыть">
+            <a href="{{ workflow_list_url }}" aria-label="Закрыть">
                 <i data-lucide="x">
                 </i>
             </a>
@@ -202,7 +202,7 @@
             {% endfor %}
         </div>
         <div class="modal-foot">
-            <a href="{% url 'newcomers' %}" class="btn btn-soft">Отмена</a>
+            <a href="{{ workflow_list_url }}" class="btn btn-soft">Отмена</a>
             <button class="btn btn-primary">Сохранить</button>
         </div>
     </form>

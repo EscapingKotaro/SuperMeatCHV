@@ -48,12 +48,15 @@ class ChildDocumentUploadForm(forms.Form):
     valid_until = forms.DateField(required=False, input_formats=["%Y-%m-%d"])
     note = forms.CharField(max_length=255, required=False)
 
-    def __init__(self, *args, document_kind="certificate", **kwargs):
+    def __init__(self, *args, document_kind="certificate", has_document=False, **kwargs):
         self.document_kind = document_kind
         super().__init__(*args, **kwargs)
+        self.fields["document"].required = not has_document
 
     def clean_document(self):
         uploaded = self.cleaned_data["document"]
+        if uploaded is None:
+            return None
         if uploaded.size > 10 * 1024 * 1024:
             raise forms.ValidationError("Размер документа не должен превышать 10 МБ")
         if (
@@ -106,11 +109,14 @@ def child_certificate_manage_view(request, child_id):
             request.POST,
             request.FILES,
             document_kind=kind,
+            has_document=bool(getattr(child, file_field)),
         )
         if not form.is_valid():
             messages.error(
                 request,
-                f"Не удалось сохранить {label.lower()}. Проверьте файл и период действия.",
+                f"Не удалось сохранить {label.lower()}: " + "; ".join(
+                    str(error) for errors in form.errors.values() for error in errors
+                ),
             )
             return redirect("child_card", child_id=child.pk)
 
@@ -118,7 +124,8 @@ def child_certificate_manage_view(request, child_id):
         old_name = current_file.name if current_file else ""
         old_storage = current_file.storage if old_name else None
 
-        setattr(child, file_field, form.cleaned_data["document"])
+        if form.cleaned_data["document"] is not None:
+            setattr(child, file_field, form.cleaned_data["document"])
         setattr(child, start_field, form.cleaned_data["valid_from"])
         setattr(child, expiry_field, form.cleaned_data["valid_until"])
         update_fields = [file_field, start_field, expiry_field]

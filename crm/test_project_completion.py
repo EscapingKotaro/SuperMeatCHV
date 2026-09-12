@@ -343,7 +343,8 @@ class ProjectCompletionTests(TestCase):
         for amount,day in [('NaN',self.today),('Infinity',self.today),('123','not-a-date'),('-1',self.today)]:
             with self.subTest(amount=amount,day=day):
                 response=self.client.post(reverse('payments'),{'action':'payment','child_id':self.child.pk,'amount':amount,'date':day})
-                self.assertEqual(response.status_code,302)
+                self.assertEqual(response.status_code,200)
+                self.assertTrue(response.context['payment_form'].errors)
         self.assertFalse(self.child.payments.exists())
 
     def test_intake_post_requires_login_before_resolving_edit_target(self):

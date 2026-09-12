@@ -211,7 +211,7 @@
             <b>
                 {% if editing %}Изменить заявку{% else %}Новая заявка{% endif %}
             </b>
-            <a href="{% url 'applications' %}" aria-label="Закрыть">
+            <a href="{{ workflow_list_url }}" aria-label="Закрыть">
                 <i data-lucide="x">
                 </i>
             </a>
@@ -225,7 +225,7 @@
             {% endfor %}
         </div>
         <div class="modal-foot">
-            <a href="{% url 'applications' %}" class="btn btn-soft">Отмена</a>
+            <a href="{{ workflow_list_url }}" class="btn btn-soft">Отмена</a>
             <button class="btn btn-primary">Сохранить</button>
         </div>
     </form>

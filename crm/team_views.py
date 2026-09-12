@@ -15,6 +15,7 @@ from django.utils import timezone
 from .forms import GroupForm, ScheduleSlotFormSet, TrainerForm
 from .models import Child, Group, Trainer
 from .views import _optional_pk, log_action
+from .navigation import list_url
 
 
 # ==================== КЛИЕНТЫ ====================
@@ -252,6 +253,9 @@ def trainer_list_view(request):
                 pk=_optional_pk(request.POST.get("trainer_id")),
             )
             make_active = action == "restore"
+            if not make_active and trainer.groups.filter(is_active=True).exists():
+                messages.error(request, "Сначала переназначьте активные группы другому тренеру или сделайте группы неактивными.")
+                return redirect(f"{reverse('group_list')}?trainer={trainer.pk}")
             if trainer.is_active != make_active:
                 trainer.is_active = make_active
                 trainer.save(update_fields=["is_active"])
@@ -295,14 +299,14 @@ def trainer_list_view(request):
 def trainer_create_view(request):
     """Создание тренера"""
     if request.method != 'POST' and not getattr(request, "_inline_trainer", False):
-        return redirect(f"{reverse('trainer_list')}?create=1")
+        return redirect(list_url(request, "trainer_list", create=1))
 
     if request.method == 'POST':
         form = TrainerForm(request.POST)
         if form.is_valid():
             trainer = form.save()
             messages.success(request, f'Тренер {trainer.full_name} добавлен')
-            return redirect('trainer_list')
+            return redirect(list_url(request, "trainer_list"))
     else:
         form = TrainerForm()
 
@@ -326,14 +330,14 @@ def trainer_edit_view(request, pk):
     """Редактирование тренера"""
     trainer = get_object_or_404(Trainer, pk=pk)
     if request.method != 'POST' and not getattr(request, "_inline_trainer", False):
-        return redirect(f"{reverse('trainer_list')}?edit={trainer.pk}")
+        return redirect(list_url(request, "trainer_list", edit=trainer.pk))
 
     if request.method == 'POST':
         form = TrainerForm(request.POST, instance=trainer)
         if form.is_valid():
             form.save()
             messages.success(request, 'Данные тренера обновлены')
-            return redirect('trainer_list')
+            return redirect(list_url(request, "trainer_list"))
     else:
         form = TrainerForm(instance=trainer)
 
@@ -358,6 +362,9 @@ def trainer_delete_view(request, pk):
     """Legacy URL: тренера переводим в архив вместо удаления истории."""
     trainer = get_object_or_404(Trainer, pk=pk)
     if request.method == "POST":
+        if trainer.groups.filter(is_active=True).exists():
+            messages.error(request, "Сначала переназначьте активные группы другому тренеру или сделайте группы неактивными.")
+            return redirect(f"{reverse('group_list')}?trainer={trainer.pk}")
         if trainer.is_active:
             trainer.is_active = False
             trainer.save(update_fields=["is_active"])
@@ -399,7 +406,7 @@ def group_list_view(request):
 def group_create_view(request):
     """Создание группы с расписанием"""
     if request.method != 'POST' and not getattr(request, "_inline_group", False):
-        return redirect(f"{reverse('group_list')}?create=1")
+        return redirect(list_url(request, "group_list", create=1))
 
     if request.method == 'POST':
         group_form = GroupForm(request.POST)
@@ -410,7 +417,7 @@ def group_create_view(request):
             slot_formset.instance = group
             slot_formset.save()
             messages.success(request, f'Группа "{group.name}" создана')
-            return redirect('group_list')
+            return redirect(list_url(request, "group_list"))
     else:
         group_form = GroupForm()
         slot_formset = ScheduleSlotFormSet()
@@ -431,7 +438,7 @@ def group_edit_view(request, pk):
     """Редактирование группы с расписанием"""
     group = get_object_or_404(Group, pk=pk)
     if request.method != 'POST' and not getattr(request, "_inline_group", False):
-        return redirect(f"{reverse('group_list')}?edit={group.pk}")
+        return redirect(list_url(request, "group_list", edit=group.pk))
 
     if request.method == 'POST':
         old_trainer = group.trainer
@@ -449,7 +456,7 @@ def group_edit_view(request, pk):
             group_form.save()
             slot_formset.save()
             messages.success(request, f'Группа "{group.name}" обновлена')
-            return redirect('group_list')
+            return redirect(list_url(request, "group_list"))
     else:
         group_form = GroupForm(instance=group)
         slot_formset = ScheduleSlotFormSet(instance=group)
@@ -489,10 +496,10 @@ def group_delete_view(request, pk):
                     "история останется доступна."
                 ),
             )
-            return redirect('group_list')
+            return redirect(list_url(request, "group_list"))
         group.delete()
         messages.success(request, f'Группа "{group.name}" удалена')
-        return redirect('group_list')
+        return redirect(list_url(request, "group_list"))
 
     context = {
         'group': group,

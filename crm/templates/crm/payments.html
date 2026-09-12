@@ -1,4 +1,5 @@
 {% extends 'crm/base.html' %}
+{% load static %}
 {% block actions %}
 <div class="flex flex-wrap gap-2">
   <button data-modal="payment-modal" class="btn btn-primary">
@@ -68,6 +69,8 @@
           </td>
           <td>
             <a class="btn btn-soft" href="{% url 'child_card' row.child.pk %}">Открыть</a>
+            <a class="btn btn-primary" href="?child={{ row.child.pk }}&new_payment=1">Принять оплату</a>
+            <a class="btn btn-soft" href="?child={{ row.child.pk }}&new_subscription=1">Продлить</a>
           </td>
         </tr>
         {% empty %}
@@ -126,10 +129,16 @@
       </table>
     </div>
   </details>
-  <details class="card overflow-hidden">
-    <summary class="cursor-pointer p-4 font-bold">Все абонементы</summary>
+  <details id="subscriptions" class="card overflow-hidden" {% if subscription_history_open %}open{% endif %}>
+    <summary class="cursor-pointer p-4 font-bold">История абонементов · {{ subscription_page.paginator.count }}</summary>
     <div class="border-b px-4 pb-4">
       <p class="text-xs text-slate-500">История и ручное редактирование оформленных абонементов</p>
+      <form method="get" action="{% url 'payments' %}#subscriptions" class="mt-3 flex flex-wrap items-end gap-3">
+        {% for key, value in subscription_filter_params %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+        <label class="flex-1 min-w-[220px]"><span class="label">Спортсмен, группа или тариф</span><input class="field" type="search" name="sub_q" value="{{ sub_q }}" placeholder="Фамилия, имя, группа…" maxlength="200"></label>
+        <label><span class="label">Статус</span><select name="sub_state" class="field"><option value="all" {% if sub_state == 'all' %}selected{% endif %}>Все</option><option value="valid" {% if sub_state == 'valid' %}selected{% endif %}>Не отменённые</option><option value="cancelled" {% if sub_state == 'cancelled' %}selected{% endif %}>Отменённые</option></select></label>
+        <button class="btn btn-primary">Найти</button><a class="btn btn-soft" href="{{ subscription_reset_url }}">Сбросить</a>
+      </form>
     </div>
     <div class="table-wrap">
       <table class="data-table">
@@ -146,7 +155,7 @@
         <tbody>
           {% for item in subscriptions %}
           <tr>
-            <td>{{ item.child }}</td>
+            <td><a href="{% url 'child_card' item.child_id %}" class="font-semibold hover:underline">{{ item.child }}</a></td>
             <td>{{ item.group|default:item.child.group }}</td>
             <td>{{ item.tariff|default:"Индивидуальный" }}{% if item.cancelled_at %}
               <small class="block text-red-500">Отменён</small>{% elif not item.is_active %}<small class="block text-slate-500">Завершён</small>
@@ -157,16 +166,22 @@
               <a class="btn btn-soft" href="?edit_subscription={{ item.pk }}">Изменить</a>
             </td>
           </tr>
+          {% empty %}
+          <tr><td colspan="5" class="py-8 text-center text-slate-500">{% if sub_q or sub_state != 'all' %}По этим фильтрам абонементов нет. Измените запрос или сбросьте фильтры.{% else %}Абонементов пока нет. Нажмите «Оформить / продлить абонемент» сверху.{% endif %}</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </div>
+    <nav class="flex flex-wrap items-center justify-between gap-3 border-t p-4" aria-label="Страницы истории абонементов">
+      <span class="text-sm text-slate-500">{% if subscription_page.paginator.count %}{{ subscription_page.start_index }}–{{ subscription_page.end_index }} из {{ subscription_page.paginator.count }} · {% endif %}Страница {{ subscription_page.number }} из {{ subscription_page.paginator.num_pages }}</span>
+      <div class="flex gap-2">{% if subscription_previous_url %}<a class="btn btn-soft" href="{{ subscription_previous_url }}">← Назад</a>{% endif %}{% if subscription_next_url %}<a class="btn btn-soft" href="{{ subscription_next_url }}">Далее →</a>{% endif %}</div>
+    </nav>
   </details>
 </div>
 {% endblock %}
 {% block modals %}
-<section id="payment-modal" class="modal">
-  <form method="post">
+<section id="payment-modal" class="modal {% if request.GET.new_payment or payment_form.errors %}open{% endif %}">
+  <form method="post" data-payment-form data-subscriptions-url="{% url 'payment_subscriptions' %}" data-initial-subscription="{{ payment_form.subscription_id.value|default_if_none:'' }}">
     {% csrf_token %}
     <input type="hidden" name="action" value="payment">
     <div class="modal-head">
@@ -177,24 +192,28 @@
       </button>
     </div>
     <div class="modal-body grid gap-4 sm:grid-cols-2">
+      {% if payment_form.errors %}<p class="sm:col-span-2 rounded-lg bg-red-50 p-3 text-sm text-red-700" role="alert">Оплата не сохранена. Исправьте поля ниже — остальные данные сохранены в форме.</p>{% endif %}
+      {{ payment_form.non_field_errors }}
       <label class="sm:col-span-2">
+        <p class="text-sm text-slate-500 mb-3">Оплата пополняет баланс. Для нового периода занятий отдельно оформите абонемент — сама оплата его не продлевает.</p>
         <span class="label">Спортсмен</span>
         <select name="child_id" class="field" required data-payment-child>
+          <option value="">— Выберите спортсмена —</option>
           {% for child in children %}
-          <option value="{{ child.pk }}" data-child-status="{{ child.status }}">{{ child }}</option>
+          <option value="{{ child.pk }}" data-child-status="{{ child.status }}" {% if child.pk == payment_child_id %}selected{% endif %}>{{ child }}{% if child.status == 'archived' or child.status == 'lost' %} · {{ child.get_status_display }}{% endif %}</option>
           {% endfor %}
         </select>
+        {{ payment_form.child_id.errors }}
       </label>
       <label class="sm:col-span-2">
         <span class="label">Абонемент / группа</span>
-        <select name="subscription_id" class="field" data-payment-subscription>
-          <option value="">Автоматически / предоплата без привязки</option>
-          {% for sub in payment_subscriptions %}
-          <option value="{{ sub.pk }}" data-child-id="{{ sub.child_id }}">
-            {{ sub.group|default:sub.child.group }} · {{ sub.start_date|date:"d.m.Y" }}–{{ sub.end_date|date:"d.m.Y" }}
-          </option>
-          {% endfor %}
+        <select name="subscription_id" class="field" data-payment-subscription disabled>
+          <option value="">Сначала выберите спортсмена</option>
         </select>
+        {{ payment_form.subscription_id.errors }}
+        <span class="block text-sm text-slate-500" role="status" aria-live="polite" data-payment-load-status>Сначала выберите спортсмена.</span>
+        <button type="button" class="btn btn-soft mt-2 hidden" data-payment-retry hidden>Повторить загрузку</button>
+        <noscript><p>Для выбора абонемента и сохранения оплаты включите JavaScript.</p></noscript>
         <small class="block text-slate-500">Если у спортсмена несколько групп, выберите нужный абонемент.</small>
       </label>
       <label class="sm:col-span-2 hidden" data-payment-working-group-wrap>
@@ -203,26 +222,29 @@
           <option value="">— Выберите рабочую группу —</option>
           {% for group in subscription_form.fields.group.queryset %}
           {% if group.is_active %}
-          <option value="{{ group.pk }}">{{ group }} · {{ group.trainer }}</option>
+          <option value="{{ group.pk }}" {% if group.pk|stringformat:'s' == payment_form.working_group_id.value|stringformat:'s' %}selected{% endif %}>{{ group }} · {{ group.trainer }}</option>
           {% endif %}
           {% endfor %}
         </select>
+        {{ payment_form.working_group_id.errors }}
         <small class="block text-slate-500">
           Для пробника это отдельное назначение: группа и тренер пробного останутся в истории.
         </small>
       </label>
       <label>
         <span class="label">Сумма, ₽</span>
-        <input name="amount" type="number" min="1" step="0.01" class="field" required>
+        <input name="amount" type="number" min="0.01" step="0.01" class="field" value="{{ payment_form.amount.value|default_if_none:'' }}" required>
+        {{ payment_form.amount.errors }}
       </label>
       <label>
         <span class="label">Дата</span>
-        <input name="date" type="date" class="field" value="{% now 'Y-m-d' %}" required>
+        <input name="date" type="date" class="field" value="{{ payment_form.date.value|default_if_none:'' }}" required>
+        {{ payment_form.date.errors }}
       </label>
     </div>
     <div class="modal-foot">
       <button type="button" data-close class="btn btn-soft">Отмена</button>
-      <button class="btn btn-primary">Принять оплату</button>
+      <button class="btn btn-primary" type="submit" data-payment-submit disabled>Принять оплату</button>
     </div>
   </form>
 </section>
@@ -232,7 +254,7 @@
     <input type="hidden" name="action" value="save_tariff">
     <div class="modal-head">
       <b>
-        {% if editing_tariff or tariff_form.errors or request.GET.new_tariff %}Изменить тариф{% else %}Новый тариф{% endif %}
+        {% if editing_tariff %}Изменить тариф{% else %}Новый тариф{% endif %}
       </b>
       <button type="button" data-close>
         <i data-lucide="x">
@@ -240,9 +262,10 @@
       </button>
     </div>
     <div class="modal-body grid gap-4 sm:grid-cols-2">
+      {{ tariff_form.non_field_errors }}
       {% for field in tariff_form %}
       <label>
-        <span class="label">{{ field.label }}</span>{{ field }}</label>
+        <span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>
       {% endfor %}
     </div>
     <div class="modal-foot">
@@ -292,46 +315,7 @@
 {% block scripts %}
 {{ tariff_preview|json_script:"tariff-preview-data" }}
 {{ child_discounts|json_script:"child-discount-data" }}
-<script>
-(() => {
-  const childField = document.querySelector('[data-payment-child]');
-  const subscriptionField = document.querySelector('[data-payment-subscription]');
-  const workingGroupWrap = document.querySelector('[data-payment-working-group-wrap]');
-  const workingGroupField = document.querySelector('[data-payment-working-group]');
-  if (!childField || !subscriptionField) return;
-
-  function filterPaymentSubscriptions() {
-    const childId = childField.value;
-    let selectedAllowed = !subscriptionField.value;
-    Array.from(subscriptionField.options).forEach(option => {
-      if (!option.value) return;
-      const allowed = option.dataset.childId === childId;
-      option.hidden = !allowed;
-      option.disabled = !allowed;
-      if (option.value === subscriptionField.value) {
-        selectedAllowed = allowed;
-      }
-    });
-    if (!selectedAllowed) subscriptionField.value = '';
-  }
-
-  function syncWorkingGroup() {
-    if (!workingGroupWrap || !workingGroupField) return;
-    const selectedChild = childField.selectedOptions[0];
-    const isTrial = selectedChild?.dataset.childStatus === 'trial';
-    workingGroupWrap.classList.toggle('hidden', !isTrial);
-    workingGroupField.required = isTrial;
-    if (!isTrial) workingGroupField.value = '';
-  }
-
-  childField.addEventListener('change', () => {
-    filterPaymentSubscriptions();
-    syncWorkingGroup();
-  });
-  filterPaymentSubscriptions();
-  syncWorkingGroup();
-})();
-</script>
+<script src="{% static 'crm/payment-picker.js' %}?v=2"></script>
 <script>
 (() => {
   const tariffs = JSON.parse(document.getElementById('tariff-preview-data').textContent) || [];

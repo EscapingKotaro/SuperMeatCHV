@@ -79,7 +79,7 @@ class RequiredChildGroupTests(TestCase):
 
         self.assertRedirects(
             response,
-            reverse("newcomers"),
+            f"{reverse('newcomers')}?edit={newcomer.pk}",
         )
 
         newcomer.refresh_from_db()

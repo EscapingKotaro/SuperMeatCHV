@@ -28,11 +28,11 @@
                     {% for item in day.urgent %}
                     <li class="flex items-start justify-between rounded-lg bg-red-50 p-2 text-sm">
                         <div class="truncate pr-2 flex-1">
-                            <span class="block font-semibold text-slate-800">{{ item.name }}</span>
+                            <a href="{% url 'child_card' item.child_id %}" class="block font-semibold text-slate-800 hover:underline">{{ item.name }}</a>
                             <span class="block text-[11px] text-slate-500 mt-0.5">
                                 {{ item.parent_name|default:"Родитель не указан" }}
                                 {% if item.parent_phone %}
-                                    <span class="text-slate-400 mx-1">·</span>{{ item.parent_phone }}
+                                    <span class="text-slate-400 mx-1">·</span><a href="tel:{{ item.parent_phone }}" class="hover:underline">{{ item.parent_phone }}</a>
                                 {% endif %}
                             </span>
                         </div>
@@ -54,11 +54,11 @@
                     {% for item in day.one_left %}
                     <li class="flex items-start justify-between rounded-lg bg-amber-50 p-2 text-sm">
                         <div class="truncate pr-2 flex-1">
-                            <span class="block font-semibold text-slate-800">{{ item.name }}</span>
+                            <a href="{% url 'child_card' item.child_id %}" class="block font-semibold text-slate-800 hover:underline">{{ item.name }}</a>
                             <span class="block text-[11px] text-slate-500 mt-0.5">
                                 {{ item.parent_name|default:"Родитель не указан" }}
                                 {% if item.parent_phone %}
-                                    <span class="text-slate-400 mx-1">·</span>{{ item.parent_phone }}
+                                    <span class="text-slate-400 mx-1">·</span><a href="tel:{{ item.parent_phone }}" class="hover:underline">{{ item.parent_phone }}</a>
                                 {% endif %}
                             </span>
                         </div>
@@ -80,11 +80,11 @@
                     {% for item in day.forecast %}
                     <li class="flex items-start justify-between rounded-lg bg-blue-50 p-2 text-sm">
                         <div class="truncate pr-2 flex-1">
-                            <span class="block font-semibold text-slate-800">{{ item.name }}</span>
+                            <a href="{% url 'child_card' item.child_id %}" class="block font-semibold text-slate-800 hover:underline">{{ item.name }}</a>
                             <span class="block text-[11px] text-slate-500 mt-0.5">
                                 {{ item.parent_name|default:"Родитель не указан" }}
                                 {% if item.parent_phone %}
-                                    <span class="text-slate-400 mx-1">·</span>{{ item.parent_phone }}
+                                    <span class="text-slate-400 mx-1">·</span><a href="tel:{{ item.parent_phone }}" class="hover:underline">{{ item.parent_phone }}</a>
                                 {% endif %}
                             </span>
                         </div>

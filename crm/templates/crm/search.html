@@ -16,8 +16,9 @@
             <select name="state" class="field mt-1 w-full">
                 <option value="active" {% if client_state == 'active' %}selected{% endif %}>Активные</option>
                 <option value="inactive" {% if client_state == 'inactive' %}selected{% endif %}>Неактивные</option>
-                <option value="all" {% if client_state == 'all' %}selected{% endif %}>Все</option>
+                <option value="all" {% if client_state == 'all' %}selected{% endif %}>Активные и неактивные</option>
             </select>
+            <small class="block mt-1 text-xs font-normal text-slate-500">Пробные занятия — в разделе <a href="{% url 'newcomers' %}" class="underline">«Новички»</a>.</small>
         </label>
         <label class="text-sm font-semibold text-slate-700">
             Тренер
@@ -100,8 +101,8 @@
                     class="cursor-pointer transition hover:bg-slate-50 focus:bg-slate-50 focus:outline-none"
                     tabindex="0"
                     data-client-row="{{ row.child.pk }}"
-                    onclick="window.location.href='{% url 'child_card' row.child.pk %}'"
-                    onkeydown="if(event.key === 'Enter'){window.location.href='{% url 'child_card' row.child.pk %}';}"
+                    onclick="if(!event.target.closest('a,button,input,select')){this.querySelector('a').click();}"
+                    onkeydown="if(event.key === 'Enter' && event.target === this){event.preventDefault();this.querySelector('a').click();}"
                 >
                     <td>
                         <a href="{% url 'child_card' row.child.pk %}" class="font-extrabold text-slate-900 hover:text-[#315EBC]">

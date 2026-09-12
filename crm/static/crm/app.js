@@ -1,4 +1,23 @@
 document.addEventListener("DOMContentLoaded", () => {
+  // Retain list filters when opening editors and carry an explicit return link to cards.
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest("a[href]");
+    if (!link) return;
+    const target = new URL(link.href, location.href);
+    if (target.origin !== location.origin) return;
+    const current = new URL(location.href);
+    if (target.pathname === current.pathname && [...target.searchParams.keys()].some(k => /^(edit|create|new_)/.test(k))) {
+      for (const [key, value] of current.searchParams) {
+        if (!/^(edit|create|new_)/.test(key) && !target.searchParams.has(key)) target.searchParams.set(key, value);
+      }
+      link.href = target.href;
+    }
+    if (/^\/children\/\d+\/$/.test(target.pathname) && target.pathname !== current.pathname) {
+      current.searchParams.delete("next");
+      target.searchParams.set("next", current.pathname + current.search + current.hash);
+      link.href = target.href;
+    }
+  }, true);
   if (window.lucide) lucide.createIcons();
 
   const backdrop = document.querySelector("[data-modal-backdrop]");
@@ -40,11 +59,13 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const closeAllModals = () => {
+    if (window.crmForms && !window.crmForms.confirmClose()) return false;
     document
       .querySelectorAll(".modal.open")
       .forEach((modal) => modal.classList.remove("open"));
     legacyOverlayModals.forEach((modal) => modal.classList.add("hidden"));
     syncModalState();
+    return true;
   };
 
   const openModal = (id) => {
@@ -52,7 +73,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!modal) return null;
 
     closeAllDropdowns();
-    closeAllModals();
+    if (!closeAllModals()) return null;
 
     if (modal.classList.contains("modal")) {
       modal.classList.add("open");

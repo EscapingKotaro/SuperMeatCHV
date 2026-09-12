@@ -18,6 +18,7 @@ from django.http import FileResponse, Http404, HttpResponse, HttpResponseForbidd
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import url_has_allowed_host_and_scheme
 from openpyxl.utils import get_column_letter
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -189,7 +190,13 @@ def login_page(request):
         if user and user.is_active:
             login(request, user)
             request.session.set_expiry(1209600 if request.POST.get("remember_me") else 0)
-            return redirect(request.GET.get("next") or "attendance")
+            next_url = request.POST.get("next") or request.GET.get("next")
+            if next_url and url_has_allowed_host_and_scheme(
+                next_url, allowed_hosts={request.get_host()},
+                require_https=request.is_secure(),
+            ):
+                return redirect(next_url)
+            return redirect("attendance")
         messages.error(request, "Неверный логин или пароль")
     return render(request, "crm/login.html")
 
@@ -451,50 +458,25 @@ def attendance_view(request):
     ):
         schedule_by_weekday.setdefault(slot.weekday, slot)
 
-    if not schedule_by_weekday:
-        return render(
-            request,
-            "crm/attendance.html",
-            page_context(
-                request,
-                "attendance",
-                groups=Group.objects.filter(is_active=True),
-                selected_group=group,
-                trainer=trainer,
-                week_data=[],
-                children_data=[],
-                ref_date=ref_date,
-                period=period,
-                period_start=period_start or ref_date,
-                period_end=period_end or ref_date,
-                date_from=period_start if period == "custom" else None,
-                date_to=period_end if period == "custom" else None,
-                filter_query=filter_query,
-                sort_by=sort_by,
-                show_archived=show_archived,
-                child_form=child_form,
-                creating_child=creating_child,
-                error="Нет расписания",
-            ),
-        )
-
-    # 3. Старое окно оставляем по умолчанию; пресеты показывают весь период.
+    # Keep the roster available even if there are no lessons to display.
     if period == "window":
         start_of_week = ref_date - timedelta(days=35)
         all_class_dates = generate_class_dates(group, start_of_week, limit=60)
-        current_index = next(
-            (i for i, class_date in enumerate(all_class_dates) if class_date >= ref_date),
-            len(all_class_dates) - 1,
-        )
-        start_idx = max(0, current_index - 4)
-        end_idx = min(len(all_class_dates), current_index + 4)
-        window_dates = all_class_dates[start_idx:end_idx]
-        prev_ref = all_class_dates[max(0, current_index - 1)].isoformat()
-        next_ref = all_class_dates[
-            min(len(all_class_dates) - 1, current_index + 1)
-        ].isoformat()
-        period_start = window_dates[0]
-        period_end = window_dates[-1]
+        if all_class_dates:
+            current_index = next(
+                (i for i, class_date in enumerate(all_class_dates) if class_date >= ref_date),
+                len(all_class_dates) - 1,
+            )
+            start_idx = max(0, current_index - 4)
+            end_idx = min(len(all_class_dates), current_index + 4)
+            window_dates = all_class_dates[start_idx:end_idx]
+            prev_ref = all_class_dates[max(0, current_index - 1)].isoformat()
+            next_ref = all_class_dates[min(len(all_class_dates) - 1, current_index + 1)].isoformat()
+            period_start, period_end = window_dates[0], window_dates[-1]
+        else:
+            window_dates = []
+            prev_ref = next_ref = ref_date.isoformat()
+            period_start = period_end = ref_date
     else:
         window_dates = class_dates_in_range(
             group,
@@ -845,6 +827,7 @@ def attendance_view(request):
         child_form=child_form,
         creating_child=creating_child,
         attendance_visual=_attendance_visual_settings(request.user),
+        error="Нет расписания" if not schedule_by_weekday else None,
         lesson_trainers=Trainer.objects.filter(
             is_active=True,
         ).order_by("full_name"),
@@ -861,6 +844,9 @@ def archive_child_view(request, child_id):
     child = get_object_or_404(Child, id=child_id)
     child.archive()
     messages.success(request, f'{child.last_name} {child.first_name} архивирован')
+    next_url = request.POST.get("next", "")
+    if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return redirect(next_url)
     return redirect('attendance')
 
 
@@ -871,6 +857,9 @@ def restore_child_view(request, child_id):
     child = get_object_or_404(Child, id=child_id)
     child.restore_from_archive()
     messages.success(request, f'{child.last_name} {child.first_name} восстановлен')
+    next_url = request.POST.get("next", "")
+    if next_url and url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}, require_https=request.is_secure()):
+        return redirect(next_url)
     return redirect('attendance')
 
 
@@ -1742,6 +1731,19 @@ def attendance_reason_view(request):
         AttendanceReason.Kind.SICK: Attendance.Status.SICK,
         AttendanceReason.Kind.FROZEN: Attendance.Status.FROZEN,
     }
+    conflicts = list(
+        child.attendances.filter(date__in=class_dates)
+        .filter(Q(group_snapshot=group) | Q(group_snapshot__isnull=True, child__group=group))
+        .filter(Q(status=Attendance.Status.PRESENT) | Q(charge_amount__gt=0))
+        .values_list("date", flat=True)
+    )
+    if conflicts:
+        dates = ", ".join(day.strftime("%d.%m.%Y") for day in sorted(set(conflicts)))
+        return JsonResponse({
+            "status": "error", "code": "attendance_conflict",
+            "message": f"В периоде есть посещения или начисления в долг: {dates}. "
+                       "Уточните период. Для исправления ошибочного посещения сначала отмените его в табеле.",
+        }, status=409)
     reason = AttendanceReason.objects.create(
         child=child,
         kind=kind,
@@ -1881,6 +1883,15 @@ def _deactivate_overlapping_subscriptions(subscription):
 @login_required
 @transaction.atomic
 def payments_page(request):
+    from .payment_forms import PaymentEntryForm
+    payment_form = getattr(request, "payment_form", None)
+    if payment_form is None:
+        payment_form = PaymentEntryForm(
+            request.POST if request.method == "POST" and request.POST.get("action", "payment") == "payment" else None,
+            initial={"child_id": request.GET.get("child")},
+        )
+    from .finance_ui import subscription_history_context
+    from .navigation import list_url
     editing_tariff = Tariff.objects.filter(pk=_optional_pk(request.GET.get("edit_tariff"))).first()
     editing_subscription = (
         Subscription.objects
@@ -1888,67 +1899,32 @@ def payments_page(request):
         .filter(pk=_optional_pk(request.GET.get("edit_subscription")))
         .first()
     )
-    tariff_form = TariffForm(request.POST or None, prefix="tariff", instance=editing_tariff)
+    tariff_form = TariffForm(request.POST if request.method == "POST" and request.POST.get("action") == "save_tariff" else None, prefix="tariff", instance=editing_tariff)
     subscription_form = SubscriptionForm(
-        request.POST or None, prefix="subscription", instance=editing_subscription,
+        request.POST if request.method == "POST" and request.POST.get("action") == "save_subscription" else None, prefix="subscription", instance=editing_subscription,
         initial={"start_date": timezone.localdate(), "child": request.GET.get("child")} if editing_subscription is None else None,
     )
     if request.method == "POST":
         action = request.POST.get("action", "payment")
         if action == "payment":
-            child = get_object_or_404(Child, pk=request.POST.get("child_id"))
-            from django import forms as django_forms
-            try:
-                amount = django_forms.DecimalField(min_value=Decimal("0.01"), max_digits=10, decimal_places=2).clean(request.POST.get("amount"))
-                payment_date = django_forms.DateField().clean(request.POST.get("date") or timezone.localdate())
-            except django_forms.ValidationError:
-                messages.error(request, "Укажите корректную дату и положительную сумму оплаты")
-            else:
-                subscription = None
-                requested_subscription = (
-                    request.POST.get("subscription_id")
-                    or ""
-                ).strip()
-                if requested_subscription:
-                    subscription_id = _optional_pk(requested_subscription)
-                    subscription = (
-                        child.subscriptions
-                        .filter(
-                            pk=subscription_id,
-                            cancelled_at__isnull=True,
-                        )
-                        .first()
-                        if subscription_id
-                        else None
-                    )
-                    if subscription is None:
-                        messages.error(
-                            request,
-                            "Выбранный абонемент не принадлежит спортсмену",
-                        )
-                        return redirect("payments")
-                else:
-                    covering = list(
-                        child.subscriptions
-                        .filter(
-                            cancelled_at__isnull=True,
-                            start_date__lte=payment_date,
-                            end_date__gte=payment_date,
-                        )
-                        .order_by("end_date", "pk")[:2]
-                    )
+            if payment_form.is_valid():
+                child = payment_form.cleaned_data["child_id"]
+                amount = payment_form.cleaned_data["amount"]
+                payment_date = payment_form.cleaned_data["date"]
+                subscription = payment_form.cleaned_data["subscription_id"]
+                if subscription is None:
+                    covering = list(child.subscriptions.filter(
+                        cancelled_at__isnull=True, start_date__lte=payment_date,
+                        end_date__gte=payment_date,
+                    ).order_by("end_date", "pk")[:2])
                     if len(covering) == 1:
                         subscription = covering[0]
-
-                payment = Payment.objects.create(
-                    child=child,
-                    subscription=subscription,
-                    amount=amount,
-                    date=payment_date,
-                    created_by=request.user,
-                )
+                payment = Payment.objects.create(child=child, subscription=subscription,
+                    amount=amount, date=payment_date, created_by=request.user)
                 log_action(request, "payment.create", payment, f"Принята оплата {amount} ₽ от {child}")
                 messages.success(request, "Оплата сохранена")
+            else:
+                messages.error(request, "Оплата не сохранена. Исправьте отмеченные поля.")
         elif action == "save_tariff":
             tariff_form = TariffForm(request.POST, prefix="tariff", instance=editing_tariff)
             if tariff_form.is_valid():
@@ -1957,15 +1933,6 @@ def payments_page(request):
                 messages.success(request, "Тариф сохранён")
             else:
                 messages.error(request, "Проверьте параметры тарифа")
-                return render(request, "crm/payments.html", page_context(
-                    request, "payments", tariff_form=tariff_form,
-                    subscription_form=SubscriptionForm(prefix="subscription"), tariffs=Tariff.objects.all(),
-                    subscriptions=Subscription.objects.select_related("child", "group", "tariff"),
-                    children=Child.objects.filter(
-                        status__in=[Child.Status.ACTIVE, Child.Status.TRIAL],
-                    ),
-                    renewals=[], urgent_count=0, expected=0, editing_tariff=editing_tariff,
-                ))
         elif action == "toggle_tariff":
             tariff = get_object_or_404(Tariff, pk=request.POST.get("tariff_id"))
             tariff.is_active = not tariff.is_active
@@ -1985,8 +1952,9 @@ def payments_page(request):
             subscription.cancel()
             log_action(request, "subscription.cancel", subscription, f"Отменён абонемент {subscription}")
             messages.success(request, "Абонемент отменён без удаления истории")
-        if action != "save_subscription" or not subscription_form.errors:
-            return redirect("payments")
+        invalid_form = (action == "payment" and payment_form.errors) or (action == "save_subscription" and subscription_form.errors) or (action == "save_tariff" and tariff_form.errors)
+        if not invalid_form:
+            return redirect(list_url(request, "payments"))
 
     month_start, month_end, today = _month_range(request)
     rows = build_renewal_rows(
@@ -2006,9 +1974,9 @@ def payments_page(request):
         rows=rows,
         month_start=month_start,
         month_end=month_end,
-        children=Child.objects.filter(
-            status__in=[Child.Status.ACTIVE, Child.Status.TRIAL],
-        ),
+        children=Child.objects.all().order_by("last_name", "first_name", "pk"),
+        payment_child_id=_optional_pk(payment_form["child_id"].value()),
+        payment_form=payment_form,
         urgent_count=sum(
             1 for row in rows
             if row["status"] == "Срочно"
@@ -2017,13 +1985,7 @@ def payments_page(request):
         tariff_preview=list(Tariff.objects.values("id", "price", "sessions_total", "duration_days")),
         child_discounts=list(Child.objects.values("id", "discount_percent")),
         tariffs=Tariff.objects.all(),
-        subscriptions=Subscription.objects.select_related("child", "group", "tariff")[:100],
-        payment_subscriptions=(
-            Subscription.objects
-            .filter(cancelled_at__isnull=True)
-            .select_related("child__group", "group")
-            .order_by("-is_active", "-end_date", "-pk")[:300]
-        ),
+        **subscription_history_context(request),
         tariff_form=tariff_form,
         subscription_form=subscription_form,
         editing_tariff=editing_tariff,
@@ -2408,6 +2370,8 @@ def competitions_page(request):
     editing_competition = competitions.filter(
         pk=_optional_pk(request.GET.get("edit_competition")),
     ).first()
+    if request.GET.get("new_competition"):
+        editing_competition = None
 
     editing_apparatus = None
     editing_entry = None
@@ -2420,6 +2384,11 @@ def competitions_page(request):
         editing_entry = selected.entries.filter(
             pk=_optional_pk(request.GET.get("edit_entry")),
         ).first()
+
+    if request.GET.get("new_apparatus"):
+        editing_apparatus = None
+    if request.GET.get("new_entry"):
+        editing_entry = None
 
     competition_form = CompetitionForm(
         prefix="competition",
@@ -4840,6 +4809,7 @@ def revenue_forecast_view(request):
             continue
 
         item = {
+            "child_id": row["child"].pk,
             "name": f"{row['child'].last_name} {row['child'].first_name}",
             "parent_name": row["parent_name"],
             "parent_phone": row["parent_phone"],
@@ -6191,10 +6161,13 @@ def statistics_view(request):
 
 
 @role_required(1)
+@transaction.atomic
 def salaries_view(request):
     month_start, month_end, today = _month_range(request)
     can_manage_salary = has_min_role(request.user, 1)
-    adjustment_form = SalaryAdjustmentForm(prefix="adjustment")
+    editing_id = _optional_pk(request.GET.get("edit"))
+    editing_adjustment = get_object_or_404(SalaryAdjustment.objects.select_for_update(), pk=editing_id, month=month_start) if editing_id else None
+    adjustment_form = SalaryAdjustmentForm(prefix="adjustment", instance=editing_adjustment)
 
     if request.method == "POST":
         if not can_manage_salary:
@@ -6207,12 +6180,16 @@ def salaries_view(request):
             adjustment_form = SalaryAdjustmentForm(
                 request.POST,
                 prefix="adjustment",
+                instance=editing_adjustment,
             )
             if adjustment_form.is_valid():
+                previous = SalaryAdjustment.objects.filter(pk=editing_id).values("trainer_id", "title", "amount").first() if editing_id else None
                 adjustment = adjustment_form.save(commit=False)
                 adjustment.month = month_start
                 adjustment.save()
-                messages.success(request, "Строка ЗП добавлена")
+                log_action(request, "salary.adjustment.edit" if previous else "salary.adjustment.create", adjustment,
+                           f"Месяц {month_start:%Y-%m}; было: {previous}; стало: тренер {adjustment.trainer_id}, {adjustment.title}, {adjustment.amount} ₽")
+                messages.success(request, "Строка ЗП обновлена" if previous else "Строка ЗП добавлена")
                 return redirect(
                     f"{reverse('salaries')}?month={month_start:%Y-%m}"
                 )
@@ -6224,6 +6201,8 @@ def salaries_view(request):
                 pk=request.POST.get("adjustment_id"),
                 month=month_start,
             )
+            log_action(request, "salary.adjustment.delete", adjustment,
+                       f"Месяц {month_start:%Y-%m}; тренер {adjustment.trainer_id}; {adjustment.title}; {adjustment.amount} ₽")
             adjustment.delete()
             messages.success(request, "Строка ЗП удалена")
             return redirect(
@@ -6237,6 +6216,7 @@ def salaries_view(request):
         'month_end': month_end,
         'can_manage_salary': can_manage_salary,
         'adjustment_form': adjustment_form,
+        'editing_adjustment': editing_adjustment,
         'title': 'ЗП тренеров',
         'page': 'salaries',
     }
@@ -6607,7 +6587,8 @@ def _save_camp_event(request, form):
                 CampStay.objects.create(camp=camp, child_id=child_id, start_date=camp.start_date, end_date=camp.end_date)
         log_action(request, "camp.save", camp, f"Мероприятие {camp}: {len(selected_ids)} участников")
     messages.success(request, "Мероприятие и состав участников сохранены")
-    return redirect("camps")
+    from .navigation import list_url
+    return redirect(list_url(request, "camps"))
 
 
 @login_required

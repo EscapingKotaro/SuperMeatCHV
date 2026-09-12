@@ -531,7 +531,9 @@ class IntakeEditRegressionTests(TestCase):
                 "working_group_id": "",
             },
         )
-        self.assertEqual(blocked.status_code, 302)
+        self.assertEqual(blocked.status_code, 200)
+        self.assertContains(blocked, 'value="1500"')
+        self.assertTrue(blocked.context["payment_form"].errors.get("working_group_id"))
         self.assertFalse(Payment.objects.filter(child=child).exists())
 
         paid = self.client.post(

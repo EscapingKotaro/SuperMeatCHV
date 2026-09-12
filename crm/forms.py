@@ -60,8 +60,9 @@ class SalaryAdjustmentForm(StyledFormMixin, forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        from django.db.models import Q
         self.fields["trainer"].queryset = Trainer.objects.filter(
-            is_active=True,
+            Q(is_active=True) | Q(pk=self.instance.trainer_id if self.instance.pk else None),
         ).order_by("full_name")
         self.apply_styles()
 

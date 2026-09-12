@@ -5,7 +5,7 @@
     <form method="get" class="flex items-center">
         <input type="month" name="month" value="{{ month_start|date:'Y-m' }}" class="field text-sm" onchange="this.form.submit()">
     </form>
-    <a href="{% url 'salaries_export' %}?month={{ month_start|date:'Y-m' }}" class="btn btn-primary">
+    <a download href="{% url 'salaries_export' %}?month={{ month_start|date:'Y-m' }}" class="btn btn-primary">
         <i data-lucide="file-spreadsheet"></i>Выгрузить Excel
     </a>
 </div>
@@ -14,14 +14,15 @@
 {% block content %}
 <div class="max-w-3xl mx-auto space-y-6">
     {% if can_manage_salary %}
-    <section class="card p-4">
+    <section class="card p-4" id="salary-adjustment">
         <div class="mb-3">
-            <h2 class="font-extrabold">Ручная строка ЗП</h2>
+            <h2 class="font-extrabold">{% if editing_adjustment %}Изменить строку ЗП{% else %}Ручная строка ЗП{% endif %} · {{ month_start|date:'m.Y' }}</h2>
             <p class="text-xs text-slate-500">Персоналки, замены, соревнования, доплата или удержание.</p>
         </div>
-        <form method="post" action="?month={{ month_start|date:'Y-m' }}" class="grid gap-3 sm:grid-cols-[1.2fr_1.5fr_140px_auto]">
+        <form method="post" data-guard-draft action="?month={{ month_start|date:'Y-m' }}{% if editing_adjustment %}&edit={{ editing_adjustment.pk }}{% endif %}#salary-adjustment" class="grid gap-3 sm:grid-cols-[1.2fr_1.5fr_140px_auto]">
             {% csrf_token %}
             <input type="hidden" name="action" value="add_adjustment">
+            {{ adjustment_form.non_field_errors }}
             {% for field in adjustment_form %}
             <label>
                 <span class="label">{{ field.label }}</span>
@@ -30,7 +31,8 @@
             </label>
             {% endfor %}
             <div class="self-end">
-                <button class="btn btn-primary w-full">Добавить</button>
+                <button class="btn btn-primary w-full">{% if editing_adjustment %}Сохранить{% else %}Добавить{% endif %}</button>
+                {% if editing_adjustment %}<a href="?month={{ month_start|date:'Y-m' }}" class="btn btn-soft mt-2">Отмена</a>{% endif %}
             </div>
         </form>
     </section>
@@ -75,6 +77,7 @@
                         <div class="flex items-center justify-between gap-2">
                             <span>{{ r.name }}</span>
                             {% if can_manage_salary and r.is_adjustment %}
+                            <a class="text-xs font-bold text-blue-700" href="?month={{ month_start|date:'Y-m' }}&edit={{ r.adjustment_id }}#salary-adjustment">Изменить</a>
                             <form method="post" action="?month={{ month_start|date:'Y-m' }}" onsubmit="return confirm('Удалить ручную строку ЗП?')">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="delete_adjustment">

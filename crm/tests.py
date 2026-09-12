@@ -1828,6 +1828,16 @@ class CrmWorkflowTests(TestCase):
             reverse("trainer_delete", args=[self.trainer.pk]),
         )
 
+        blocked_response = self.client.post(
+            reverse("trainer_list"),
+            {"action": "archive", "trainer_id": str(self.trainer.pk)},
+        )
+        self.assertRedirects(blocked_response, f"{reverse('group_list')}?trainer={self.trainer.pk}")
+        self.trainer.refresh_from_db()
+        self.assertTrue(self.trainer.is_active)
+        self.group.is_active = False
+        self.group.save(update_fields=["is_active"])
+
         archive_response = self.client.post(
             reverse("trainer_list"),
             {
@@ -1914,6 +1924,13 @@ class CrmWorkflowTests(TestCase):
         trainer_response = self.client.post(
             reverse("trainer_delete", args=[self.trainer.pk]),
         )
+        self.assertRedirects(trainer_response, f"{reverse('group_list')}?trainer={self.trainer.pk}")
+
+        self.trainer.refresh_from_db()
+        self.assertTrue(self.trainer.is_active)
+        self.group.is_active = False
+        self.group.save(update_fields=["is_active"])
+        trainer_response = self.client.post(reverse("trainer_delete", args=[self.trainer.pk]))
         self.assertRedirects(trainer_response, reverse("trainer_list"))
 
         self.trainer.refresh_from_db()
@@ -7863,10 +7880,9 @@ class CrmWorkflowTests(TestCase):
         )
         page = self.client.get(reverse("payments"))
         self.assertContains(page, 'data-payment-subscription')
-        self.assertContains(
-            page,
-            f'value="{target_subscription.pk}" data-child-id="{self.child.pk}"',
-        )
+        choices = self.client.get(reverse("payment_subscriptions"), {"child_id": self.child.pk})
+        self.assertEqual(choices.status_code, 200)
+        self.assertIn(target_subscription.pk, {item["id"] for item in choices.json()["subscriptions"]})
 
         response = self.client.post(
             reverse("payments"),

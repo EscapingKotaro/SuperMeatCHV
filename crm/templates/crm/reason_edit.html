@@ -1,0 +1,20 @@
+{% extends 'crm/base.html' %}
+{% block content %}
+<a class="btn btn-soft" href="{% url 'child_card' child.pk %}#absence-reasons">← К причинам пропуска</a>
+{% endblock %}
+{% block modals %}
+<section class="modal open" id="reason-edit-modal">
+  <form method="post">
+    {% csrf_token %}
+    <div class="modal-head"><b>{{ reason.get_kind_display }} · изменить период</b><a href="{% url 'child_card' child.pk %}#absence-reasons" aria-label="Закрыть">×</a></div>
+    <div class="modal-body space-y-4">
+      <p class="font-bold">{{ child }}{% if group %} · {{ group.name }}{% endif %}</p>
+      <p class="text-sm text-slate-500">Отметки этой причины вне нового периода будут сняты, на новые даты занятий — добавлены. Другие отметки не перезаписываются. Прикреплённый документ останется прежним.</p>
+      {{ form.non_field_errors }}
+      {% for field in form %}<label class="block"><span class="label">{{ field.label }}</span>{{ field }}{{ field.errors }}</label>{% endfor %}
+      {% if reason.document %}<a class="text-sm underline" href="{% url 'reason_document' reason.pk %}" download>Скачать текущий документ</a>{% endif %}
+    </div>
+    <div class="modal-foot"><a class="btn btn-soft" href="{% url 'child_card' child.pk %}#absence-reasons">Отмена</a><button class="btn btn-primary">Сохранить изменения</button></div>
+  </form>
+</section>
+{% endblock %}

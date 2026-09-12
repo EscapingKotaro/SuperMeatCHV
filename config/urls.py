@@ -7,6 +7,7 @@ from crm import staff_views
 from crm import intake_views
 from crm import team_views
 from crm import certificate_views
+from crm import workflow_views
 
 
 urlpatterns = [
@@ -23,6 +24,10 @@ urlpatterns = [
     path("attendance/mark/", views.mark_attendance_view, name="mark_attendance"),
     path("attendance/cancel/", views.cancel_attendance_view, name="cancel_attendance"),
     path("attendance/reason/", views.attendance_reason_view, name="attendance_reason"),
+    path("attendance/reasons/<int:pk>/document/", workflow_views.reason_document, name="reason_document"),
+    path("attendance/reasons/<int:pk>/cancel/", workflow_views.cancel_reason, name="cancel_reason"),
+    path("attendance/reasons/<int:pk>/edit/", workflow_views.edit_reason, name="edit_reason"),
+    path("payments/subscriptions/", workflow_views.payment_subscriptions, name="payment_subscriptions"),
     path("attendance/move-class/", views.move_class_view, name="move_class"),
     path("attendance/assign-trainer/", views.assign_lesson_trainer_view, name="assign_lesson_trainer"),
 
