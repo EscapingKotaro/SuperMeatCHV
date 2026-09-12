@@ -517,7 +517,7 @@ class IntakeEditRegressionTests(TestCase):
         page = self.client.get(reverse("payments"))
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, "data-payment-working-group")
-        self.assertContains(page, 'data-child-status="trial"')
+        self.assertContains(page, 'data-athlete-remote=')
         self.assertContains(page, "Рабочая группа после оплаты")
 
         blocked = self.client.post(

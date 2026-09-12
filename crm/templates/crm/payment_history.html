@@ -8,9 +8,9 @@
 {% block content %}
 <section class="card overflow-hidden">
     <div class="border-b border-slate-100 p-4">
-        <h2 class="font-extrabold">Фактически принятые оплаты</h2>
+        <h2 class="font-extrabold">Оплаты, возвраты и исправления</h2>
         <p class="mt-1 text-xs text-slate-500">
-            История денег, которые уже были приняты администратором.
+            Возвраты и сторно показаны отдельными отрицательными суммами. Итог учитывает все операции периода.
         </p>
     </div>
 
@@ -23,12 +23,13 @@
                     <th>Группа</th>
                     <th>Абонемент</th>
                     <th>Принял</th>
+                    <th>Операция</th>
                     <th class="text-right">Сумма</th>
                 </tr>
             </thead>
             <tbody>
             {% for p in payments %}
-                <tr>
+                <tr id="payment-{{ p.pk }}">
                     <td>{{ p.date|date:"d.m.Y" }}</td>
                     <td>
                         <a href="{% url 'child_card' p.child.pk %}" class="font-semibold hover:text-blue-600">
@@ -50,18 +51,23 @@
                         {% endif %}
                     </td>
                     <td class="text-slate-500">{{ p.created_by|default:"—" }}</td>
+                    <td class="text-sm">
+                        {{ p.get_operation_kind_display }} №{{ p.pk }}
+                        {% if p.original_payment_id %}<div><a class="text-blue-600" href="{% url 'payment_history' %}?month={{ p.original_payment.date|date:'Y-m' }}#payment-{{ p.original_payment_id }}">К оплате №{{ p.original_payment_id }}</a></div><p class="text-slate-500 whitespace-pre-wrap">{{ p.reason }}</p>
+                        {% elif is_senior and p.amount > 0 %}<div><a class="text-blue-600" href="{% url 'payment_adjustment' p.pk %}">Возврат / исправить</a></div>{% endif %}
+                    </td>
                     <td class="text-right font-bold">{{ p.amount|floatformat:2 }} ₽</td>
                 </tr>
             {% empty %}
                 <tr>
-                    <td colspan="6" class="py-8 text-center text-slate-400">
+                    <td colspan="7" class="py-8 text-center text-slate-400">
                         Нет оплат за период
                     </td>
                 </tr>
             {% endfor %}
 
                 <tr class="bg-slate-50 font-extrabold">
-                    <td colspan="5">Итого</td>
+                    <td colspan="6">Итого с учётом возвратов и сторно</td>
                     <td class="text-right">{{ total|floatformat:2 }} ₽</td>
                 </tr>
             </tbody>

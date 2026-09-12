@@ -198,8 +198,9 @@
       {% if payment_form.non_field_errors %}<a class="text-sm underline" href="{% url 'payments' %}?new_payment=1{% if payment_child_id %}&child={{ payment_child_id }}{% endif %}">Открыть новую форму оплаты</a>{% endif %}
       <label class="sm:col-span-2">
         <p class="text-sm text-slate-500 mb-3">Оплата пополняет баланс. Для нового периода занятий отдельно оформите абонемент — сама оплата его не продлевает.</p>
+        <p class="text-sm text-slate-500 mb-3">Посещённое пробное зачтётся как 1 занятие после полной оплаты выбранного абонемента. Если посещение подтвердили позже, зачёт проверится автоматически при одном подходящем абонементе. При нескольких вариантах или предоплате откройте «Пробное и предоплата» в карточке спортсмена.</p>
         <span class="label">Спортсмен</span>
-        <select name="child_id" class="field" required data-payment-child>
+        <select name="child_id" class="field" required data-payment-child data-athlete-remote="{% url 'athlete_lookup' %}">
           <option value="">— Выберите спортсмена —</option>
           {% for child in children %}
           <option value="{{ child.pk }}" data-child-status="{{ child.status }}" {% if child.pk == payment_child_id %}selected{% endif %}>{{ child }}{% if child.status == 'archived' or child.status == 'lost' %} · {{ child.get_status_display }}{% endif %}</option>
@@ -317,12 +318,10 @@
 {% endblock %}
 {% block scripts %}
 {{ tariff_preview|json_script:"tariff-preview-data" }}
-{{ child_discounts|json_script:"child-discount-data" }}
 <script src="{% static 'crm/payment-picker.js' %}?v=2"></script>
 <script>
 (() => {
   const tariffs = JSON.parse(document.getElementById('tariff-preview-data').textContent) || [];
-  const discounts = JSON.parse(document.getElementById('child-discount-data').textContent) || [];
   const field = name => document.getElementById('id_subscription-' + name);
   const childField = field('child');
   const groupField = field('group');
@@ -404,7 +403,7 @@
     applyTariffAvailability();
     const tariff = tariffs.find(item => String(item.id) === field('tariff').value);
     if (tariff && !field('manual_override').checked) {
-      const discount = discounts.find(item => String(item.id) === field('child').value)?.discount_percent || 0;
+      const discount = Number(field('child').selectedOptions[0]?.dataset.discountPercent || 0);
       const promo = Math.min(100, Math.max(0, Number(field('promo_percent').value) || 0));
       const reprice = !existing || ['child','tariff','promo_percent'].some(name => field(name).value !== snapshot[name]);
       field('sessions_total').value = reprice ? tariff.sessions_total : snapshot.sessions_total;

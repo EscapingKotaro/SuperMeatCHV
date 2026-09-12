@@ -8,9 +8,15 @@ from crm import intake_views
 from crm import team_views
 from crm import certificate_views
 from crm import workflow_views
+from crm import payment_adjustments
+from crm import trial_management
+from crm import athlete_lookup
 
 
 urlpatterns = [
+    path("children/lookup/", athlete_lookup.athlete_lookup, name="athlete_lookup"),
+    path("children/<int:pk>/trial-review/", trial_management.trial_management, name="trial_management"),
+    path("payments/<int:pk>/adjust/", payment_adjustments.adjust_payment, name="payment_adjustment"),
     # Django admin
     path("admin/", admin.site.urls),
 

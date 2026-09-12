@@ -54,7 +54,7 @@ def expire_trials(today=None):
                 or child.status != Child.Status.TRIAL
                 or not child.trial_from
                 or child.trial_from > today - timedelta(days=TRIAL_EXPIRY_DAYS)
-                or child.payments.filter(amount__gt=0).exists()
+                or (child.payments.aggregate(total=Sum("amount"))["total"] or 0) > 0
             ):
                 continue
             child.mark_as_lost(on_date=today)
@@ -887,34 +887,7 @@ class Child(models.Model):
             return 0
 
         today = timezone.localdate()
-        cached = getattr(
-            self,
-            "_prefetched_objects_cache",
-            {},
-        ).get("attendances")
-        if cached is not None:
-            used = sum(
-                mark.status in ("present", "absent")
-                and subscription.start_date <= mark.date <= today
-                and self._attendance_matches_group(mark, group)
-                for mark in cached
-            )
-        else:
-            group_scope = models.Q(group_snapshot=group)
-            if self.group_id == group.pk:
-                group_scope |= models.Q(group_snapshot__isnull=True)
-            used = (
-                self.attendances
-                .filter(
-                    status__in=("present", "absent"),
-                    date__gte=subscription.start_date,
-                    date__lte=today,
-                )
-                .filter(group_scope)
-                .count()
-            )
-
-        return max(0, subscription.sessions_total - used)
+        return max(0, subscription.sessions_total - subscription.sessions_used(today))
 
     def has_class_today(self, group=None):
         group = group or self.group
@@ -1227,12 +1200,14 @@ class Child(models.Model):
                 detail = "Без привязки к абонементу"
 
             if payment.created_by_id:
-                detail += f" · принял {payment.created_by}"
+                detail += f" · сотрудник {payment.created_by}"
+            if payment.original_payment_id:
+                detail += f" · к оплате №{payment.original_payment_id} · {payment.reason}"
 
             append_movement(
                 date=payment.date,
                 kind="payment",
-                title="Оплата",
+                title=payment.get_operation_kind_display(),
                 detail=detail,
                 amount=payment.amount,
                 object_id=payment.pk,
@@ -1452,7 +1427,21 @@ class Subscription(models.Model):
                 .count()
             )
 
+        used += self.trial_extra_sessions(through_date)
         return min(self.sessions_total, used)
+
+    def trial_extra_sessions(self, through_date):
+        cached_credits = getattr(self, "_prefetched_objects_cache", {}).get("trial_credits")
+        credit = next((item for item in cached_credits if not item.is_void and item.date <= through_date), None) if cached_credits is not None else self.trial_credits.filter(is_void=False, date__lte=through_date).first()
+        if credit:
+            group = self.group or self.child.group
+            cached = getattr(self.child, "_prefetched_objects_cache", {}).get("attendances")
+            # A trial already inside this group's normal period must only count once.
+            normal_mark = any(mark.date == credit.date and mark.status in ("present", "absent") and self.child._attendance_matches_group(mark, group) for mark in cached) if cached is not None else self.child.attendances.filter(
+                date=credit.date, status__in=("present", "absent"),
+            ).filter(models.Q(group_snapshot_id=group.pk) | (models.Q(group_snapshot__isnull=True) if self.child.group_id == group.pk else models.Q(pk__in=[]))).exists()
+            return int(not (self.start_date <= credit.date <= through_date and normal_mark))
+        return 0
 
     def save(self, *args, **kwargs):
         if self._state.adding and self.group_id is None and self.child_id:
@@ -1511,6 +1500,28 @@ def extend_subscriptions_for_schedule_move(
     return len(subscriptions), extension_days
 
 
+class AttendanceChargeRevision(models.Model):
+    attendance = models.ForeignKey("Attendance", on_delete=models.SET_NULL, null=True, related_name="charge_revisions")
+    child = models.ForeignKey(Child, on_delete=models.PROTECT, related_name="charge_revisions")
+    attendance_number = models.PositiveBigIntegerField()
+    attendance_date = models.DateField()
+    previous_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    new_amount = models.DecimalField(max_digits=10, decimal_places=2)
+    reason = models.TextField()
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class TrialCredit(models.Model):
+    is_void = models.BooleanField("Зачёт снят", default=False)
+    child = models.OneToOneField(Child, on_delete=models.PROTECT, related_name="trial_credit", verbose_name="Спортсмен")
+    subscription = models.ForeignKey(Subscription, on_delete=models.PROTECT, null=True, blank=True, related_name="trial_credits", verbose_name="Абонемент")
+    date = models.DateField("Дата пробного")
+    group = models.ForeignKey(Group, on_delete=models.PROTECT, null=True, blank=True, verbose_name="Группа пробного")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class Payment(models.Model):
     """Оплата абонемента (из них считаем выручку и долг)."""
     child = models.ForeignKey(Child, on_delete=models.PROTECT,
@@ -1518,6 +1529,10 @@ class Payment(models.Model):
     subscription = models.ForeignKey(Subscription, on_delete=models.SET_NULL,
                                      blank=True, null=True, verbose_name="абонемент")
     amount = models.DecimalField("Сумма", max_digits=10, decimal_places=2)
+    original_payment = models.ForeignKey("self", on_delete=models.PROTECT, null=True, blank=True, related_name="adjustments", verbose_name="Исходная оплата")
+    operation_kind = models.CharField("Операция", max_length=16, default="payment", choices=(("payment", "Оплата"), ("refund", "Возврат"), ("correction", "Сторно ошибочной оплаты")))
+    reason = models.TextField("Причина", blank=True)
+    recorded_at = models.DateTimeField("Время записи", default=timezone.now, editable=False)
     date = models.DateField("Дата", default=timezone.localdate)
     submission_key = models.UUIDField("Ключ операции", unique=True, null=True, blank=True, editable=False)
     submission_hash = models.CharField("Параметры операции", max_length=64, blank=True, editable=False)
@@ -1538,7 +1553,7 @@ class Payment(models.Model):
                 self.child.status = Child.Status.ACTIVE
                 self.child.trial_from = None
             Newcomer.objects.filter(child_id=self.child_id).update(
-                paid=Payment.objects.filter(child_id=self.child_id, amount__gt=0).exists()
+                paid=(Payment.objects.filter(child_id=self.child_id).aggregate(total=Sum("amount"))["total"] or 0) > 0
             )
 
     def __str__(self):
@@ -2250,7 +2265,7 @@ class Newcomer(models.Model):
         if not self.child_id:
             return False
         cached = getattr(self.child, "_prefetched_objects_cache", {}).get("payments")
-        return any(payment.amount > 0 for payment in cached) if cached is not None else self.child.payments.filter(amount__gt=0).exists()
+        return (sum(payment.amount for payment in cached) if cached is not None else self.child.payments.aggregate(total=Sum("amount"))["total"] or 0) > 0
 
     def save(self, *args, **kwargs):
         with transaction.atomic():
@@ -2324,12 +2339,23 @@ class User(AbstractUser):
 
 
 # paid remains a compatibility cache; UI reads real Payment rows.
-from django.db.models.signals import post_delete
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 
 
 @receiver(post_delete, sender=Payment)
 def refresh_newcomer_payment_after_delete(sender, instance, **kwargs):
     Newcomer.objects.filter(child_id=instance.child_id).update(
-        paid=Payment.objects.filter(child_id=instance.child_id, amount__gt=0).exists()
+        paid=(Payment.objects.filter(child_id=instance.child_id).aggregate(total=Sum("amount"))["total"] or 0) > 0
     )
+
+
+@receiver(post_save, sender=Newcomer)
+@receiver(post_save, sender=Attendance)
+def reconcile_confirmed_trial(sender, instance, raw=False, **kwargs):
+    if raw or not instance.child_id:
+        return
+    confirmed = instance.attended and not instance.lesson_cancelled if sender is Newcomer else instance.status == Attendance.Status.PRESENT
+    if confirmed:
+        from .trial_credit import credit_available_trial
+        credit_available_trial(instance.child_id)

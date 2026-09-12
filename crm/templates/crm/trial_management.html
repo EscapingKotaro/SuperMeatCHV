@@ -1,0 +1,26 @@
+{% extends 'crm/base.html' %}
+{% block content %}
+<div class="max-w-3xl mx-auto space-y-5">
+  <a class="text-blue-600" href="{% url 'child_card' child.pk %}">← {{ child }}</a>
+  <section class="card p-5 space-y-3">
+    <h2 class="font-bold text-xl">1. Распределить уже принятую предоплату</h2>
+    <p class="text-sm text-slate-600">Выберите существующий платёж и абонемент. Сумма целиком привяжется к нему вместе с возвратами. Баланс и выручка не меняются; принимать деньги второй раз не нужно.</p>
+    <form method="post" data-guard-draft class="space-y-3">{% csrf_token %}<input type="hidden" name="action" value="allocate">{{ allocation.as_p }}<button class="btn btn-primary">Привязать предоплату</button></form>
+  </section>
+  <section class="card p-5 space-y-3">
+    <h2 class="font-bold text-xl">2. Проверить / исправить зачёт пробного</h2>
+    {% for mark in charges %}<p class="text-sm">Начисление №{{ mark.pk }} · {{ mark.date|date:'d.m.Y' }} · {{ mark.group_snapshot }} · {{ mark.charge_amount|floatformat:2 }} ₽</p>{% endfor %}
+    <p>{% if credit.is_void %}Зачёт снят.{% elif credit.subscription_id %}Пробное {{ credit.date|date:'d.m.Y' }} зачтено в абонемент №{{ credit.subscription_id }}.{% else %}Зачёт пока не назначен.{% endif %}</p>
+    {% if trial %}<p class="text-sm text-slate-600">У новичка подтверждено пробное: {{ trial.trial_at|date:'d.m.Y H:i' }} · {{ trial.group }}.</p>{% endif %}
+    <p class="text-sm text-slate-600">Этот экран подходит и для старых оплат: проверьте фактическое посещение, дату и оплаченный абонемент. Перенос меняет существующий зачёт, а не создаёт второй. Снятие зачёта не удаляет настоящую отметку посещения из табеля. Денежные начисления автоматически не переписываются.</p>
+    <form method="post" data-guard-draft class="space-y-3">{% csrf_token %}<input type="hidden" name="action" value="review">{{ review.as_p }}<button class="btn btn-primary">Сохранить проверенный зачёт</button></form>
+  </section>
+  <section class="card p-5 space-y-3">
+    <h2 class="font-bold text-xl">3. Исправить начисление за занятие</h2>
+    <p class="text-sm text-slate-600">Сначала сверьте занятия с абонементом. Укажите правильную сумму: 0 ₽ снимает ошибочное начисление. Изменение влияет на долг, но не на принятую выручку. Предыдущая сумма и причина сохраняются. После исправления вернитесь к проверке зачёта выше; если начисления остаются, подтвердите их сверку.</p>
+    <form method="post" data-guard-draft class="space-y-3">{% csrf_token %}<input type="hidden" name="action" value="charge">{{ charge_form.as_p }}<button class="btn btn-primary">Исправить начисление</button></form>
+    <h3 class="font-semibold">История исправлений</h3>
+    {% for row in charge_revisions %}<p class="text-sm">{{ row.created_at|date:'d.m.Y H:i' }} · занятие №{{ row.attendance_number }} от {{ row.attendance_date|date:'d.m.Y' }}{% if not row.attendance_id %} (отметка удалена){% endif %} · {{ row.previous_amount|floatformat:2 }} → {{ row.new_amount|floatformat:2 }} ₽ · {{ row.actor }} · {{ row.reason }}</p>{% empty %}<p class="text-sm text-slate-500">Исправлений пока нет.</p>{% endfor %}
+  </section>
+</div>
+{% endblock %}

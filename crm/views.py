@@ -571,7 +571,7 @@ def attendance_view(request):
         children_qs = group.current_children()
 
     children_qs = children_qs.select_related('group__trainer').prefetch_related(
-        'subscriptions', 'payments', 'attendances', 'ranks',
+        'subscriptions__group', 'subscriptions__trial_credits', 'payments', 'attendances', 'ranks',
         'group_memberships',
     )
 
@@ -1520,7 +1520,7 @@ def mark_attendance_view(request):
             used_marks = used_marks.exclude(pk=attendance.pk)
 
         subscription_has_session = (
-            used_marks.count() < subscription_on_date.sessions_total
+            used_marks.count() + subscription_on_date.trial_extra_sessions(mark_date) < subscription_on_date.sessions_total
         )
 
     existing_present = (
@@ -1915,6 +1915,8 @@ def payments_page(request):
         if action == "payment":
             if payment_form.is_valid():
                 child = payment_form.cleaned_data["child_id"]
+                was_trial = child.status == Child.Status.TRIAL
+                trial_from = child.trial_from
                 amount = payment_form.cleaned_data["amount"]
                 payment_date = payment_form.cleaned_data["date"]
                 subscription = payment_form.cleaned_data["subscription_id"]
@@ -1930,6 +1932,12 @@ def payments_page(request):
                     submission_key=request.payment_submission_key,
                     submission_hash=request.payment_submission_hash)
                 log_action(request, "payment.create", payment, f"Принята оплата {amount} ₽ от {child}")
+                from .trial_credit import credit_paid_trial
+                credit = credit_paid_trial(subscription, child=child, actor=request.user, was_trial=was_trial, trial_from=trial_from)
+                if credit:
+                    messages.success(request, f"Пробное занятие {credit.date:%d.%m.%Y} зачтено в абонемент (один раз, без дублирования отметки).")
+                elif was_trial and subscription is None:
+                    messages.warning(request, "Оплата сохранена без абонемента. Для зачёта пробного откройте «Пробное и предоплата» в карточке спортсмена и распределите уже принятую сумму. Повторно принимать оплату не нужно.")
                 messages.success(request, "Оплата сохранена")
             else:
                 messages.error(request, "Оплата не сохранена. Исправьте отмеченные поля.")
@@ -1982,7 +1990,7 @@ def payments_page(request):
         rows=rows,
         month_start=month_start,
         month_end=month_end,
-        children=Child.objects.all().order_by("last_name", "first_name", "pk"),
+        children=Child.objects.filter(pk=_optional_pk(payment_form["child_id"].value())),
         payment_child_id=_optional_pk(payment_form["child_id"].value()),
         payment_form=payment_form,
         payment_token=request.payment_token,
@@ -1992,7 +2000,6 @@ def payments_page(request):
         ),
         expected=expected,
         tariff_preview=list(Tariff.objects.values("id", "price", "sessions_total", "duration_days")),
-        child_discounts=list(Child.objects.values("id", "discount_percent")),
         tariffs=Tariff.objects.all(),
         **subscription_history_context(request),
         tariff_form=tariff_form,
@@ -4391,7 +4398,7 @@ def boss_page(request):
         row["trainer_id"]: row["total"]
         for row in (
             trial_qs
-            .filter(child__payments__amount__gt=0)
+            .filter(child_id__in=Payment.objects.values("child_id").annotate(net=Sum("amount")).filter(net__gt=0).values("child_id"))
             .exclude(trainer__isnull=True)
             .values("trainer_id")
             .annotate(total=Count("id", distinct=True))
@@ -6328,6 +6335,8 @@ def build_renewal_rows(month_start, month_end, today=None):
         .select_related("group")
         .prefetch_related(
             "subscriptions__tariff",
+            "subscriptions__group",
+            "subscriptions__trial_credits",
             "payments",
             "attendances",
             "group_memberships__group__schedule",
@@ -6408,24 +6417,7 @@ def build_renewal_rows(month_start, month_end, today=None):
                 if active_subscription
                 else 0
             )
-            attendance_cutoff = min(today, subscription.end_date)
-            sessions_used = min(
-                subscription.sessions_total,
-                sum(
-                    1
-                    for mark in child.attendances.all()
-                    if (
-                        mark.status in (
-                            Attendance.Status.PRESENT,
-                            Attendance.Status.ABSENT,
-                        )
-                        and subscription.start_date
-                        <= mark.date
-                        <= attendance_cutoff
-                        and child._attendance_matches_group(mark, group)
-                    )
-                ),
-            )
+            sessions_used = subscription.sessions_used(today)
             projected_end = (
                 child.projected_end_date(group)
                 if active_subscription and sessions_left > 0
@@ -6543,6 +6535,7 @@ def payment_history_view(request):
         'child__group',
         'created_by',
         'subscription',
+        'original_payment',
     ).order_by('-date')
 
     total = payments.aggregate(s=Sum('amount'))['s'] or 0

@@ -160,6 +160,7 @@
                                 {% endif %}
                             {% else %}
                             <a href="{% url 'child_card' item.child.pk %}" class="btn btn-soft">Открыть карточку</a>
+                            {% if is_senior %}<a href="{% url 'trial_management' item.child.pk %}" class="btn btn-soft">Проверить зачёт / предоплату</a>{% endif %}
                             {% endif %}
                         </div>
                     </td>

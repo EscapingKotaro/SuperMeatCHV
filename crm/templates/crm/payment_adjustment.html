@@ -1,0 +1,18 @@
+{% extends 'crm/base.html' %}
+{% block content %}
+<section class="card max-w-2xl mx-auto p-6 space-y-4">
+  <h2 class="text-xl font-bold">Возврат / исправление оплаты №{{ original.pk }}</h2>
+  <p>{{ original.child }} · {{ original.date|date:'d.m.Y' }} · {{ original.amount|floatformat:2 }} ₽</p>
+  <p class="font-semibold">Доступно: {{ remaining|floatformat:2 }} ₽</p>
+  <div class="rounded-xl bg-amber-50 p-4 text-sm space-y-2">
+    <p>«Возврат» — деньги действительно возвращены клиенту. «Сторно» — исправление ошибочно внесённой оплаты. Для замены неверных данных сторнируйте ошибочную сумму, затем внесите правильную оплату отдельно.</p>
+    <p>Запись уменьшит баланс и выручку на выбранную дату. Абонемент, посещения и группа не отменяются: при необходимости измените их отдельно. Деньги через банк эта форма не переводит.</p>
+  </div>
+  <form method="post" data-guard-draft class="space-y-4">
+    {% csrf_token %}{{ form.token }}
+    <div class="text-red-600">{{ form.non_field_errors }}{{ form.token.errors }}</div>
+    {% for field in form.visible_fields %}<div><label for="{{ field.id_for_label }}" class="label">{{ field.label }}</label>{{ field }}<div class="text-red-600 text-sm">{{ field.errors }}</div></div>{% endfor %}
+    <div class="flex gap-3"><button class="btn btn-primary" type="submit">Записать операцию</button><a class="btn" href="{% url 'payment_history' %}?month={{ original.date|date:'Y-m' }}">Отмена</a></div>
+  </form>
+</section>
+{% endblock %}

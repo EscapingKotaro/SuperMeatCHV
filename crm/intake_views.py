@@ -204,9 +204,7 @@ def applications_page(request):
                 Lead.objects.select_for_update(),
                 pk=views._optional_pk(request.POST.get("lead_id")),
             )
-            has_paid = lead.newcomers.filter(
-                child__payments__amount__gt=0,
-            ).exists()
+            has_paid = any(item.has_paid for item in lead.newcomers.select_related("child").prefetch_related("child__payments"))
             has_newcomer = lead.newcomers.exists()
 
             if (

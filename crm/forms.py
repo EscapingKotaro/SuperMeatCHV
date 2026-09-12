@@ -3,6 +3,7 @@ from decimal import Decimal
 
 from django.forms import inlineformset_factory
 from django import forms
+from .athlete_lookup import RemoteChildSelect, RemoteChildrenSelect
 from django.db import models
 from django.contrib.auth import get_user_model
 from django.contrib.auth.forms import PasswordChangeForm, UserCreationForm
@@ -35,6 +36,13 @@ from .models import (
 class StyledFormMixin:
     def apply_styles(self):
         for field in self.fields.values():
+            if isinstance(field, forms.ModelChoiceField) and field.queryset.model is Child:
+                if not isinstance(field.widget, (RemoteChildSelect, RemoteChildrenSelect)):
+                    widget_type = RemoteChildrenSelect if isinstance(field, forms.ModelMultipleChoiceField) else RemoteChildSelect
+                    field.widget = widget_type(attrs=field.widget.attrs, choices=field.choices)
+                from django.urls import reverse
+                field.widget.attrs["data-athlete-remote"] = reverse("athlete_lookup")
+                field.widget.attrs["data-scope"] = "subscription" if self.__class__.__name__ == "SubscriptionForm" else "all"
             if isinstance(field.widget, forms.CheckboxInput):
                 field.widget.attrs["class"] = "h-4 w-4 rounded border-slate-300"
             else:
@@ -358,7 +366,7 @@ class TariffForm(StyledFormMixin, forms.ModelForm):
         self.apply_styles()
 
 
-class SubscriptionChildSelect(forms.Select):
+class SubscriptionChildSelect(RemoteChildSelect):
     """Добавляет к спортсмену активные группы, где нужен абонемент."""
 
     def create_option(self, name, value, label, selected, index, subindex=None, attrs=None):
@@ -397,6 +405,7 @@ class SubscriptionChildSelect(forms.Select):
                 str(group_id)
                 for group_id in sorted(group_ids)
             )
+            option["attrs"]["data-discount-percent"] = str(instance.discount_percent)
             if instance.group_id:
                 option["attrs"]["data-primary-group-id"] = str(instance.group_id)
         return option
@@ -896,6 +905,7 @@ class CompetitionDocumentForm(StyledFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["child"].queryset = Child.objects.filter(competition_entries__competition=competition).distinct()
         self.apply_styles()
+        self.fields["child"].widget.attrs.update({"data-scope": "competition", "data-competition": str(competition.pk) if competition else ""})
 
     def clean_file(self):
         from django.core.validators import FileExtensionValidator

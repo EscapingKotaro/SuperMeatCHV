@@ -6177,10 +6177,9 @@ class CrmWorkflowTests(TestCase):
             reverse("payments"),
         )
 
-        self.assertIn(
-            child,
-            list(payments_page.context["children"]),
-        )
+        self.assertEqual(list(payments_page.context["children"]), [])
+        results = self.client.get(reverse("athlete_lookup"), {"q": child.last_name}).json()["results"]
+        self.assertIn(child.pk, [item["id"] for item in results])
 
         response = self.client.post(
             reverse("payments"),
