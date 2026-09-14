@@ -170,6 +170,34 @@ class ProjectCompletionTests(TestCase):
         payment.delete()
         self.assertFalse(newcomer.has_paid)
 
+    def test_newcomer_payment_cell_opens_real_payment(self):
+        newcomer = Newcomer.objects.create(
+            full_name='Оплатная Анна',
+            child=self.child,
+            group=self.group,
+            trainer=self.trainer,
+            trial_at=timezone.now(),
+            attended=True,
+        )
+        response = self.client.get(reverse('newcomers'))
+        payment_url = f"{reverse('payments')}?child={self.child.pk}"
+
+        self.assertContains(response, f'href="{payment_url}"')
+        self.assertContains(response, 'data-newcomer-payment-link')
+        self.assertContains(
+            response,
+            'data-newcomer-payment-state="unpaid"',
+        )
+        self.assertFalse(newcomer.has_paid)
+
+        Payment.objects.create(child=self.child, amount=100)
+        response = self.client.get(reverse('newcomers'))
+        self.assertContains(response, f'href="{payment_url}"')
+        self.assertContains(
+            response,
+            'data-newcomer-payment-state="paid"',
+        )
+
     def test_parser_website_and_vk_samples(self):
         website = 'Имя: Анна Петрова\nТелефон: 8 (999) 123-45-67\nВозраст: 7 лет\nИсточник: Сайт\nКампания: Сентябрь\nВремя звонка: после 18:00'
         parsed = parse_application(website)

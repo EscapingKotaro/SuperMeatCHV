@@ -93,9 +93,23 @@
                         </form>
                     </td>
                     <td class="text-center">
-                        <input type="checkbox" class="h-4 w-4" disabled
-                               title="Оплата определяется по фактическим платежам"
-                               aria-label="Оплата: {{ item.full_name }}" {% if item.has_paid %}checked{% endif %}>
+                        {% if item.child %}
+                        <a href="{% url 'payments' %}?child={{ item.child.pk }}"
+                           class="inline-flex h-6 w-6 items-center justify-center rounded border {% if item.has_paid %}border-emerald-300 bg-emerald-50 text-emerald-700{% else %}border-slate-300 bg-white text-slate-400 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700{% endif %}"
+                           data-newcomer-payment-link
+                           data-newcomer-payment-state="{% if item.has_paid %}paid{% else %}unpaid{% endif %}"
+                           title="{% if item.has_paid %}Открыть оплаты спортсмена{% else %}Добавить оплату спортсмену{% endif %}"
+                           aria-label="{% if item.has_paid %}Оплачено: открыть оплаты {{ item.full_name }}{% else %}Добавить оплату: {{ item.full_name }}{% endif %}">
+                            {% if item.has_paid %}
+                            <i data-lucide="check" class="h-4 w-4"></i>
+                            {% endif %}
+                        </a>
+                        {% else %}
+                        <span class="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-slate-50 text-slate-300"
+                              data-newcomer-payment-unavailable
+                              title="Сначала добавьте пробника в табель"
+                              aria-label="Оплата недоступна: сначала добавьте {{ item.full_name }} в табель"></span>
+                        {% endif %}
                     </td>
                     <td class="text-center">
                         <form method="post" class="inline-flex" data-quick-flag>
