@@ -160,3 +160,72 @@ class UIRescanTests(TestCase):
         self.assertNotIn("Индивидуальная скидка 5%", html)
         self.assertNotIn("5%", html)
         self.assertEqual(html.count("Осень · 10%"), 1)
+
+    def test_child_card_hides_legacy_membership_implementation_details(self):
+        self.child.group_memberships.all().delete()
+
+        response = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, self.group.name)
+        self.assertContains(response, self.group.trainer.full_name)
+        self.assertContains(response, "Основная группа")
+        self.assertNotContains(response, "Только чтение")
+        self.assertNotContains(response, "связь membership отсутствует")
+        self.assertNotContains(response, "Восстановить связь")
+        self.assertFalse(self.child.group_memberships.exists())
+
+    def test_group_picker_is_trainer_first_and_subscription_mode_is_explicit(self):
+        primary_extra = Group.objects.create(
+            name="Архивная группа",
+            trainer=self.group.trainer,
+        )
+        trainer_two = Trainer.objects.create(full_name="Анна Миронова")
+        group_two = Group.objects.create(
+            name="Младшая группа",
+            trainer=trainer_two,
+        )
+        trainer_three = Trainer.objects.create(full_name="Ирина Белова")
+        group_three = Group.objects.create(
+            name="Средняя группа · Котельники",
+            trainer=trainer_three,
+        )
+
+        response = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertEqual(response.status_code, 200)
+
+        html = " ".join(response.content.decode().split())
+        picker_start = html.index('data-membership-group-picker')
+        picker_end = html.index('Требовать абонемент для этой группы')
+        picker = html[picker_start:picker_end]
+
+        for trainer_name, group_name in (
+            (self.group.trainer.full_name, primary_extra.name),
+            (trainer_two.full_name, group_two.name),
+            (trainer_three.full_name, group_three.name),
+        ):
+            self.assertIn(trainer_name, picker)
+            self.assertIn(group_name, picker)
+            self.assertLess(
+                picker.index(trainer_name),
+                picker.index(group_name),
+            )
+
+        self.assertNotIn("раскрыть", picker)
+        self.assertContains(
+            response,
+            "Требовать абонемент для этой группы",
+        )
+        self.assertContains(
+            response,
+            "без списания абонемента и без оформления долга",
+        )
+        self.assertNotContains(
+            response,
+            "Показывать состояние абонемента",
+        )
+        self.assertContains(response, "Занятия: по абонементу")
