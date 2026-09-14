@@ -479,12 +479,7 @@
         <input type="hidden" name="action" value="save">
 
         <div class="modal-head">
-            <div>
-                <b>{% if editing %}Изменить{% elif can_manage_team_tasks %}Новая задача{% else %}Новое напоминание{% endif %}</b>
-                <p class="text-xs text-slate-500">
-                    {% if can_manage_team_tasks %}Задача появится в календаре и уведомлениях{% else %}Личное напоминание в вашем календаре{% endif %}
-                </p>
-            </div>
+            <b>{% if editing %}Изменить{% elif can_manage_team_tasks %}Новая задача{% else %}Новое напоминание{% endif %}</b>
 
             <a href="{{ workflow_list_url }}" aria-label="Закрыть">
                 <i data-lucide="x"></i>

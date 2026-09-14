@@ -512,3 +512,46 @@ class UIRescanTests(TestCase):
             response,
             "lower(row.dataset.group) === lower(v.group)",
         )
+
+    def test_task_form_has_two_clear_dates_without_microcopy(self):
+        from .forms import ManagerTaskForm
+
+        form = ManagerTaskForm()
+
+        self.assertNotIn("scheduled_end_at", form.fields)
+        self.assertEqual(
+            form.fields["scheduled_at"].label,
+            "Дата и время задачи",
+        )
+        self.assertEqual(
+            form.fields["due_date"].label,
+            "Выполнить до",
+        )
+        self.assertEqual(form.fields["assignee"].help_text, "")
+
+        invalid = ManagerTaskForm(
+            data={
+                "title": "Проверить документы",
+                "scheduled_at": "2026-09-15T10:00",
+                "due_date": "2026-09-14",
+            },
+        )
+        self.assertFalse(invalid.is_valid())
+        self.assertIn(
+            "Срок выполнения не может быть раньше даты задачи",
+            invalid.errors["due_date"],
+        )
+
+        response = self.client.get(reverse("calendar"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Дата и время задачи")
+        self.assertContains(response, "Выполнить до")
+        self.assertNotContains(response, "Окончание в календаре")
+        self.assertNotContains(
+            response,
+            "Задача появится в календаре и уведомлениях",
+        )
+        self.assertNotContains(
+            response,
+            "Пусто — общая задача для всей администрации",
+        )
