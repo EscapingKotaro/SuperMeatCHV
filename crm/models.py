@@ -39,7 +39,7 @@ def age_label(birth_date=None, birth_year=None, age_text="", today=None):
 
 
 def expire_trials(today=None):
-    """Идемпотентный обход всех групп. Платёж и уход блокируют одного ребёнка."""
+    """Архивирует неоплаченных пробников через 30 дней, сохраняя историю."""
     today = today or timezone.localdate()
     count = 0
     candidates = Child.objects.filter(
@@ -57,8 +57,13 @@ def expire_trials(today=None):
                 or (child.payments.aggregate(total=Sum("amount"))["total"] or 0) > 0
             ):
                 continue
-            child.mark_as_lost(on_date=today)
-            AuditEvent.objects.create(action="trial.expired", object_type="Child", object_id=str(child.pk), description=f"Пробный период истёк без оплаты: {child}")
+            child.archive(on_date=today)
+            AuditEvent.objects.create(
+                action="trial.expired",
+                object_type="Child",
+                object_id=str(child.pk),
+                description=f"Пробный период истёк без оплаты, спортсмен перенесён в архив: {child}",
+            )
             count += 1
     return count
 
@@ -1277,10 +1282,10 @@ class Child(models.Model):
             salary_rate_snapshot=salary_rate,
         )
 
-    def archive(self):
+    def archive(self, on_date=None):
         self.freeze_current_history()
         self.status = self.Status.ARCHIVED
-        self.archived_at = timezone.localdate()
+        self.archived_at = on_date or timezone.localdate()
         self.departure_group = self.group
         self.departure_trainer = self.trainer
         self.save(update_fields=[

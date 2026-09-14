@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 
-from .models import Attendance, Child, Newcomer, Notification, Payment, Subscription, has_min_role, user_role
+from .models import Attendance, Child, ManagerTask, Newcomer, Notification, Payment, Subscription, has_min_role, user_role
 from .navigation import current_list_url
 
 
@@ -80,6 +80,61 @@ def sync_today_trials(user):
     _sync_events(user, Q(event_key__startswith="trial_today:"), desired)
     Notification.objects.filter(recipient=user, task__is_done=True, resolved_at__isnull=True,
                                 kind__in=[Notification.Kind.TASK_CREATED, Notification.Kind.TASK_UPDATED, Notification.Kind.TASK_REOPENED]).update(resolved_at=timezone.now())
+
+
+def sync_due_task_notifications(user):
+    """Поднимает задачу в уведомлениях только когда наступил её срок."""
+    if not user.is_authenticated or not user.is_staff:
+        return
+
+    today = timezone.localdate()
+    tasks = (
+        ManagerTask.objects
+        .filter(
+            is_done=False,
+            due_date__isnull=False,
+            due_date__lte=today,
+        )
+        .filter(Q(assignee=user) | Q(assignee__isnull=True))
+        .select_related("child", "lead")
+        .order_by("due_date", "pk")
+    )
+
+    desired = {}
+    for task in tasks:
+        key = f"task_due:{task.pk}:{task.due_date.isoformat()}"
+
+        if task.child_id:
+            target = str(task.child)
+            url = reverse("child_card", args=[task.child_id])
+        elif task.lead_id:
+            target = task.lead.full_name
+            url = reverse("applications") + f"?edit={task.lead_id}"
+        else:
+            target = ""
+            url = reverse("calendar") + f"?day={task.due_date.isoformat()}"
+
+        if task.due_date == today:
+            prefix = "Сегодня выполнить задачу"
+        else:
+            prefix = f"Просрочена задача со сроком {task.due_date:%d.%m.%Y}"
+
+        message = f"{prefix}: «{task.title}»"
+        if target:
+            message += f" · {target}"
+
+        desired[key] = {
+            "kind": Notification.Kind.TASK_UPDATED,
+            "message": message,
+            "url": url,
+            "task": task,
+        }
+
+    _sync_events(
+        user,
+        Q(event_key__startswith="task_due:"),
+        desired,
+    )
 
 
 def crm_role_context(request):
