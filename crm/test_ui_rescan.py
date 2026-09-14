@@ -248,3 +248,25 @@ class UIRescanTests(TestCase):
         self.assertEqual(statistics.count("break-words"), 6)
         self.assertIn("Заморозка", statistics)
         self.assertIn("Больничный", statistics)
+
+    def test_subscription_boundary_is_thick_and_contrasting(self):
+        styles = render_to_string(
+            "crm/includes/attendance_styles.html",
+        )
+
+        self.assertIn(
+            "border-right:3px solid #475569",
+            styles,
+        )
+        self.assertIn(
+            "border-left:3px solid #475569",
+            styles,
+        )
+        self.assertNotIn(
+            "border-right:2px solid #f87171",
+            styles,
+        )
+        self.assertNotIn(
+            "border-left:2px solid #f87171",
+            styles,
+        )
