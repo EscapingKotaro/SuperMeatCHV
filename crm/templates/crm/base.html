@@ -172,11 +172,11 @@
     <a href="{% url 'clients' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'clients' %}bg-slate-100 font-semibold{% endif %}">
         <i data-lucide="users-round" class="h-4 w-4"></i> Клиенты
     </a>
-    <a href="{% url 'applications' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'applications' %}bg-slate-100 font-semibold{% endif %}">
-        <i data-lucide="inbox" class="h-4 w-4"></i> Заявки
-    </a>
     <a href="{% url 'newcomers' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'newcomers' %}bg-slate-100 font-semibold{% endif %}">
         <i data-lucide="user-round-plus" class="h-4 w-4"></i> Новички · пробные занятия
+    </a>
+    <a href="{% url 'applications' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 {% if page == 'applications' %}bg-slate-100 font-semibold{% endif %}">
+        <i data-lucide="inbox" class="h-4 w-4"></i> Заявки
     </a>
 </div>
 

@@ -105,3 +105,21 @@ class UIRescanTests(TestCase):
         Notification.objects.create(recipient=self.user, task=task, kind="task_created", message="Старая ссылка", url="")
         response = self.client.get(reverse("notifications"))
         self.assertContains(response, '?start=2026-12-01&day=2026-12-15', html=False)
+
+    def test_clients_dropdown_orders_newcomers_before_applications(self):
+        response = self.client.get(reverse("clients"))
+        self.assertEqual(response.status_code, 200)
+
+        html = response.content.decode()
+        start = html.index('id="dropdown-clients"')
+        end = html.index('id="dropdown-team"', start)
+        menu = html[start:end]
+
+        self.assertLess(
+            menu.index(reverse("clients")),
+            menu.index(reverse("newcomers")),
+        )
+        self.assertLess(
+            menu.index(reverse("newcomers")),
+            menu.index(reverse("applications")),
+        )
