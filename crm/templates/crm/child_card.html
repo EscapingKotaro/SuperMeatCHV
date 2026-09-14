@@ -803,24 +803,25 @@
                    onchange="this.form.submit()">
         </label>
         {% else %}
-        <div class="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
-            <label>
+        <div class="grid min-w-0 gap-2"
+             data-custom-attendance-period>
+            <label class="min-w-0">
                 <span class="text-[10px] font-bold uppercase text-slate-400">С</span>
                 <input type="date"
                        name="attendance_from"
                        value="{{ attendance_from|date:'Y-m-d' }}"
                        max="{{ today|date:'Y-m-d' }}"
-                       class="field mt-1">
+                       class="field mt-1 min-w-0 max-w-full">
             </label>
-            <label>
+            <label class="min-w-0">
                 <span class="text-[10px] font-bold uppercase text-slate-400">По</span>
                 <input type="date"
                        name="attendance_to"
                        value="{{ attendance_to|date:'Y-m-d' }}"
                        max="{{ today|date:'Y-m-d' }}"
-                       class="field mt-1">
+                       class="field mt-1 min-w-0 max-w-full">
             </label>
-            <button type="submit" class="btn btn-soft self-end text-xs">
+            <button type="submit" class="btn btn-soft w-full text-xs">
                 Показать
             </button>
         </div>

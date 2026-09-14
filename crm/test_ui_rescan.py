@@ -270,3 +270,21 @@ class UIRescanTests(TestCase):
             "border-left:2px solid #f87171",
             styles,
         )
+
+    def test_custom_attendance_period_stays_inside_card(self):
+        response = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+            {"attendance_period": "custom"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+        html = " ".join(response.content.decode().split())
+        start = html.index("data-custom-attendance-period")
+        end = html.index("Показать", start)
+        period = html[start:end]
+
+        self.assertNotIn("sm:grid-cols-[1fr_1fr_auto]", period)
+        self.assertEqual(period.count("min-w-0"), 5)
+        self.assertEqual(period.count("max-w-full"), 2)
+        self.assertIn('name="attendance_from"', period)
+        self.assertIn('name="attendance_to"', period)
