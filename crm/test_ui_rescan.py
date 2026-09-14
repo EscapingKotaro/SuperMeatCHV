@@ -229,3 +229,22 @@ class UIRescanTests(TestCase):
             "Показывать состояние абонемента",
         )
         self.assertContains(response, "Занятия: по абонементу")
+
+    def test_child_visit_statistics_use_non_overflowing_grid(self):
+        response = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertEqual(response.status_code, 200)
+
+        html = " ".join(response.content.decode().split())
+        start = html.index("data-period-statistics")
+        end = html.index("Отметки выбранного периода", start)
+        statistics = html[start:end]
+
+        self.assertIn("grid-cols-2", statistics)
+        self.assertIn("sm:grid-cols-3", statistics)
+        self.assertNotIn("sm:grid-cols-6", statistics)
+        self.assertEqual(statistics.count('data-period-stat="'), 6)
+        self.assertEqual(statistics.count("break-words"), 6)
+        self.assertIn("Заморозка", statistics)
+        self.assertIn("Больничный", statistics)

@@ -840,30 +840,37 @@
     </div>
 
     <!-- Статистика за период -->
-    <div class="grid grid-cols-3 gap-2 mt-4 sm:grid-cols-6">
-        <div class="bg-emerald-50 p-2 rounded-lg text-center">
+    <div class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3"
+         data-period-statistics>
+        <div class="min-w-0 rounded-lg bg-emerald-50 p-2 text-center"
+             data-period-stat="present">
             <div class="text-lg font-extrabold text-emerald-700">{{ period_stats.present }}</div>
-            <div class="text-[9px] font-bold text-emerald-600 uppercase">Пришёл</div>
+            <div class="break-words text-[10px] font-bold leading-tight text-emerald-600">Пришёл</div>
         </div>
-        <div class="bg-red-50 p-2 rounded-lg text-center">
+        <div class="min-w-0 rounded-lg bg-red-50 p-2 text-center"
+             data-period-stat="absent">
             <div class="text-lg font-extrabold text-red-700">{{ period_stats.absent }}</div>
-            <div class="text-[9px] font-bold text-red-600 uppercase">Пропуск</div>
+            <div class="break-words text-[10px] font-bold leading-tight text-red-600">Пропуск</div>
         </div>
-        <div class="bg-blue-50 p-2 rounded-lg text-center">
+        <div class="min-w-0 rounded-lg bg-blue-50 p-2 text-center"
+             data-period-stat="frozen">
             <div class="text-lg font-extrabold text-blue-700">{{ period_stats.frozen }}</div>
-            <div class="text-[9px] font-bold text-blue-600 uppercase">Заморозка</div>
+            <div class="break-words text-[10px] font-bold leading-tight text-blue-600">Заморозка</div>
         </div>
-        <div class="bg-amber-50 p-2 rounded-lg text-center">
+        <div class="min-w-0 rounded-lg bg-amber-50 p-2 text-center"
+             data-period-stat="vacation">
             <div class="text-lg font-extrabold text-amber-700">{{ period_stats.vacation }}</div>
-            <div class="text-[9px] font-bold text-amber-600 uppercase">Отпуск</div>
+            <div class="break-words text-[10px] font-bold leading-tight text-amber-700">Отпуск</div>
         </div>
-        <div class="bg-yellow-50 p-2 rounded-lg text-center">
+        <div class="min-w-0 rounded-lg bg-yellow-50 p-2 text-center"
+             data-period-stat="excused">
             <div class="text-lg font-extrabold text-yellow-700">{{ period_stats.excused }}</div>
-            <div class="text-[9px] font-bold text-yellow-600 uppercase">Уваж.</div>
+            <div class="break-words text-[10px] font-bold leading-tight text-yellow-700">Уваж.</div>
         </div>
-        <div class="bg-rose-50 p-2 rounded-lg text-center">
+        <div class="min-w-0 rounded-lg bg-rose-50 p-2 text-center"
+             data-period-stat="sick">
             <div class="text-lg font-extrabold text-rose-700">{{ period_stats.sick }}</div>
-            <div class="text-[9px] font-bold text-rose-600 uppercase">Больничный</div>
+            <div class="break-words text-[10px] font-bold leading-tight text-rose-700">Больничный</div>
         </div>
     </div>
 
