@@ -328,9 +328,30 @@
                         {% endfor %}
                     </tr>
                 {% empty %}
-                    <tr><td colspan="100" class="text-center py-6 text-slate-500 text-sm">
-                        {% if not selected_group %}Создайте или активируйте группу, чтобы открыть табель.{% elif error %}Для отображения табеля настройте расписание. Спортсмены доступны в разделе «Клиенты».{% elif show_archived %}В архиве никого нет{% else %}Нет детей в этой группе{% endif %}
-                    </td></tr>
+                    <tr data-attendance-empty-state>
+                        <td colspan="{{ week_data|length|add:'1' }}" class="p-0">
+                            <div class="flex min-h-40 flex-col items-center justify-center gap-2 px-6 py-10 text-center text-slate-500">
+                                <span class="grid h-11 w-11 place-items-center rounded-xl bg-slate-100 text-slate-400">
+                                    <i data-lucide="users" class="h-5 w-5"></i>
+                                </span>
+                                {% if show_archived %}
+                                <b class="text-sm text-slate-700">В архиве никого нет</b>
+                                <span class="text-xs">В этой группе нет архивных спортсменов.</span>
+                                {% else %}
+                                <b class="text-sm text-slate-700">В группе пока нет спортсменов</b>
+                                <span class="max-w-md text-xs">
+                                    Добавьте спортсмена, чтобы начать вести посещения.
+                                </span>
+                                <button type="button"
+                                        data-modal="child-create-modal"
+                                        class="btn btn-primary mt-1 text-xs">
+                                    <i data-lucide="user-plus"></i>
+                                    Добавить спортсмена
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
                 {% endfor %}
             </tbody>
         </table>

@@ -555,3 +555,45 @@ class UIRescanTests(TestCase):
             response,
             "Пусто — общая задача для всей администрации",
         )
+
+    def test_attendance_empty_group_keeps_table_and_shows_empty_state(self):
+        from datetime import time
+
+        from django.utils import timezone
+
+        from .models import ScheduleSlot
+
+        empty_group = Group.objects.create(
+            name="Пустая группа",
+            trainer=self.group.trainer,
+        )
+        today = timezone.localdate()
+        ScheduleSlot.objects.create(
+            group=empty_group,
+            weekday=today.weekday(),
+            start_time=time(18, 0),
+        )
+
+        response = self.client.get(
+            reverse("attendance"),
+            {
+                "group_id": empty_group.pk,
+                "ref_date": today.isoformat(),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["children_data"])
+        self.assertTrue(response.context["week_data"])
+
+        html = " ".join(response.content.decode().split())
+        expected_colspan = len(response.context["week_data"]) + 1
+
+        self.assertIn("data-attendance-empty-state", html)
+        self.assertIn(f'colspan="{expected_colspan}"', html)
+        self.assertIn("В группе пока нет спортсменов", html)
+        self.assertIn(
+            "Добавьте спортсмена, чтобы начать вести посещения.",
+            html,
+        )
+        self.assertIn('data-modal="child-create-modal"', html)
+        self.assertNotIn('colspan="100"', html)
