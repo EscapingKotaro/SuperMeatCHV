@@ -449,3 +449,66 @@ class UIRescanTests(TestCase):
         self.assertNotIn("Excel", salaries)
         self.assertNotIn("строку ЗП", salaries)
         self.assertNotIn("Персоналки", salaries)
+
+    def test_newcomer_trainer_and_group_filters_are_selectable(self):
+        second_trainer = Trainer.objects.create(
+            full_name="Анна Миронова",
+        )
+        second_group = Group.objects.create(
+            name="Младшая группа",
+            trainer=second_trainer,
+        )
+        Newcomer.objects.create(
+            full_name="Пробник первый",
+            trainer=self.group.trainer,
+            group=self.group,
+        )
+        Newcomer.objects.create(
+            full_name="Пробник второй",
+            trainer=second_trainer,
+            group=second_group,
+        )
+
+        response = self.client.get(reverse("newcomers"))
+        self.assertEqual(response.status_code, 200)
+
+        html = " ".join(response.content.decode().split())
+        start = html.index("data-newcomer-filters")
+        end = html.index("data-clear-filters", start)
+        filters = html[start:end]
+
+        self.assertIn(
+            '<select class="field" data-filter="trainer"',
+            filters,
+        )
+        self.assertIn(
+            '<select class="field" data-filter="group"',
+            filters,
+        )
+        self.assertIn("Тренер: все", filters)
+        self.assertIn("Группа: все", filters)
+        self.assertNotIn(
+            'type="search" class="field" placeholder="Тренер"',
+            filters,
+        )
+        self.assertNotIn(
+            'type="search" class="field" placeholder="Группа"',
+            filters,
+        )
+
+        self.assertContains(
+            response,
+            "populateFilterSelect(controls.trainer, 'trainer', 'Тренер: все')",
+        )
+        self.assertContains(
+            response,
+            "populateFilterSelect(controls.group, 'group', 'Группа: все')",
+        )
+        self.assertContains(
+            response,
+            "lower(row.dataset.trainer) === lower(v.trainer)",
+        )
+        self.assertContains(
+            response,
+            "lower(row.dataset.group) === lower(v.group)",
+        )

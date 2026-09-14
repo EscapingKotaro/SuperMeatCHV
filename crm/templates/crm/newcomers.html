@@ -11,8 +11,12 @@
     </div>
     <div class="grid gap-3 border-b px-4 py-4 md:grid-cols-2 xl:grid-cols-5" data-newcomer-filters>
         <input type="search" class="field" placeholder="ФИО, телефон, источник" data-filter="q">
-        <input type="search" class="field" placeholder="Тренер" data-filter="trainer">
-        <input type="search" class="field" placeholder="Группа" data-filter="group">
+        <select class="field" data-filter="trainer" aria-label="Фильтр по тренеру">
+            <option value="">Тренер: все</option>
+        </select>
+        <select class="field" data-filter="group" aria-label="Фильтр по группе">
+            <option value="">Группа: все</option>
+        </select>
         <input type="text" inputmode="numeric" class="field" placeholder="Возраст или год рождения" data-filter="age">
         <div class="flex gap-2">
             <input type="date" class="field" aria-label="Дата заявки с" data-filter="from">
@@ -234,6 +238,21 @@
         [...root.querySelectorAll('[data-filter]')].map(el => [el.dataset.filter, el])
     );
     const params = new URLSearchParams(window.location.search);
+
+    const populateFilterSelect = (control, datasetKey, emptyLabel) => {
+        const values = [...new Set(
+            rows
+                .map(row => (row.dataset[datasetKey] || '').trim())
+                .filter(Boolean)
+        )].sort((left, right) => left.localeCompare(right, 'ru'));
+
+        control.replaceChildren(new Option(emptyLabel, ''));
+        values.forEach(value => control.add(new Option(value, value)));
+    };
+
+    populateFilterSelect(controls.trainer, 'trainer', 'Тренер: все');
+    populateFilterSelect(controls.group, 'group', 'Группа: все');
+
     Object.entries(controls).forEach(([key, control]) => {
         if (params.has(key)) control.value = params.get(key);
     });
@@ -253,8 +272,8 @@
         rows.forEach(row => {
             const show = (
                 (!v.q || lower(row.dataset.search).includes(lower(v.q)))
-                && (!v.trainer || lower(row.dataset.trainer).includes(lower(v.trainer)))
-                && (!v.group || lower(row.dataset.group).includes(lower(v.group)))
+                && (!v.trainer || lower(row.dataset.trainer) === lower(v.trainer))
+                && (!v.group || lower(row.dataset.group) === lower(v.group))
                 && (!v.from || row.dataset.applicationDate >= v.from)
                 && (!v.to || row.dataset.applicationDate <= v.to)
                 && (!v.attended || row.dataset.attended === v.attended)
