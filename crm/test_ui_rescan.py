@@ -556,34 +556,66 @@ class UIRescanTests(TestCase):
             "Пусто — общая задача для всей администрации",
         )
 
-    def test_group_modal_uses_shared_scroll_contract(self):
+    def test_modal_scroll_contract_covers_all_modal_shapes(self):
         from pathlib import Path
 
         from django.contrib.staticfiles import finders
 
-        response = self.client.get(
+        group_response = self.client.get(
             reverse("group_list"),
             {"edit": self.group.pk},
         )
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'id="group-modal"')
-        self.assertContains(response, 'class="modal open"')
-        self.assertContains(response, 'class="modal-body"')
+        self.assertEqual(group_response.status_code, 200)
+        self.assertContains(group_response, 'id="group-modal"')
+        self.assertContains(group_response, 'class="modal open"')
+        self.assertContains(group_response, 'class="modal-body"')
+        self.assertContains(group_response, "crm/app.css?v=5")
+
+        child_response = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertEqual(child_response.status_code, 200)
+        child_html = " ".join(child_response.content.decode().split())
+        child_modal_start = child_html.index('id="child-edit-modal"')
+        child_modal_end = child_html.index("</section>", child_modal_start)
+        child_modal = child_html[child_modal_start:child_modal_end]
+        self.assertIn("<form ", child_modal)
+        self.assertIn('class="modal-body', child_modal)
+
+        attendance_response = self.client.get(
+            reverse("attendance"),
+            {"group_id": self.group.pk},
+        )
+        self.assertEqual(attendance_response.status_code, 200)
+        self.assertContains(
+            attendance_response,
+            'id="attendance-reason-modal" class="hidden fixed inset-0',
+        )
 
         css_path = finders.find("crm/app.css")
         self.assertIsNotNone(css_path)
         css = Path(css_path).read_text(encoding="utf-8")
 
         self.assertIn(
-            ".modal.open{display:flex;min-height:0;flex-direction:column}",
+            ".modal.open{display:flex;min-height:0;flex-direction:column;"
+            "overflow-y:auto;",
             css,
         )
         self.assertIn(
-            ".modal>.modal-body{flex:1 1 auto}",
+            ".modal>form{display:flex;max-height:inherit;",
             css,
         )
         self.assertIn(
-            ".modal-body{min-height:0;overflow-y:auto;",
+            ".modal>.modal-body{flex:0 0 auto;overflow:visible}",
+            css,
+        )
+        self.assertIn(
+            ".modal>form>.modal-body{flex:1 1 auto;overflow-y:auto;",
+            css,
+        )
+        self.assertIn(
+            ".crm-overlay-panel{max-height:calc(100dvh - 2rem);"
+            "overflow-y:auto;",
             css,
         )
 

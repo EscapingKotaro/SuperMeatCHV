@@ -28,13 +28,14 @@ body{font-size:16px}.btn,.field,.nav-pill,.menu-item{font-size:.9rem;min-height:
 
 /* Shared modal behavior: one scroll contract for common and legacy overlays. */
 body.modal-open{overflow:hidden}
-.modal{overflow:hidden}
-.modal.open{display:flex;min-height:0;flex-direction:column}
-.modal>form{display:flex;max-height:88vh;min-height:0;width:100%;flex:1 1 auto;flex-direction:column}
-.modal>.modal-body{flex:1 1 auto}
+.modal{max-height:min(88vh,calc(100dvh - 2rem));overflow:hidden}
+.modal.open{display:flex;min-height:0;flex-direction:column;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable}
+.modal>form{display:flex;max-height:inherit;min-height:0;width:100%;flex:1 1 auto;flex-direction:column;overflow:hidden}
+.modal>.modal-body{flex:0 0 auto;overflow:visible}
+.modal>form>.modal-body{flex:1 1 auto;overflow-y:auto;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch}
 .modal-head,.modal-foot{flex:0 0 auto}
-.modal-body{min-height:0;overflow-y:auto;overscroll-behavior:contain}
-.crm-overlay-panel{max-height:calc(100vh - 2rem);overflow-y:auto;overscroll-behavior:contain}
+.modal-body{min-height:0;overscroll-behavior:contain}
+.crm-overlay-panel{max-height:calc(100dvh - 2rem);overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable;-webkit-overflow-scrolling:touch}
 
 /* Application rows keep their workflow color on hover. */
 .data-table tbody tr[data-lead-row]{--lead-hover-bg:#f8fafc}
