@@ -834,6 +834,47 @@ class IntakeEditRegressionTests(TestCase):
         )
         self.assertEqual(child.status, Child.Status.TRIAL)
 
+    def test_newcomer_payment_action_is_clickable_and_preselects_child(self):
+        trainer = Trainer.objects.create(full_name="Тренер оплаты")
+        group = Group.objects.create(name="Группа оплаты", trainer=trainer)
+        newcomer = Newcomer.objects.create(
+            full_name="Петрова Анна",
+            age_text="9 лет",
+            trial_at=timezone.now(),
+            trainer=trainer,
+            group=group,
+            attended=True,
+        )
+
+        page = self.client.get(reverse("newcomers"))
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "data-newcomer-payment-convert")
+        self.assertContains(page, 'data-lucide="credit-card"')
+        self.assertContains(page, "Создать карточку и добавить оплату")
+
+        response = self.client.post(
+            reverse("newcomers"),
+            {
+                "action": "convert",
+                "newcomer_id": str(newcomer.pk),
+            },
+        )
+
+        newcomer.refresh_from_db()
+        child = newcomer.child
+        self.assertRedirects(
+            response,
+            f"{reverse('payments')}?child={child.pk}&new_payment=1",
+        )
+
+        page = self.client.get(reverse("newcomers"))
+        html = page.content.decode()
+        self.assertIn("data-newcomer-payment-link", html)
+        self.assertIn(
+            f"{reverse('payments')}?child={child.pk}&new_payment=1",
+            html,
+        )
+
     def test_intake_ui_and_dispensary_field_explain_real_meaning(self):
         applications = self.client.get(reverse("applications"))
         newcomers = self.client.get(reverse("newcomers"))

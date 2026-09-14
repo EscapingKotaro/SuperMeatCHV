@@ -99,20 +99,47 @@
                     <td class="text-center">
                         {% if item.child %}
                         <a href="{% url 'payments' %}?child={{ item.child.pk }}&new_payment=1"
-                           class="inline-flex h-6 w-6 items-center justify-center rounded border {% if item.has_paid %}border-emerald-300 bg-emerald-50 text-emerald-700{% else %}border-slate-300 bg-white text-slate-400 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700{% endif %}"
+                           class="inline-flex h-6 w-6 items-center justify-center rounded border {% if item.has_paid %}border-emerald-300 bg-emerald-50 text-emerald-700{% else %}border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100{% endif %}"
                            data-newcomer-payment-link
                            data-newcomer-payment-state="{% if item.has_paid %}paid{% else %}unpaid{% endif %}"
                            title="{% if item.has_paid %}Открыть оплаты спортсмена{% else %}Добавить оплату спортсмену{% endif %}"
                            aria-label="{% if item.has_paid %}Оплачено: открыть оплаты {{ item.full_name }}{% else %}Добавить оплату: {{ item.full_name }}{% endif %}">
                             {% if item.has_paid %}
                             <i data-lucide="check" class="h-4 w-4"></i>
+                            {% else %}
+                            <i data-lucide="credit-card" class="h-4 w-4"></i>
                             {% endif %}
                         </a>
                         {% else %}
-                        <span class="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-slate-50 text-slate-300"
-                              data-newcomer-payment-unavailable
-                              title="Сначала добавьте пробника в табель"
-                              aria-label="Оплата недоступна: сначала добавьте {{ item.full_name }} в табель"></span>
+                            {% if item.trial_at and item.group and item.attended and not item.lesson_cancelled and not item.trial_not_liked %}
+                                {% if item.birth_date or item.age_text %}
+                                <form method="post" class="inline-flex" data-newcomer-payment-convert>
+                                    {% csrf_token %}
+                                    <input type="hidden" name="action" value="convert">
+                                    <input type="hidden" name="newcomer_id" value="{{ item.pk }}">
+                                    <button type="submit"
+                                            class="inline-flex h-6 w-6 items-center justify-center rounded border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100"
+                                            title="Создать карточку и добавить оплату"
+                                            aria-label="Создать карточку и добавить оплату: {{ item.full_name }}">
+                                        <i data-lucide="credit-card" class="h-4 w-4"></i>
+                                    </button>
+                                </form>
+                                {% else %}
+                                <span class="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-slate-50 text-slate-300"
+                                      data-newcomer-payment-unavailable
+                                      title="Сначала укажите возраст"
+                                      aria-label="Оплата недоступна: сначала укажите возраст {{ item.full_name }}">
+                                    <i data-lucide="lock-keyhole" class="h-3.5 w-3.5"></i>
+                                </span>
+                                {% endif %}
+                            {% else %}
+                            <span class="inline-flex h-6 w-6 items-center justify-center rounded border border-slate-200 bg-slate-50 text-slate-300"
+                                  data-newcomer-payment-unavailable
+                                  title="Сначала подтвердите посещение пробного и заполните дату с группой"
+                                  aria-label="Оплата пока недоступна: {{ item.full_name }}">
+                                <i data-lucide="lock-keyhole" class="h-3.5 w-3.5"></i>
+                            </span>
+                            {% endif %}
                         {% endif %}
                     </td>
                     <td class="text-center">

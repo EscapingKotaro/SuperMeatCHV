@@ -3647,7 +3647,11 @@ def newcomers_page(request):
                 "Карточка спортсмена создана. "
                 "Если оплата получена — зафиксируйте её в продлениях.",
             )
-            return redirect("payments")
+            if request.POST.get("return_to_card") == "1":
+                return redirect("child_card", pk=child.pk)
+            return redirect(
+                f"{reverse('payments')}?child={child.pk}&new_payment=1"
+            )
             
         if form.is_valid():
             newcomer = form.save()
