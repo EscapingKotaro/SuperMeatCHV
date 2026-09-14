@@ -78,3 +78,40 @@ class TrialCreditTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertEqual(TrialCredit.objects.get().subscription_id, self.sub.pk)
         self.assertEqual(self.child.sessions_left(), 7)
+
+    def test_late_trial_confirmation_after_payment_applies_credit_automatically(self):
+        from .payment_submission import issue_token
+
+        self.newcomer.attended = False
+        self.newcomer.save(update_fields=["attended"])
+
+        user = get_user_model().objects.create_user(
+            username="trial-payment-before-confirmation",
+            is_staff=True,
+        )
+        self.client.force_login(user)
+        response = self.client.post(
+            reverse("payments"),
+            {
+                "action": "payment",
+                "child_id": self.child.pk,
+                "amount": "100",
+                "date": self.today.isoformat(),
+                "subscription_id": self.sub.pk,
+                "submission_token": issue_token(user.pk),
+            },
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(
+            TrialCredit.objects.filter(child=self.child).exists(),
+        )
+        self.assertEqual(self.sub.sessions_used(), 0)
+
+        self.newcomer.attended = True
+        self.newcomer.save(update_fields=["attended"])
+
+        credit = TrialCredit.objects.get(child=self.child)
+        self.assertEqual(credit.subscription_id, self.sub.pk)
+        self.assertEqual(self.sub.sessions_used(), 1)
+        self.assertEqual(self.child.sessions_left(), 7)
