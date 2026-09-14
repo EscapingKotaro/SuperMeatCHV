@@ -333,3 +333,73 @@ class UIRescanTests(TestCase):
         self.assertEqual(period.count("max-w-full"), 2)
         self.assertIn('name="attendance_from"', period)
         self.assertIn('name="attendance_to"', period)
+
+    def test_management_profile_and_users_copy_is_user_facing(self):
+        from types import SimpleNamespace
+
+        from django.utils import timezone
+
+        request = RequestFactory().get("/")
+        request.user = self.user
+        event = SimpleNamespace(
+            actor=self.user,
+            description="Проверочное действие",
+            created_at=timezone.now(),
+            action="child_deleted",
+        )
+        boss = render_to_string(
+            "crm/boss.html",
+            {
+                "events": [event],
+                "events_count": 1,
+                "trainer_rows": [],
+                "top_trainers_attendance": [],
+                "top_groups_attendance": [],
+                "top_trial_groups": [],
+                "top_competition_groups": [],
+            },
+            request=request,
+        )
+        self.assertIn("Показатели тренеров", boss)
+        self.assertIn("Скачать таблицу", boss)
+        self.assertIn("Записей в журнале: 1", boss)
+        self.assertNotIn("KPI", boss)
+        self.assertNotIn("child_deleted", boss)
+        self.assertNotIn(">Excel<", boss)
+
+        profile = render_to_string(
+            "crm/profile.html",
+            {
+                "profile_form": [],
+                "password_form": [],
+                "attendance_visual": {
+                    "show_subscription_boundary": True,
+                    "highlight_today": True,
+                    "show_legend": True,
+                },
+            },
+            request=request,
+        )
+        self.assertIn("Учётная запись активна", profile)
+        self.assertIn("Контрастная вертикальная линия", profile)
+        self.assertNotIn("Аккаунт активен", profile)
+        self.assertNotIn("Красная вертикальная линия", profile)
+
+        other = get_user_model().objects.create_user(
+            username="ui-copy-other",
+        )
+        users = render_to_string(
+            "crm/users.html",
+            {
+                "users": [self.user, other],
+                "current_role": "admin",
+                "form": [],
+            },
+            request=request,
+        )
+        self.assertIn("Эл. почта не указана", users)
+        self.assertIn('placeholder="Эл. почта"', users)
+        self.assertIn("Текущая учётная запись", users)
+        self.assertIn("Создать пользователя", users)
+        self.assertNotIn("Email", users)
+        self.assertNotIn("аккаунт", users.lower())

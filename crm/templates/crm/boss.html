@@ -73,7 +73,7 @@
 <div class="grid gap-4 xl:grid-cols-2">
     <section class="card overflow-hidden">
         <div class="p-5">
-            <h2 class="font-extrabold">KPI тренеров</h2>
+            <h2 class="font-extrabold">Показатели тренеров</h2>
             <p class="text-xs text-slate-500">
                 Пробные — фактический приход за текущий месяц.
                 «Остались» — пробники с отмеченной оплатой.
@@ -138,14 +138,14 @@
                     {% if all_logs %}Все действия{% else %}Последние действия{% endif %}
                 </h2>
                 <p class="text-xs text-slate-500">
-                    Журнал сотрудников · всего {{ events_count }} событий
+                    Записей в журнале: {{ events_count }}
                 </p>
             </div>
 
             <div class="flex gap-2">
                 <a href="{% url 'boss_logs_export' %}" class="btn btn-soft">
                     <i data-lucide="file-spreadsheet"></i>
-                    Excel
+                    Скачать таблицу
                 </a>
 
                 <a href="{% if all_logs %}
@@ -164,7 +164,6 @@
                     <p class="text-slate-500">
                         {% if event.actor %}{{ event.actor.get_full_name|default:event.actor.username }}{% else %}Система{% endif %}
                         · {{ event.created_at|date:"d.m.Y H:i:s" }}
-                        · {{ event.action }}
                     </p>
                 </div>
             </div>

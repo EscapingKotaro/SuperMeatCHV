@@ -5,7 +5,7 @@
         <span class="mx-auto grid h-20 w-20 place-items-center rounded-2xl bg-[#E8F0FF] text-2xl font-extrabold text-[#315EBC]">{{ request.user.username|slice:":2"|upper }}</span>
         <h2 class="mt-4 font-extrabold">{{ request.user.get_full_name|default:request.user.username }}</h2>
         <p class="text-xs text-slate-500">{{ request.user.profile.get_role_display|default:"Администратор" }}</p>
-        <span class="badge mt-4 bg-emerald-50 text-emerald-700">Аккаунт активен</span>
+        <span class="badge mt-4 bg-emerald-50 text-emerald-700">Учётная запись активна</span>
     </section>
     <section class="space-y-4">
         <form method="post" data-guard-draft class="card p-5">
@@ -41,7 +41,7 @@
                            {% if attendance_visual.show_subscription_boundary %}checked{% endif %}>
                     <span>
                         <b class="block text-sm">Граница окончания абонемента</b>
-                        <span class="text-xs text-slate-500">Красная вертикальная линия на последнем занятии абонемента.</span>
+                        <span class="text-xs text-slate-500">Контрастная вертикальная линия на последнем занятии абонемента.</span>
                     </span>
                 </label>
 

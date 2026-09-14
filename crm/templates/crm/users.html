@@ -24,7 +24,7 @@
                 <tr>
                     <td>
                         <b>{{ item.get_full_name|default:item.username }}</b>
-                        <small class="block text-slate-500">{{ item.email|default:"Email не указан" }}</small>
+                        <small class="block text-slate-500">{{ item.email|default:"Эл. почта не указана" }}</small>
                     </td>
                     <td>{{ item.username }}</td>
                     <td>
@@ -39,9 +39,9 @@
                     <td class="min-w-[280px]">
                         {% with target_role=item.profile.role|default:"manager" %}
                         {% if item == request.user %}
-                        <span class="text-xs text-slate-400">Текущий аккаунт</span>
+                        <span class="text-xs text-slate-400">Текущая учётная запись</span>
                         {% elif item.is_superuser and not request.user.is_superuser %}
-                        <span class="text-xs text-slate-400">Системный аккаунт</span>
+                        <span class="text-xs text-slate-400">Системная учётная запись</span>
                         {% elif current_role == "senior" and target_role == "boss" or current_role == "senior" and target_role == "admin" or current_role == "boss" and target_role == "admin" %}
                         <span class="text-xs text-slate-400">Недостаточно прав</span>
                         {% else %}
@@ -56,7 +56,7 @@
                                 <input class="field" name="first_name" value="{{ item.first_name }}" placeholder="Имя">
                                 <input class="field" name="last_name" value="{{ item.last_name }}" placeholder="Фамилия">
                                 <input class="field" name="username" value="{{ item.username }}" placeholder="Логин" required>
-                                <input class="field" type="email" name="email" value="{{ item.email }}" placeholder="Email">
+                                <input class="field" type="email" name="email" value="{{ item.email }}" placeholder="Эл. почта">
                                 <select class="field" name="role" required>
                                     <option value="manager" {% if target_role == "manager" %}selected{% endif %}>Менеджер</option>
                                     <option value="senior" {% if target_role == "senior" %}selected{% endif %}>Старший менеджер</option>
@@ -117,7 +117,7 @@
         </div>
         <div class="modal-foot">
             <button type="button" data-close class="btn btn-soft">Отмена</button>
-            <button class="btn btn-primary">Создать аккаунт</button>
+            <button class="btn btn-primary">Создать пользователя</button>
         </div>
     </form>
 </section>
