@@ -180,7 +180,9 @@ class ProjectCompletionTests(TestCase):
             attended=True,
         )
         response = self.client.get(reverse('newcomers'))
-        payment_url = f"{reverse('payments')}?child={self.child.pk}"
+        payment_url = (
+            f"{reverse('payments')}?child={self.child.pk}&new_payment=1"
+        )
 
         self.assertContains(response, f'href="{payment_url}"')
         self.assertContains(response, 'data-newcomer-payment-link')
@@ -189,6 +191,23 @@ class ProjectCompletionTests(TestCase):
             'data-newcomer-payment-state="unpaid"',
         )
         self.assertFalse(newcomer.has_paid)
+
+        payment_response = self.client.get(
+            reverse('payments'),
+            {
+                'child': self.child.pk,
+                'new_payment': '1',
+            },
+        )
+        self.assertEqual(payment_response.status_code, 200)
+        self.assertEqual(
+            payment_response.context['payment_child_id'],
+            self.child.pk,
+        )
+        self.assertContains(
+            payment_response,
+            'id="payment-modal" class="modal open"',
+        )
 
         Payment.objects.create(child=self.child, amount=100)
         response = self.client.get(reverse('newcomers'))

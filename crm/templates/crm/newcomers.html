@@ -94,7 +94,7 @@
                     </td>
                     <td class="text-center">
                         {% if item.child %}
-                        <a href="{% url 'payments' %}?child={{ item.child.pk }}"
+                        <a href="{% url 'payments' %}?child={{ item.child.pk }}&new_payment=1"
                            class="inline-flex h-6 w-6 items-center justify-center rounded border {% if item.has_paid %}border-emerald-300 bg-emerald-50 text-emerald-700{% else %}border-slate-300 bg-white text-slate-400 hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700{% endif %}"
                            data-newcomer-payment-link
                            data-newcomer-payment-state="{% if item.has_paid %}paid{% else %}unpaid{% endif %}"
