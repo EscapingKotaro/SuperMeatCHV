@@ -112,6 +112,42 @@ class RevenueForecastRegressionTests(TestCase):
         }
         self.assertNotIn("Иванова Анна", names)
 
+    def test_forecast_renders_weekdays_in_russian(self):
+        self.client.login(
+            username="forecast-admin",
+            password="TestPass123!",
+        )
+        response = self.client.get(reverse("revenue_forecast"))
+
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode().lower()
+
+        for english_weekday in (
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday",
+        ):
+            self.assertNotIn(english_weekday, html)
+
+        self.assertTrue(
+            any(
+                russian_weekday in html
+                for russian_weekday in (
+                    "понедельник",
+                    "вторник",
+                    "среда",
+                    "четверг",
+                    "пятница",
+                    "суббота",
+                    "воскресенье",
+                )
+            )
+        )
+
     def test_forecast_uses_net_amount_after_prepayment(self):
         today = timezone.localdate()
         ScheduleSlot.objects.create(

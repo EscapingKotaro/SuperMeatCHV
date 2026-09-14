@@ -50,8 +50,8 @@
             Документы
             <select name="alerts" class="field mt-1 w-full">
                 <option value="all" {% if client_alerts == 'all' %}selected{% endif %}>Любые</option>
-                <option value="yes" {% if client_alerts == 'yes' %}selected{% endif %}>Есть алерты</option>
-                <option value="no" {% if client_alerts == 'no' %}selected{% endif %}>Без алертов</option>
+                <option value="yes" {% if client_alerts == 'yes' %}selected{% endif %}>Есть проблемы</option>
+                <option value="no" {% if client_alerts == 'no' %}selected{% endif %}>Без проблем</option>
             </select>
         </label>
         <div class="grid grid-cols-2 gap-2">
@@ -139,9 +139,9 @@
                     </td>
                     <td>
                         {% if row.alert_count %}
-                        <span class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">{{ row.alert_count }} алерт.</span>
+                        <span class="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-700">Проблем: {{ row.alert_count }}</span>
                         {% else %}
-                        <span class="font-semibold text-emerald-700">Ок</span>
+                        <span class="font-semibold text-emerald-700">В порядке</span>
                         {% endif %}
                     </td>
                 </tr>

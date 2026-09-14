@@ -53,8 +53,8 @@
             <span class="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold {% if document_alerts %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}"
                   data-child-indicator="documents">
                 <i data-lucide="triangle-alert" class="h-4 w-4"></i>
-                Аллерт
-                <b>{% if document_alerts %}{{ document_alerts|length }}{% else %}нет{% endif %}</b>
+                Документы
+                <b>{% if document_alerts %}{{ document_alerts|length }}{% else %}в порядке{% endif %}</b>
             </span>
         </div>
     </div>
@@ -71,7 +71,7 @@
             <div class="space-y-3 text-sm" data-child-contacts>
                 <div class="grid gap-3 sm:grid-cols-2">
                     <div class="rounded-xl bg-slate-50 p-3" data-parent-contact="primary">
-                        <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Родитель 1</div>
+                        <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Основной контакт</div>
                         <div class="font-semibold">{{ child.parent_name|default:"—" }}</div>
                         {% if child.parent_phone %}
                         <a href="tel:{{ child.parent_phone }}" class="mt-1 inline-block font-semibold text-[#FF5C35] hover:underline">
@@ -82,7 +82,7 @@
                         {% endif %}
                     </div>
                     <div class="rounded-xl bg-slate-50 p-3" data-parent-contact="secondary">
-                        <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Родитель 2</div>
+                        <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Дополнительный контакт</div>
                         <div class="font-semibold">{{ child.second_parent_name|default:"—" }}</div>
                         {% if child.second_parent_phone %}
                         <a href="tel:{{ child.second_parent_phone }}" class="mt-1 inline-block font-semibold text-[#FF5C35] hover:underline">
@@ -183,7 +183,7 @@
         <span class="badge bg-red-50 text-red-700"
               title="Есть отсутствующие, просроченные или без срока документы">
             <i data-lucide="triangle-alert" class="h-3.5 w-3.5"></i>
-            {{ document_alerts|length }} проблем
+            Проблем с документами: {{ document_alerts|length }}
         </span>
         {% else %}
         <span class="badge bg-emerald-50 text-emerald-700">Всё действует</span>

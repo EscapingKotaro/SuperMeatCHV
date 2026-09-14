@@ -275,10 +275,10 @@ class ChildForm(StyledFormMixin, forms.ModelForm):
         super().__init__(*args, **kwargs)
         self.fields["birth_date"].input_formats = ["%Y-%m-%d"]
         self.fields["trial_from"].input_formats = ["%Y-%m-%d"]
-        self.fields["parent_name"].label = "Родитель 1"
-        self.fields["parent_phone"].label = "Телефон родителя 1"
-        self.fields["second_parent_name"].label = "Родитель 2"
-        self.fields["second_parent_phone"].label = "Телефон родителя 2"
+        self.fields["parent_name"].label = "Основной контакт"
+        self.fields["parent_phone"].label = "Телефон основного контакта"
+        self.fields["second_parent_name"].label = "Дополнительный контакт"
+        self.fields["second_parent_phone"].label = "Телефон дополнительного контакта"
         self.fields["address"].label = "Адрес прописки"
         self.fields["sex"].choices = [
             ("", "— Не указан —"),

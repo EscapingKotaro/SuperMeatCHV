@@ -271,6 +271,51 @@ class UIRescanTests(TestCase):
             styles,
         )
 
+    def test_contacts_and_document_copy_are_universal_and_russian(self):
+        from .forms import ChildForm
+
+        response = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertEqual(response.status_code, 200)
+        html = " ".join(response.content.decode().split())
+
+        self.assertIn("Основной контакт", html)
+        self.assertIn("Дополнительный контакт", html)
+        self.assertNotIn("Родитель 1", html)
+        self.assertNotIn("Родитель 2", html)
+        self.assertNotIn("аллерт", html.lower())
+        self.assertIn(
+            f"Проблем с документами: {len(response.context['document_alerts'])}",
+            html,
+        )
+
+        form = ChildForm(instance=self.child)
+        self.assertEqual(
+            form.fields["parent_name"].label,
+            "Основной контакт",
+        )
+        self.assertEqual(
+            form.fields["parent_phone"].label,
+            "Телефон основного контакта",
+        )
+        self.assertEqual(
+            form.fields["second_parent_name"].label,
+            "Дополнительный контакт",
+        )
+        self.assertEqual(
+            form.fields["second_parent_phone"].label,
+            "Телефон дополнительного контакта",
+        )
+
+        clients = self.client.get(reverse("clients"))
+        self.assertEqual(clients.status_code, 200)
+        clients_html = clients.content.decode().lower()
+        self.assertNotIn("алерт", clients_html)
+        self.assertContains(clients, "Есть проблемы")
+        self.assertContains(clients, "Без проблем")
+        self.assertContains(clients, "В порядке")
+
     def test_custom_attendance_period_stays_inside_card(self):
         response = self.client.get(
             reverse("child_card", args=[self.child.pk]),

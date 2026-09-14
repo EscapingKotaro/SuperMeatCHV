@@ -6,7 +6,7 @@
     <div class="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
         <!-- Шапка дня -->
         <div class="border-b border-slate-100 bg-slate-50/50 p-4 text-center">
-            <p class="text-xs font-bold uppercase tracking-wider text-slate-400">{{ day.weekday }}</p>
+            <p class="text-xs font-bold uppercase tracking-wider text-slate-400">{{ day.date|date:"l" }}</p>
             <h3 class="text-xl font-extrabold text-slate-900">{{ day.date|date:"d.m" }}</h3>
             <div class="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-bold text-emerald-700">
                 <i data-lucide="banknote" class="h-3 w-3"></i>
