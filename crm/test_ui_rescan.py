@@ -556,6 +556,37 @@ class UIRescanTests(TestCase):
             "Пусто — общая задача для всей администрации",
         )
 
+    def test_group_modal_uses_shared_scroll_contract(self):
+        from pathlib import Path
+
+        from django.contrib.staticfiles import finders
+
+        response = self.client.get(
+            reverse("group_list"),
+            {"edit": self.group.pk},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="group-modal"')
+        self.assertContains(response, 'class="modal open"')
+        self.assertContains(response, 'class="modal-body"')
+
+        css_path = finders.find("crm/app.css")
+        self.assertIsNotNone(css_path)
+        css = Path(css_path).read_text(encoding="utf-8")
+
+        self.assertIn(
+            ".modal.open{display:flex;min-height:0;flex-direction:column}",
+            css,
+        )
+        self.assertIn(
+            ".modal>.modal-body{flex:1 1 auto}",
+            css,
+        )
+        self.assertIn(
+            ".modal-body{min-height:0;overflow-y:auto;",
+            css,
+        )
+
     def test_attendance_empty_group_keeps_table_and_shows_empty_state(self):
         from datetime import time
 
