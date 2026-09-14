@@ -403,3 +403,49 @@ class UIRescanTests(TestCase):
         self.assertIn("Создать пользователя", users)
         self.assertNotIn("Email", users)
         self.assertNotIn("аккаунт", users.lower())
+
+    def test_finance_pages_use_clear_russian_copy(self):
+        request = RequestFactory().get("/")
+        request.user = self.user
+
+        statistics = render_to_string(
+            "crm/statistics.html",
+            {
+                "is_senior": True,
+                "month_start": date(2026, 9, 1),
+                "revenue_month": 0,
+                "potential": 0,
+                "bar_scale": 1,
+                "target": None,
+                "groups_stats": [],
+                "trainers_stats": [],
+            },
+            request=request,
+        )
+        self.assertIn("Зарплаты тренеров", statistics)
+        self.assertIn("Расчёт и выгрузка", statistics)
+        self.assertNotIn("ЗП тренеров", statistics)
+        self.assertNotIn("Excel", statistics)
+
+        salaries = render_to_string(
+            "crm/salaries.html",
+            {
+                "month_start": date(2026, 9, 1),
+                "month_end": date(2026, 9, 30),
+                "can_manage_salary": True,
+                "editing_adjustment": None,
+                "adjustment_form": [],
+                "summary_rows": [],
+                "trainers": [],
+                "grand_total": 0,
+            },
+            request=request,
+        )
+        self.assertIn("Скачать таблицу", salaries)
+        self.assertIn("Ручное начисление", salaries)
+        self.assertIn("Персональные занятия", salaries)
+        self.assertIn("Посещений", salaries)
+        self.assertIn("Удалить ручное начисление?", salaries)
+        self.assertNotIn("Excel", salaries)
+        self.assertNotIn("строку ЗП", salaries)
+        self.assertNotIn("Персоналки", salaries)

@@ -6,7 +6,7 @@
         <input type="month" name="month" value="{{ month_start|date:'Y-m' }}" class="field text-sm" onchange="this.form.submit()">
     </form>
     <a download href="{% url 'salaries_export' %}?month={{ month_start|date:'Y-m' }}" class="btn btn-primary">
-        <i data-lucide="file-spreadsheet"></i>Выгрузить Excel
+        <i data-lucide="file-spreadsheet"></i>Скачать таблицу
     </a>
 </div>
 {% endblock %}
@@ -16,8 +16,8 @@
     {% if can_manage_salary %}
     <section class="card p-4" id="salary-adjustment">
         <div class="mb-3">
-            <h2 class="font-extrabold">{% if editing_adjustment %}Изменить строку ЗП{% else %}Ручная строка ЗП{% endif %} · {{ month_start|date:'m.Y' }}</h2>
-            <p class="text-xs text-slate-500">Персоналки, замены, соревнования, доплата или удержание.</p>
+            <h2 class="font-extrabold">{% if editing_adjustment %}Изменить начисление{% else %}Ручное начисление{% endif %} · {{ month_start|date:'m.Y' }}</h2>
+            <p class="text-xs text-slate-500">Персональные занятия, замены, соревнования, доплаты и удержания.</p>
         </div>
         <form method="post" data-guard-draft action="?month={{ month_start|date:'Y-m' }}{% if editing_adjustment %}&edit={{ editing_adjustment.pk }}{% endif %}#salary-adjustment" class="grid gap-3 sm:grid-cols-[1.2fr_1.5fr_140px_auto]">
             {% csrf_token %}
@@ -46,7 +46,7 @@
             <thead><tr class="bg-slate-50 text-left text-xs font-bold">
                 <th class="px-4 py-2 border-b border-slate-200">Группа / начисление</th>
                 <th class="px-2 py-2 border-b border-slate-200 text-center">Ставка</th>
-                <th class="px-2 py-2 border-b border-slate-200 text-center">Посещение</th>
+                <th class="px-2 py-2 border-b border-slate-200 text-center">Посещений</th>
                 <th class="px-2 py-2 border-b border-slate-200 text-right">Всего</th>
             </tr></thead>
             <tbody>
@@ -78,7 +78,7 @@
                             <span>{{ r.name }}</span>
                             {% if can_manage_salary and r.is_adjustment %}
                             <a class="text-xs font-bold text-blue-700" href="?month={{ month_start|date:'Y-m' }}&edit={{ r.adjustment_id }}#salary-adjustment">Изменить</a>
-                            <form method="post" action="?month={{ month_start|date:'Y-m' }}" onsubmit="return confirm('Удалить ручную строку ЗП?')">
+                            <form method="post" action="?month={{ month_start|date:'Y-m' }}" onsubmit="return confirm('Удалить ручное начисление?')">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="delete_adjustment">
                                 <input type="hidden" name="adjustment_id" value="{{ r.adjustment_id }}">
