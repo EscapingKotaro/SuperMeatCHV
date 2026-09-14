@@ -123,3 +123,40 @@ class UIRescanTests(TestCase):
             menu.index(reverse("newcomers")),
             menu.index(reverse("applications")),
         )
+
+    def test_child_card_does_not_duplicate_discount_percentages(self):
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        from .models import Subscription
+
+        today = timezone.localdate()
+        self.child.discount_percent = 5
+        self.child.save(update_fields=["discount_percent"])
+
+        Subscription.objects.create(
+            child=self.child,
+            group=self.group,
+            start_date=today,
+            end_date=today + timedelta(days=30),
+            sessions_total=8,
+            price=4500,
+            discount_percent=5,
+            promo="Осень",
+            promo_percent=10,
+            promo_start_date=today,
+            promo_end_date=today + timedelta(days=15),
+            is_active=True,
+        )
+
+        response = self.client.get(
+            reverse("child_card", args=[self.child.pk]),
+        )
+        self.assertEqual(response.status_code, 200)
+
+        html = " ".join(response.content.decode().split())
+        self.assertNotIn('data-child-indicator="discount"', html)
+        self.assertNotIn("Индивидуальная скидка 5%", html)
+        self.assertNotIn("5%", html)
+        self.assertEqual(html.count("Осень · 10%"), 1)

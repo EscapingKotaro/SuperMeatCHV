@@ -42,19 +42,13 @@
                 </span>
             </div>
         </div>
-        <!-- Операционные индикаторы вместо дублирующих числовых метрик -->
+        <!-- Операционные индикаторы без дублирования скидок из финансовых форм -->
         <div class="flex flex-wrap gap-2" data-child-status-indicators>
             <span class="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold {% if debt > 0 %}border-red-200 bg-red-50 text-red-700{% else %}border-slate-200 bg-slate-50 text-slate-500{% endif %}"
                   data-child-indicator="debt">
                 <i data-lucide="coins" class="h-4 w-4"></i>
                 Долг
                 <b>{% if debt > 0 %}{{ debt|floatformat:0 }} ₽{% else %}нет{% endif %}</b>
-            </span>
-            <span class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold {% if child.discount_percent %}text-emerald-700{% else %}text-slate-500{% endif %}"
-                  data-child-indicator="discount">
-                <i data-lucide="percent" class="h-4 w-4"></i>
-                Скидка
-                <b>{{ child.discount_percent }}%</b>
             </span>
             <span class="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-bold {% if document_alerts %}border-red-200 bg-red-50 text-red-700{% else %}border-emerald-200 bg-emerald-50 text-emerald-700{% endif %}"
                   data-child-indicator="documents">
@@ -589,10 +583,10 @@
                     </div>
                     <div class="flex items-center gap-3 text-[10px] text-slate-500">
                         <span class="font-semibold text-slate-600">{{ sub.group|default:child.group }}</span>
-                        <span>{{ sub.sessions_total }} занятий{% if sub.cancelled_at %} · Отменён{% endif %} · Индивидуальная скидка {{ sub.discount_percent }}%</span>
+                        <span>{{ sub.sessions_total }} занятий{% if sub.cancelled_at %} · Отменён{% endif %}</span>
                         {% if sub.promo %}
                         <span class="text-[#FF5C35] font-bold">
-                            {{ sub.promo }} · {{ sub.promo_percent }}%
+                            {{ sub.promo }}
                             {% if sub.promo_end_date %}
                                 · до {{ sub.promo_end_date|date:"d.m.Y" }}
                             {% endif %}
