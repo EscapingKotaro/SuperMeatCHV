@@ -230,6 +230,53 @@ class UIRescanTests(TestCase):
         )
         self.assertContains(response, "Занятия: по абонементу")
 
+    def test_groups_page_follows_trainer_then_groups_reference_structure(self):
+        trainer_a = Trainer.objects.create(full_name="Алексей Воронцов")
+        group_a_second = Group.objects.create(
+            name="Бета",
+            trainer=trainer_a,
+        )
+        group_a_first = Group.objects.create(
+            name="Альфа",
+            trainer=trainer_a,
+        )
+        trainer_b = Trainer.objects.create(full_name="Борис Соколов")
+        group_b = Group.objects.create(
+            name="Гамма",
+            trainer=trainer_b,
+        )
+
+        response = self.client.get(reverse("group_list"))
+        self.assertEqual(response.status_code, 200)
+
+        html = " ".join(response.content.decode().split())
+        start = html.index("data-groups-by-trainer")
+        end = html.index("data-group-filter-empty", start)
+        grouped = html[start:end]
+
+        trainer_a_marker = f'data-trainer-block="{trainer_a.pk}"'
+        trainer_b_marker = f'data-trainer-block="{trainer_b.pk}"'
+        self.assertEqual(grouped.count(trainer_a_marker), 1)
+        self.assertEqual(grouped.count(trainer_b_marker), 1)
+        self.assertIn("data-trainer-groups", grouped)
+        self.assertIn(f'data-group-card="{group_a_first.pk}"', grouped)
+        self.assertIn(f'data-group-card="{group_a_second.pk}"', grouped)
+        self.assertIn(f'data-group-card="{group_b.pk}"', grouped)
+        self.assertNotIn('<table class="data-table">', grouped)
+
+        trainer_a_pos = grouped.index(trainer_a_marker)
+        group_a_first_pos = grouped.index(group_a_first.name, trainer_a_pos)
+        group_a_second_pos = grouped.index(group_a_second.name, trainer_a_pos)
+        trainer_b_pos = grouped.index(trainer_b_marker)
+
+        self.assertLess(trainer_a_pos, group_a_first_pos)
+        self.assertLess(group_a_first_pos, group_a_second_pos)
+        self.assertLess(group_a_second_pos, trainer_b_pos)
+        self.assertLess(
+            trainer_b_pos,
+            grouped.index(group_b.name, trainer_b_pos),
+        )
+
     def test_child_visit_statistics_use_non_overflowing_grid(self):
         response = self.client.get(
             reverse("child_card", args=[self.child.pk]),
