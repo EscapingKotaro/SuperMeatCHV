@@ -3648,7 +3648,7 @@ def newcomers_page(request):
                 "Если оплата получена — зафиксируйте её в продлениях.",
             )
             if request.POST.get("return_to_card") == "1":
-                return redirect("child_card", pk=child.pk)
+                return redirect("child_card", child_id=child.pk)
             return redirect(
                 f"{reverse('payments')}?child={child.pk}&new_payment=1"
             )
