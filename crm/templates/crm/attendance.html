@@ -227,9 +227,9 @@
                                     </b>
                                     {% if item.requires_subscription %}
                                     <span class="shrink-0 text-sm font-extrabold text-slate-800"
-                                          title="Использовано занятий из абонемента"
+                                          title="Осталось занятий из абонемента"
                                           data-athlete-sessions>
-                                        {{ item.sessions_used }}/{{ item.sessions_total }}
+                                        {{ item.sessions_left }}/{{ item.sessions_total }}
                                     </span>
                                     {% else %}
                                     <span class="shrink-0 text-[10px] font-bold text-slate-400"
