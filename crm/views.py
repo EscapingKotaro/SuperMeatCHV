@@ -3623,6 +3623,10 @@ def newcomers_page(request):
             if newcomer.child:
                 messages.info(request, "Карточка спортсмена уже создана")
                 return redirect("newcomers")
+            trial_date = None
+            if newcomer.trial_at:
+                trial_date = timezone.localtime(newcomer.trial_at).date()
+
             parts = newcomer.full_name.split()
             child = Child.objects.create(
                 last_name=parts[0] if parts else "Без фамилии",
@@ -3633,9 +3637,28 @@ def newcomers_page(request):
                 parent_phone=newcomer.phone,
                 group=newcomer.group,
                 status=Child.Status.TRIAL,
-                trial_from=timezone.localdate(),
+                trial_from=trial_date or timezone.localdate(),
                 note=newcomer.comment,
             )
+            if (
+                newcomer.attended
+                and trial_date
+                and newcomer.group
+            ):
+                Attendance.objects.get_or_create(
+                    child=child,
+                    date=trial_date,
+                    slot=None,
+                    group_snapshot=newcomer.group,
+                    defaults={
+                        "trainer_snapshot": newcomer.group.trainer,
+                        "salary_rate_snapshot": newcomer.group.salary_rate,
+                        "status": Attendance.Status.PRESENT,
+                        "comment": "Пробное занятие (перенос из новичков)",
+                        "charge_amount": 0,
+                    },
+                )
+
             newcomer.child = child
             newcomer.save(update_fields=["child"])
             if newcomer.lead:
