@@ -899,54 +899,6 @@
             <div class="break-words text-[10px] font-bold leading-tight text-rose-700">Больничный</div>
         </div>
     </div>
-
-    <div class="mt-4 border-t border-slate-100 pt-4">
-        <div class="mb-2 text-[10px] font-bold uppercase text-slate-400">
-            Отметки выбранного периода
-        </div>
-        <div class="max-h-72 overflow-y-auto divide-y divide-slate-100">
-            {% for attendance in attendances %}
-            <div class="py-2 flex items-start gap-3 text-xs">
-                <div class="w-20 shrink-0 font-bold text-slate-600">
-                    {{ attendance.date|date:"d.m.Y" }}
-                </div>
-                <div class="min-w-0 flex-1">
-                    <div class="font-semibold
-                        {% if attendance.status == 'present' %}text-emerald-700
-                        {% elif attendance.status == 'absent' %}text-red-700
-                        {% elif attendance.status == 'frozen' %}text-blue-700
-                        {% else %}text-slate-700{% endif %}">
-                        {{ attendance.get_status_display }}
-                    </div>
-                    {% if attendance.comment %}
-                    <div class="mt-0.5 text-slate-500">{{ attendance.comment }}</div>
-                    {% endif %}
-                    <div class="mt-1 flex flex-wrap items-center gap-1 text-slate-400"
-                         data-attendance-history-meta>
-                        <span>
-                            {% if attendance.group_snapshot %}{{ attendance.group_snapshot.name }}{% elif attendance.slot %}{{ attendance.slot.group.name }}{% else %}Группа —{% endif %}
-                        </span>
-                        <span>·</span>
-                        <span>
-                            {% if attendance.slot %}{{ attendance.slot.get_weekday_display }} {{ attendance.slot.start_time|time:"H:i" }}{% else %}Время —{% endif %}
-                        </span>
-                        <span>·</span>
-                        <span>
-                            {% if attendance.trainer_snapshot %}{{ attendance.trainer_snapshot.full_name }}{% else %}Тренер —{% endif %}
-                        </span>
-                    </div>
-                </div>
-                {% if attendance.charge_amount %}
-                <div class="shrink-0 font-bold text-amber-700">
-                    {{ attendance.charge_amount|floatformat:0 }} ₽
-                </div>
-                {% endif %}
-            </div>
-            {% empty %}
-            <p class="py-3 text-xs text-slate-400 italic">Нет отметок в выбранном периоде</p>
-            {% endfor %}
-        </div>
-    </div>
 </div>
 
         <!-- История соревнований -->
