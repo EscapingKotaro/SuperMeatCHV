@@ -139,7 +139,7 @@ class Command(BaseCommand):
                         child_groups[child_id] = []
                     child_groups[child_id].append({
                         'group_id': group_id,
-                        'clgr_id': row['ClGrId']  # Для определения основной группы
+                        'clgr_id': row['ClGrId']
                     })
 
             # Теперь создаем членства
@@ -158,7 +158,7 @@ class Command(BaseCommand):
                         defaults={
                             'is_primary': is_primary,
                             'joined_at': datetime.now().date(),
-                            'archived_at': None if is_primary else datetime.now().date(),  # Дополнительные группы сразу в архив
+                            'archived_at': None if is_primary else datetime.now().date(),
                             'requires_subscription': True,
                         }
                     )
