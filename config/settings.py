@@ -28,6 +28,13 @@ DEBUG = os.getenv('DJANGO_DEBUG', '1') == '1'
 
 ALLOWED_HOSTS = ["*"]
 
+CSRF_TRUSTED_ORIGINS = [
+    'https://spartak-crm.ru',
+    'http://spartak-crm.ru',
+    'https://www.spartak-crm.ru',
+    'http://www.spartak-crm.ru',
+]
+
 # Application definition
 
 INSTALLED_APPS = [
