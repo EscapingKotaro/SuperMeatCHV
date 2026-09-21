@@ -37,17 +37,21 @@ class Command(BaseCommand):
             old_cursor.execute("SELECT teacherId, teacherName, teacherSalary FROM Teacher")
             for row in old_cursor.fetchall():
                 name = row['teacherName'] or f"Тренер_{row['teacherId']}"
+                # Чистим имя от мусора типа "Pass:11" (видел такое в твоём примере)
+                if 'Pass:' in name:
+                    name = name.split('Pass:')[0].strip() or f"Тренер_{row['teacherId']}"
+                
                 trainer, _ = Trainer.objects.get_or_create(
                     full_name=name,
                     defaults={
                         'phone': '',
                         'is_active': True,
-                        'salary_rate': Decimal(row['teacherSalary'] or 300), # Заглушка ставки
+                        # ️ salary_rate убран — его нет в модели Trainer!
+                        # Ставка тренера хранится в модели Group (поле salary_rate)
                     }
                 )
                 trainer_map[row['teacherId']] = trainer.id
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено тренеров: {len(trainer_map)}"))
-
             self.stdout.write("🔄 Этап 2: Перенос Групп (Group)")
             old_cursor.execute("""
                 SELECT g.ClGrTypeId, g.ClGrTypeName, g.ClGrTypeTeacherId, d.DisciplineSingleVisitPrice 
