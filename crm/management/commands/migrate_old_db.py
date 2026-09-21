@@ -128,7 +128,12 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено детей: {len(child_map)}"))
             
             self.stdout.write("🔄 Этап 4: Перенос Членства в группах (ChildGroupMembership)")
-            # Сначала собираем все группы для каждого ребенка
+
+            # 🔥 УДАЛЯЕМ все автоматически созданные ChildGroupMembership на этапе 3
+            ChildGroupMembership.objects.all().delete()
+            self.stdout.write("   🗑️ Удалены автоматически созданные членства")
+
+            # Собираем все группы для каждого ребенка
             old_cursor.execute("SELECT ClGrId, ClGrClientId, ClGrClGrTypeId FROM ClientGroup")
             child_groups = {}
             for row in old_cursor.fetchall():
@@ -142,7 +147,7 @@ class Command(BaseCommand):
                         'clgr_id': row['ClGrId']
                     })
 
-            # Теперь создаем членства
+            # Создаем членства
             count = 0
             for child_id, groups in child_groups.items():
                 # Сортируем по ClGrId (последняя группа = основная)
@@ -152,17 +157,27 @@ class Command(BaseCommand):
                     # Первая группа (с максимальным ClGrId) = основная
                     is_primary = (idx == 0)
                     
-                    membership, created = ChildGroupMembership.objects.update_or_create(
+                    # 🔥 Создаем с is_primary=False для всех, потом обновим основную
+                    ChildGroupMembership.objects.create(
                         child_id=child_id,
                         group_id=group_data['group_id'],
-                        defaults={
-                            'is_primary': is_primary,
-                            'joined_at': datetime.now().date(),
-                            'archived_at': None if is_primary else datetime.now().date(),
-                            'requires_subscription': True,
-                        }
+                        is_primary=False,  # Сначала все False
+                        joined_at=datetime.now().date(),
+                        archived_at=datetime.now().date(),  # Все в архив
+                        requires_subscription=True,
                     )
                     count += 1
+                
+                # 🔥 Теперь обновляем первую группу (основную)
+                if groups:
+                    primary_group_id = groups[0]['group_id']
+                    ChildGroupMembership.objects.filter(
+                        child_id=child_id,
+                        group_id=primary_group_id
+                    ).update(
+                        is_primary=True,
+                        archived_at=None  # Активная, не в архиве
+                    )
 
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено связей ребенок-группа: {count}"))
             self.stdout.write("🔄 Этап 5: Перенос Тарифов (Tariff)")
