@@ -79,7 +79,7 @@ class Command(BaseCommand):
             self.stdout.write("🔄 Этап 3: Перенос Детей (Child)")
             old_cursor.execute("SELECT * FROM Client")
             default_group_id = Group.objects.first().id if Group.objects.exists() else None
-            
+
             for row in old_cursor.fetchall():
                 # Пытаемся разделить ФИО, если оно в одной строке
                 full_name = row['ClientName'] or "Без имени"
@@ -98,6 +98,14 @@ class Command(BaseCommand):
                     except ValueError:
                         pass
 
+                # 🔥 ОБРЕЗКА ДЛИННЫХ СТРОК (важно!)
+                phone = (row['ClientPhone'] or "")[:20]  # max_length=20
+                address = (row['ClientAddress'] or "")[:255]  # max_length=255
+                comment = (row['ClientComment'] or "")[:500]  # TextField, но на всякий случай
+                patronymic = (patronymic or row['ClientFatherName'] or "")[:100]  # max_length=100
+                first_name = first_name[:100]  # max_length=100
+                last_name = last_name[:100]  # max_length=100
+
                 # ЗАГЛУШКА: Если у ребенка нет группы, назначаем первую попавшуюся
                 assigned_group_id = default_group_id
 
@@ -106,19 +114,19 @@ class Command(BaseCommand):
                     last_name=last_name,
                     birth_date=birth_date,
                     defaults={
-                        'patronymic': patronymic or row['ClientFatherName'] or "",
+                        'patronymic': patronymic,
                         'birth_year': birth_year,
-                        'address': row['ClientAddress'] or "",
-                        'parent_phone': row['ClientPhone'] or "",
+                        'address': address,
+                        'parent_phone': phone,
                         'group_id': assigned_group_id,
                         'status': 'active', # ЗАГЛУШКА
                         'discount_percent': 10 if row['ClientIsHaveDiscount'] else 0,
-                        'note': row['ClientComment'] or "",
+                        'note': comment,
                     }
                 )
                 child_map[row['ClientID']] = child.id
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено детей: {len(child_map)}"))
-
+            
             self.stdout.write("🔄 Этап 4: Перенос Членства в группах (ChildGroupMembership)")
             old_cursor.execute("SELECT ClGrId, ClGrClientId, ClGrClGrTypeId FROM ClientGroup")
             count = 0
