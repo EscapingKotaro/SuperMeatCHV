@@ -776,9 +776,12 @@ def attendance_view(request):
                     else:
                         break
 
+        ln = (child.last_name or "Б").strip()
+        fn = (child.first_name or "И").strip()
+
         children_data.append({
             'child': child,
-            'initials': f"{child.last_name[0]}{child.first_name[0]}".upper(),
+            'initials': f"{ln[0]}{fn[0]}".upper(),
             'age': child.age_display(),
             'requires_subscription': requires_subscription,
             'sessions_left': sessions_left,
