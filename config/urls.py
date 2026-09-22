@@ -121,4 +121,10 @@ urlpatterns = [
 
     # Backup
     path("backup/export/", views.backup_export, name="backup_export"),
+
+
+    path('admin/db-management/', views.db_management_view, name='db_management'),
+    path('admin/db-management/download/', views.download_db, name='download_db'),
+    path('admin/db-management/upload-old/', views.upload_old_db, name='upload_old_db'),
+    path('admin/db-management/upload-new/', views.upload_new_db, name='upload_new_db'),
 ]

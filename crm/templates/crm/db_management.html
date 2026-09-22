@@ -1,0 +1,81 @@
+{% extends 'crm/base.html' %}
+{% block title %}Управление базой данных{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4"><i class="fas fa-database me-2"></i>Управление базой данных</h2>
+
+    {% if messages %}
+        {% for message in messages %}
+            <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+
+    <div class="row g-4">
+        <!-- 1. Скачать БД -->
+        <div class="col-md-6">
+            <div class="card h-100 border-primary">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="fas fa-download me-2"></i>Скачать текущую БД</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Создает свежий дамп PostgreSQL и скачивает его в формате .sql.gz</p>
+                    <a href="{% url 'download_db' %}" class="btn btn-primary w-100">
+                        <i class="fas fa-file-archive me-2"></i>Скачать дамп
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. Загрузить старую БД (Миграция) -->
+        <div class="col-md-6">
+            <div class="card h-100 border-warning">
+                <div class="card-header bg-warning text-dark">
+                    <h5 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Перенос из старой CRM</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Загружает старый файл <code>.db</code> (SQLite) и переносит данные в новую структуру, заполняя пустые поля заглушками.</p>
+                    <form method="post" enctype="multipart/form-data" action="{% url 'upload_old_db' %}">
+                        {% csrf_token %}
+                        <input type="file" name="old_db_file" class="form-control mb-3" accept=".db,.sqlite3" required>
+                        <button type="submit" class="btn btn-warning w-100" onclick="return confirm('Начать перенос данных из старой базы? Это займет время.')">
+                            <i class="fas fa-upload me-2"></i>Загрузить и перенести
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. Загрузить новую БД (Полное восстановление) -->
+        <div class="col-md-12">
+            <div class="card border-danger">
+                <div class="card-header bg-danger text-white">
+                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>ПОЛНОЕ ВОССТАНОВЛЕНИЕ БД (Опасно!)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="alert alert-danger">
+                        <strong>Внимание!</strong> Это действие <u>полностью удалит</u> все текущие данные в базе и заменит их содержимым загруженного файла. Используйте только для восстановления из резервных копий.
+                    </div>
+                    <form method="post" enctype="multipart/form-data" action="{% url 'upload_new_db' %}">
+                        {% csrf_token %}
+                        <div class="row align-items-end">
+                            <div class="col-md-8">
+                                <input type="file" name="new_db_file" class="form-control" accept=".sql,.sql.gz" required>
+                                <small class="text-muted">Поддерживаются файлы .sql и архивы .sql.gz</small>
+                            </div>
+                            <div class="col-md-4 mt-3 mt-md-0">
+                                <button type="submit" class="btn btn-danger w-100" onclick="return confirm('ВЫ УВЕРЕНЫ? Все текущие данные будут УНИЧТОЖЕНЫ и заменены файлом дампа!')">
+                                    <i class="fas fa-skull-crossbones me-2"></i>Восстановить БД
+                                </button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

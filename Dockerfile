@@ -6,7 +6,7 @@ ENV PYTHONUNBUFFERED=1
 WORKDIR /opt/crm/SuperMeatCHV/
 
 # Системные зависимости (если нужны, например для Pillow)
-RUN apt-get update && apt-get install -y gcc libpq-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y gcc libpq-dev postgresql-client && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt gunicorn
