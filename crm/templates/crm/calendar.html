@@ -273,7 +273,9 @@
                             {% if item.is_done %}
                                 <span class="badge bg-emerald-50 text-emerald-700">Выполнено</span>
                             {% elif item.is_overdue_now %}
-                                <span class="badge bg-red-50 text-red-700">Просрочено</span>
+                                <span class="badge bg-red-50 text-red-700">
+                                    Просрочено{% if item.overdue_days %} на {{ item.overdue_days }} дн.{% endif %}
+                                </span>
                             {% else %}
                                 <span class="badge bg-blue-50 text-[#315EBC]">В работе</span>
                             {% endif %}

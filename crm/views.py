@@ -4033,28 +4033,23 @@ def calendar_page(request):
         return task.due_date
 
     for task in tasks:
-        task.calendar_date = task_date(
-            task
-        )
+        task.calendar_date = task_date(task)
 
         if task.is_done:
             task.is_overdue_now = False
+            task.overdue_days = 0
 
         elif task.due_date:
-            task.is_overdue_now = (
-                task.due_date < today
-            )
+            task.is_overdue_now = task.due_date < today
+            task.overdue_days = max(0, (today - task.due_date).days) if task.is_overdue_now else 0
 
         elif task.scheduled_end_at:
-            task.is_overdue_now = (
-                task.scheduled_end_at < now
-            )
+            task.is_overdue_now = task.scheduled_end_at < now
+            task.overdue_days = max(0, (today - task.scheduled_end_at.date()).days) if task.is_overdue_now else 0
 
         else:
-            task.is_overdue_now = bool(
-                task.scheduled_at
-                and task.scheduled_at < now
-            )
+            task.is_overdue_now = bool(task.scheduled_at and task.scheduled_at < now)
+            task.overdue_days = max(0, (today - task.scheduled_at.date()).days) if task.is_overdue_now else 0
 
     scoped_tasks = tasks
 
@@ -4088,43 +4083,53 @@ def calendar_page(request):
         return sorted(
             items,
             key=lambda task: (
+                0 if task.is_overdue_now else 1,  # 🔥 Просроченные задачи сверху
                 (
-                    timezone.localtime(
-                        task.scheduled_at
-                    ).time()
+                    timezone.localtime(task.scheduled_at).time()
                     if task.scheduled_at
                     else datetime.max.time()
                 ),
+                task.due_date or date.max,
                 task.created_at,
             ),
         )
 
     days = []
 
-    for offset in range(
-        grid_days_count
-    ):
-        day = (
-            grid_start
-            + timedelta(days=offset)
-        )
+    for offset in range(grid_days_count):
+        day = grid_start + timedelta(days=offset)
+
+        # 🔥 НОВАЯ ЛОГИКА: просроченные задачи показываются каждый день после их даты
+        def task_belongs_to_day(task, day):
+            # Задача принадлежит дню, если:
+            # 1. Её дата == day
+            if task.calendar_date == day:
+                return True
+            # 2. ИЛИ день >= сегодня, задача просрочена и не выполнена
+            if (
+                day >= today
+                and task.calendar_date is not None
+                and task.calendar_date < today
+                and not task.is_done
+            ):
+                return True
+            return False
 
         scoped_day_tasks = [
             task
             for task in scoped_tasks
-            if task.calendar_date == day
+            if task_belongs_to_day(task, day)
         ]
+        
         items = sort_tasks([
             task
             for task in filtered
-            if task.calendar_date == day
+            if task_belongs_to_day(task, day)
         ])
 
         days.append({
             "date": day,
-            "month_start": day.replace(
-                day=1
-            ),
+            "month_start": day.replace(day=1),
             "in_month": (
                 day.month == month_start.month
                 and day.year == month_start.year
@@ -4147,11 +4152,22 @@ def calendar_page(request):
             ),
         })
 
+    def task_belongs_to_selected_day(task, selected_day):
+        if task.calendar_date == selected_day:
+            return True
+        if (
+            selected_day >= today
+            and task.calendar_date is not None
+            and task.calendar_date < today
+            and not task.is_done
+        ):
+            return True
+        return False
+
     selected_tasks = sort_tasks([
         task
         for task in filtered
-        if task.calendar_date
-        == selected_day
+        if task_belongs_to_selected_day(task, selected_day)
     ])
 
     undated_tasks = [
