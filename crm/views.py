@@ -6663,39 +6663,94 @@ def competition_document_download(request, pk):
 
 
 import os
+import tempfile
 import subprocess
 from django.conf import settings
-from django.core.management.base import BaseCommand, CommandError
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.core.management import call_command
+from django.shortcuts import render, redirect
+from django.contrib import messages
+from django.http import FileResponse
 
-class Command(BaseCommand):
-    help = 'Восстанавливает БД из SQL дампа'
+# Проверка: только Босс или Админ
+def is_admin(user):
+    return user.is_superuser or getattr(user, 'profile', None) and user.profile.role in ['boss', 'admin']
 
-    def add_arguments(self, parser):
-        parser.add_argument('file_path', type=str, help='Путь к файлу .sql или .sql.gz')
+@login_required
+@user_passes_test(is_admin)
+def db_management_view(request):
+    """Страница управления базой данных"""
+    return render(request, 'crm/db_management.html')
 
-    def handle(self, *args, **options):
-        file_path = options['file_path']
-        if not os.path.exists(file_path):
-            raise CommandError(f"Файл не найден: {file_path}")
-
-        db_name = os.environ.get('DB_NAME', 'mydb')
-        db_user = os.environ.get('DB_USER', 'myuser')
-
-        self.stdout.write("⚠️  Начинается полное восстановление БД...")
+@login_required
+@user_passes_test(is_admin)
+def download_db(request):
+    """Скачать текущий дамп БД"""
+    db_name = os.environ.get('DB_NAME', 'mydb')
+    db_user = os.environ.get('DB_USER', 'myuser')
+    db_password = os.environ.get('DB_PASSWORD', '')
+    
+    # Создаем временный файл
+    with tempfile.NamedTemporaryFile(suffix='.sql.gz', delete=False) as tmp_file:
+        tmp_path = tmp_file.name
         
+    try:
+        # Делаем дамп прямо из контейнера web (у нас там теперь есть pg_dump)
+        cmd = f"PGPASSWORD={db_password} pg_dump -h db -U {db_user} -d {db_name} | gzip > {tmp_path}"
+        subprocess.run(cmd, shell=True, check=True)
+        
+        # Отдаем файл пользователю
+        response = FileResponse(open(tmp_path, 'rb'), as_attachment=True, filename=f'backup_{db_name}.sql.gz')
+        return response
+    except Exception as e:
+        messages.error(request, f"Ошибка создания дампа: {e}")
+        return redirect('db_management')
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+@login_required
+@user_passes_test(is_admin)
+def upload_old_db(request):
+    """Загрузка и миграция старой SQLite БД"""
+    if request.method == 'POST' and request.FILES.get('old_db_file'):
+        file = request.FILES['old_db_file']
+        if not file.name.endswith(('.db', '.sqlite3')):
+            messages.error(request, "Разрешены только файлы .db или .sqlite3")
+            return redirect('db_management')
+            
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.db') as tmp_file:
+            for chunk in file.chunks():
+                tmp_file.write(chunk)
+            tmp_path = tmp_file.name
+            
         try:
-            # Определяем команду в зависимости от сжатия
-            if file_path.endswith('.gz'):
-                cmd = f"zcat {file_path} | PGPASSWORD={os.environ.get('DB_PASSWORD')} psql -h db -U {db_user} -d {db_name}"
-            else:
-                cmd = f"PGPASSWORD={os.environ.get('DB_PASSWORD')} psql -h db -U {db_user} -d {db_name} < {file_path}"
+            call_command('restore_old_db', tmp_path)
+            messages.success(request, "✅ Данные из старой базы успешно перенесены!")
+        except Exception as e:
+            messages.error(request, f"❌ Ошибка переноса: {e}")
             
-            # Выполняем в оболочке
-            result = subprocess.run(cmd, shell=True, check=True, capture_output=True, text=True)
-            self.stdout.write(self.style.SUCCESS("✅ База данных успешно восстановлена!"))
+    return redirect('db_management')
+
+@login_required
+@user_passes_test(is_admin)
+def upload_new_db(request):
+    """Полное восстановление БД из SQL дампа"""
+    if request.method == 'POST' and request.FILES.get('new_db_file'):
+        file = request.FILES['new_db_file']
+        if not file.name.endswith(('.sql', '.sql.gz')):
+            messages.error(request, "Разрешены только файлы .sql или .sql.gz")
+            return redirect('db_management')
             
-        except subprocess.CalledProcessError as e:
-            raise CommandError(f"Ошибка восстановления: {e.stderr}")
-        finally:
-            if os.path.exists(file_path):
-                os.remove(file_path)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(file.name)[1]) as tmp_file:
+            for chunk in file.chunks():
+                tmp_file.write(chunk)
+            tmp_path = tmp_file.name
+            
+        try:
+            call_command('restore_new_db', tmp_path)
+            messages.success(request, "✅ База данных полностью восстановлена! Перезагрузите страницу.")
+        except Exception as e:
+            messages.error(request, f"❌ Ошибка восстановления: {e}")
+            
+    return redirect('db_management')
