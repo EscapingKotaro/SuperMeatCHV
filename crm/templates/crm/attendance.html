@@ -1,5 +1,94 @@
 {% extends 'crm/base.html' %}
-{% block page_styles %}{% include 'crm/includes/attendance_styles.html' %}{% endblock %}
+{% block page_styles %}
+    {% include 'crm/includes/attendance_styles.html' %}
+    <style>
+        /* === УПЛОТНЕНИЕ ТАБЛИЦЫ ПОСЕЩАЕМОСТИ НА ~20% === */
+        
+        /* 1. Базовый шрифт таблицы чуть меньше */
+        .attendance-grid {
+            font-size: 0.8rem; /* ~12.8px вместо стандартных 14-16px */
+        }
+
+        /* 2. Ячейка спортсмена (левая закрепленная колонка) */
+        .attendance-person-cell {
+            padding: 0.5rem 0.6rem !important; /* Было ~0.75rem 1rem */
+            min-width: 170px !important; /* Было ~200px+ */
+            max-width: 220px !important;
+        }
+        .attendance-person-cell b {
+            font-size: 0.75rem !important; /* ~12px */
+        }
+        .attendance-person-cell .text-xs,
+        .attendance-person-cell .text-sm {
+            font-size: 0.65rem !important; /* ~10.4px */
+        }
+
+        /* 3. Иконки и индикаторы в строке спортсмена (уменьшаем с 28px до 22px) */
+        .attendance-person-cell .h-7 { height: 1.35rem !important; width: 1.35rem !important; }
+        .attendance-person-cell .w-7 { width: 1.35rem !important; }
+        .attendance-person-cell .h-5 { height: 1rem !important; width: 1rem !important; }
+        .attendance-person-cell .w-5 { width: 1rem !important; }
+
+        /* 4. Кнопки действий в строке (архив/вернуть) */
+        .attendance-row-action button {
+            height: 1.4rem !important; /* 22px вместо 28px (h-7) */
+            width: 1.4rem !important;
+        }
+        .attendance-row-action button i,
+        .attendance-row-action button svg {
+            height: 0.8rem !important;
+            width: 0.8rem !important;
+        }
+
+        /* 5. Ячейки с датами (заголовки) */
+        .attendance-date-cell {
+            padding: 0.35rem 0.2rem !important;
+            min-width: 50px !important; /* Было ~64px */
+        }
+        .attendance-date-cell b {
+            font-size: 0.7rem !important;
+        }
+        .attendance-date-cell .text-xs {
+            font-size: 0.6rem !important;
+        }
+        .attendance-date-cell .text-[10px],
+        .attendance-date-cell .text-[9px] {
+            font-size: 0.55rem !important;
+        }
+
+        /* 6. Ячейки с отметками (квадратики) */
+        .attendance-mark-cell {
+            padding: 0.2rem !important;
+            min-width: 40px !important; /* Было ~50-60px */
+        }
+        .attendance-cell {
+            width: 28px !important; /* Было ~36-40px */
+            height: 28px !important;
+            font-size: 0.8rem !important;
+            border-radius: 4px !important;
+        }
+
+        /* 7. Уплотняем верхнюю панель управления */
+        .card.mb-3.p-3 {
+            padding: 0.6rem 0.75rem !important; /* Было 1rem (p-3) */
+        }
+        .card.mb-3.p-3 select,
+        .card.mb-3.p-3 input[type="date"],
+        .card.mb-3.p-3 .btn {
+            font-size: 0.7rem !important;
+            padding-top: 0.2rem !important;
+            padding-bottom: 0.2rem !important;
+            height: auto !important;
+        }
+        .card.mb-3.p-3 .h-9 { height: 1.75rem !important; width: 1.75rem !important; } /* Кнопки стрелок */
+
+        /* 8. Легенда (значки статусов) */
+        [data-attendance-legend] .badge {
+            font-size: 0.65rem !important;
+            padding: 0.15rem 0.4rem !important;
+        }
+    </style>
+{% endblock %}
 {% block main_class %}w-full max-w-none px-3 py-5 lg:px-5{% endblock %}
 {% block actions %}
 <div class="flex gap-2 flex-wrap">
