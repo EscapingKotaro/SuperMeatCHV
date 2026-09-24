@@ -230,9 +230,9 @@
     <a href="{% url 'users' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100">
         <i data-lucide="users-round" class="h-4 w-4"></i> Пользователи
     </a>
-    <a href="{% url 'backup_export' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100">
-        <i data-lucide="download" class="h-4 w-4"></i> Резервная копия
-    </a>
+    <a href="{% url 'db_management' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-slate-100 text-indigo-600 font-medium">
+            <i data-lucide="database" class="h-4 w-4"></i> Управление БД
+        </a>
     {% endif %}
     <hr class="my-2 border-slate-100">
     <a href="{% url 'logout' %}" class="menu-item flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-600 hover:bg-red-50">
