@@ -226,5 +226,5 @@ def parse_application(raw):
     if raw:
         comment_parts.extend(["", "=== Исходная заявка ===", raw])
     
-    result["comment"] = "\n".join(comment_parts).strip()
+ #   result["comment"] = "\n".join(comment_parts).strip()
     return result
