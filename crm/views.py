@@ -6682,6 +6682,17 @@ def db_management_view(request):
     """Страница управления базой данных"""
     return render(request, 'crm/db_management.html')
 
+import os
+import tempfile
+import subprocess
+import gzip
+from django.http import FileResponse
+from django.contrib import messages
+from django.shortcuts import redirect
+from django.contrib.auth.decorators import login_required, user_passes_test
+from django.utils import timezone
+# from .utils import is_admin # Твой декоратор
+
 @login_required
 @user_passes_test(is_admin)
 def download_db(request):
@@ -6689,23 +6700,60 @@ def download_db(request):
     db_name = os.environ.get('DB_NAME', 'mydb')
     db_user = os.environ.get('DB_USER', 'myuser')
     db_password = os.environ.get('DB_PASSWORD', '')
+    db_host = os.environ.get('DB_HOST', 'db') # Лучше брать из env, но 'db' как фоллбэк
     
     # Создаем временный файл
     with tempfile.NamedTemporaryFile(suffix='.sql.gz', delete=False) as tmp_file:
         tmp_path = tmp_file.name
         
     try:
-        # Делаем дамп прямо из контейнера web (у нас там теперь есть pg_dump)
-        cmd = f"PGPASSWORD={db_password} pg_dump -h db -U {db_user} -d {db_name} | gzip > {tmp_path}"
-        subprocess.run(cmd, shell=True, check=True)
+        # 1. Формируем команду БЕЗ shell=True (список аргументов)
+        cmd = [
+            'pg_dump',
+            '-h', db_host,
+            '-U', db_user,
+            '-d', db_name,
+            '--no-password' # Пароль передадим через переменную окружения
+        ]
         
-        # Отдаем файл пользователю
-        response = FileResponse(open(tmp_path, 'rb'), as_attachment=True, filename=f'backup_{db_name}.sql.gz')
+        # 2. Передаем пароль безопасно через окружение процесса (никаких спецсимволов не страшно)
+        env = os.environ.copy()
+        env['PGPASSWORD'] = db_password
+        
+        # 3. Запускаем процесс и сразу сжимаем поток байтов через Python's gzip
+        with open(tmp_path, 'wb') as f_out:
+            with gzip.GzipFile(fileobj=f_out, mode='wb') as gzip_file:
+                process = subprocess.run(
+                    cmd,
+                    env=env,
+                    stdout=gzip_file,       # Направляем вывод pg_dump прямо в gzip-поток
+                    stderr=subprocess.PIPE, # Ловим ошибки, чтобы показать их пользователю
+                    check=True              # Вызовет CalledProcessError, если pg_dump упадет
+                )
+        
+        # Генерируем красивое имя файла с датой
+        filename = f"backup_{db_name}_{timezone.now().strftime('%Y%m%d_%H%M')}.sql.gz"
+        
+        # 4. Отдаем файл пользователю
+        response = FileResponse(
+            open(tmp_path, 'rb'), 
+            as_attachment=True, 
+            filename=filename
+        )
         return response
-    except Exception as e:
-        messages.error(request, f"Ошибка создания дампа: {e}")
+        
+    except subprocess.CalledProcessError as e:
+        # Если pg_dump упал, мы покажем РЕАЛЬНУЮ причину (например, "password authentication failed")
+        error_msg = e.stderr.decode('utf-8', errors='ignore').strip() if e.stderr else str(e)
+        messages.error(request, f"Ошибка pg_dump: {error_msg}")
         return redirect('db_management')
+        
+    except Exception as e:
+        messages.error(request, f"Неожиданная ошибка при создании дампа: {str(e)}")
+        return redirect('db_management')
+        
     finally:
+        # 5. Гарантированно удаляем временный файл после отдачи (или при ошибке)
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
 
