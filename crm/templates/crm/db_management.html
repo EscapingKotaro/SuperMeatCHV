@@ -1,74 +1,147 @@
 {% extends 'crm/base.html' %}
 {% block title %}Управление базой данных{% endblock %}
 
-{% block content %}
-<div class="container mt-4">
-    <h2 class="mb-4"><i class="fas fa-database me-2"></i>Управление базой данных</h2>
+{% block page_styles %}
+<style>
+    /* Специфичные стили для страницы управления БД */
+    .db-card {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .db-card:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+    .db-card.danger:hover {
+        box-shadow: 0 8px 24px rgba(220, 53, 69, 0.15);
+    }
+    .db-icon-wrapper {
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 12px;
+        flex-shrink: 0;
+    }
+</style>
+{% endblock %}
 
+{% block content %}
+<section class="max-w-5xl mx-auto">
+    <!-- Заголовок -->
+    <div class="mb-6">
+        <h1 class="text-2xl font-extrabold tracking-tight text-[#17202A] flex items-center gap-3">
+            <span class="grid h-11 w-11 place-items-center rounded-xl bg-[#E8F0FF] text-[#315EBC]">
+                <i data-lucide="database" class="h-5 w-5"></i>
+            </span>
+            Управление базой данных
+        </h1>
+        <p class="mt-2 text-sm text-slate-500 ml-14">
+            Резервное копирование, миграция и восстановление данных системы
+        </p>
+    </div>
+
+    <!-- Сообщения -->
     {% if messages %}
+    <div class="mb-4 space-y-2">
         {% for message in messages %}
-            <div class="alert alert-{{ message.tags }} alert-dismissible fade show">
-                {{ message }}
-                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-            </div>
+        <div class="flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm {% if message.tags == 'error' %}border-red-200 bg-red-50 text-red-800{% elif message.tags == 'success' %}border-emerald-200 bg-emerald-50 text-emerald-800{% elif message.tags == 'warning' %}border-amber-200 bg-amber-50 text-amber-800{% else %}border-blue-200 bg-blue-50 text-blue-800{% endif %}">
+            <span class="min-w-0 flex-1">{{ message }}</span>
+            <button type="button" onclick="this.parentElement.remove()" class="shrink-0 opacity-60 hover:opacity-100">
+                <i data-lucide="x" class="h-4 w-4"></i>
+            </button>
+        </div>
         {% endfor %}
+    </div>
     {% endif %}
 
-    <div class="row g-4">
+    <!-- Карточки -->
+    <div class="grid gap-4 md:grid-cols-2">
+        
         <!-- 1. Скачать БД -->
-        <div class="col-md-6">
-            <div class="card h-100 border-primary">
-                <div class="card-header bg-primary text-white">
-                    <h5 class="mb-0"><i class="fas fa-download me-2"></i>Скачать текущую БД</h5>
+        <div class="db-card rounded-2xl border border-slate-200 bg-white p-6">
+            <div class="flex items-start gap-4">
+                <div class="db-icon-wrapper bg-emerald-50 text-emerald-600">
+                    <i data-lucide="download" class="h-5 w-5"></i>
                 </div>
-                <div class="card-body">
-                    <p class="text-muted">Создает свежий дамп PostgreSQL и скачивает его в формате .sql.gz</p>
-                    <a href="{% url 'download_db' %}" class="btn btn-primary w-100">
-                        <i class="fas fa-file-archive me-2"></i>Скачать дамп
+                <div class="flex-1 min-w-0">
+                    <h3 class="text-base font-bold text-[#17202A] mb-1">Скачать текущую БД</h3>
+                    <p class="text-sm text-slate-500 mb-4 leading-relaxed">
+                        Создаёт свежий дамп PostgreSQL и скачивает его в формате <code class="px-1.5 py-0.5 rounded bg-slate-100 text-xs font-mono">.sql.gz</code>
+                    </p>
+                    <a href="{% url 'download_db' %}" class="btn btn-primary w-full justify-center">
+                        <i data-lucide="file-archive" class="h-4 w-4"></i>
+                        Скачать дамп
                     </a>
                 </div>
             </div>
         </div>
 
-        <!-- 2. Загрузить старую БД (Миграция) -->
-        <div class="col-md-6">
-            <div class="card h-100 border-warning">
-                <div class="card-header bg-warning text-dark">
-                    <h5 class="mb-0"><i class="fas fa-exchange-alt me-2"></i>Перенос из старой CRM</h5>
+        <!-- 2. Загрузить старую БД -->
+        <div class="db-card rounded-2xl border border-slate-200 bg-white p-6">
+            <div class="flex items-start gap-4">
+                <div class="db-icon-wrapper bg-amber-50 text-amber-600">
+                    <i data-lucide="arrow-right-left" class="h-5 w-5"></i>
                 </div>
-                <div class="card-body">
-                    <p class="text-muted">Загружает старый файл <code>.db</code> (SQLite) и переносит данные в новую структуру, заполняя пустые поля заглушками.</p>
-                    <form method="post" enctype="multipart/form-data" action="{% url 'upload_old_db' %}">
+                <div class="flex-1 min-w-0">
+                    <h3 class="text-base font-bold text-[#17202A] mb-1">Перенос из старой CRM</h3>
+                    <p class="text-sm text-slate-500 mb-4 leading-relaxed">
+                        Загружает файл <code class="px-1.5 py-0.5 rounded bg-slate-100 text-xs font-mono">.db</code> (SQLite) и переносит данные в новую структуру
+                    </p>
+                    <form method="post" enctype="multipart/form-data" action="{% url 'upload_old_db' %}" class="space-y-3">
                         {% csrf_token %}
-                        <input type="file" name="old_db_file" class="form-control mb-3" accept=".db,.sqlite3" required>
-                        <button type="submit" class="btn btn-warning w-100" onclick="return confirm('Начать перенос данных из старой базы? Это займет время.')">
-                            <i class="fas fa-upload me-2"></i>Загрузить и перенести
+                        <label class="block">
+                            <input type="file" name="old_db_file" accept=".db,.sqlite3" required
+                                   class="field w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200">
+                        </label>
+                        <button type="submit" onclick="return confirm('Начать перенос данных из старой базы? Это займёт время.')" 
+                                class="btn btn-soft w-full justify-center bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-200">
+                            <i data-lucide="upload" class="h-4 w-4"></i>
+                            Загрузить и перенести
                         </button>
                     </form>
                 </div>
             </div>
         </div>
 
-        <!-- 3. Загрузить новую БД (Полное восстановление) -->
-        <div class="col-md-12">
-            <div class="card border-danger">
-                <div class="card-header bg-danger text-white">
-                    <h5 class="mb-0"><i class="fas fa-exclamation-triangle me-2"></i>ПОЛНОЕ ВОССТАНОВЛЕНИЕ БД (Опасно!)</h5>
+        <!-- 3. Полное восстановление (на всю ширину) -->
+        <div class="db-card danger md:col-span-2 rounded-2xl border-2 border-red-200 bg-white p-6">
+            <div class="flex items-start gap-4">
+                <div class="db-icon-wrapper bg-red-50 text-red-600">
+                    <i data-lucide="alert-triangle" class="h-5 w-5"></i>
                 </div>
-                <div class="card-body">
-                    <div class="alert alert-danger">
-                        <strong>Внимание!</strong> Это действие <u>полностью удалит</u> все текущие данные в базе и заменит их содержимым загруженного файла. Используйте только для восстановления из резервных копий.
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        <h3 class="text-base font-bold text-[#17202A]">Полное восстановление БД</h3>
+                        <span class="px-2 py-0.5 rounded-full bg-red-100 text-red-700 text-xs font-bold">ОПАСНО</span>
                     </div>
+                    
+                    <div class="rounded-xl border border-red-200 bg-red-50 px-4 py-3 my-3">
+                        <div class="flex items-start gap-2">
+                            <i data-lucide="shield-alert" class="h-4 w-4 text-red-600 mt-0.5 flex-shrink-0"></i>
+                            <p class="text-sm text-red-800">
+                                <strong>Внимание!</strong> Это действие <u>полностью удалит</u> все текущие данные в базе и заменит их содержимым загруженного файла. Используйте только для восстановления из резервных копий.
+                            </p>
+                        </div>
+                    </div>
+
                     <form method="post" enctype="multipart/form-data" action="{% url 'upload_new_db' %}">
                         {% csrf_token %}
-                        <div class="row align-items-end">
-                            <div class="col-md-8">
-                                <input type="file" name="new_db_file" class="form-control" accept=".sql,.sql.gz" required>
-                                <small class="text-muted">Поддерживаются файлы .sql и архивы .sql.gz</small>
+                        <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
+                            <div class="flex-1">
+                                <label class="block mb-1.5">
+                                    <span class="text-xs font-semibold text-slate-600 mb-1 block">Файл дампа</span>
+                                    <input type="file" name="new_db_file" accept=".sql,.sql.gz" required
+                                           class="field w-full text-sm file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200">
+                                </label>
+                                <p class="text-xs text-slate-400 mt-1">Поддерживаются файлы <code class="font-mono">.sql</code> и архивы <code class="font-mono">.sql.gz</code></p>
                             </div>
-                            <div class="col-md-4 mt-3 mt-md-0">
-                                <button type="submit" class="btn btn-danger w-100" onclick="return confirm('ВЫ УВЕРЕНЫ? Все текущие данные будут УНИЧТОЖЕНЫ и заменены файлом дампа!')">
-                                    <i class="fas fa-skull-crossbones me-2"></i>Восстановить БД
+                            <div class="sm:w-64">
+                                <button type="submit" 
+                                        onclick="return confirm('⚠️ ВЫ УВЕРЕНЫ?\n\nВсе текущие данные будут УНИЧТОЖЕНЫ и заменены файлом дампа!\n\nЭто действие необратимо!')" 
+                                        class="btn btn-primary w-full justify-center bg-red-600 hover:bg-red-700 border-red-700">
+                                    <i data-lucide="skull" class="h-4 w-4"></i>
+                                    Восстановить БД
                                 </button>
                             </div>
                         </div>
@@ -76,6 +149,16 @@
                 </div>
             </div>
         </div>
+
     </div>
-</div>
+</section>
+
+<script>
+    // Инициализация Lucide иконок после загрузки
+    document.addEventListener('DOMContentLoaded', function() {
+        if (window.lucide) {
+            lucide.createIcons();
+        }
+    });
+</script>
 {% endblock %}
