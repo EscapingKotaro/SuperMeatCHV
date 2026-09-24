@@ -1,116 +1,7 @@
 {% extends 'crm/base.html' %}
 {% block page_styles %}
     {% include 'crm/includes/attendance_styles.html' %}
-    <style>
-/* === УПЛОТНЕНИЕ ТАБЛИЦЫ ПОСЕЩАЕМОСТИ НА ~35% === */
-
-/* 1. Базовый шрифт таблицы */
-.attendance-grid {
-    font-size: 0.75rem;
-}
-
-/* 2. Ячейка спортсмена (левая колонка) — УЖЕ */
-.attendance-person-cell {
-    padding: 0.4rem 0.5rem !important;
-    min-width: 140px !important;  /* было 170px */
-    max-width: 180px !important;  /* было 220px */
-}
-.attendance-person-cell b {
-    font-size: 0.7rem !important;
-}
-.attendance-person-cell .text-xs,
-.attendance-person-cell .text-sm {
-    font-size: 0.6rem !important;
-}
-
-/* 3. Иконки в строке спортсмена (уменьшаем с 28px до 18px) */
-.attendance-person-cell .h-7 { height: 1.1rem !important; width: 1.1rem !important; }
-.attendance-person-cell .w-7 { width: 1.1rem !important; }
-.attendance-person-cell .h-5 { height: 0.85rem !important; width: 0.85rem !important; }
-.attendance-person-cell .w-5 { width: 0.85rem !important; }
-.attendance-person-cell .h-4 { height: 0.75rem !important; width: 0.75rem !important; }
-.attendance-person-cell .min-w-4 { min-width: 0.7rem !important; height: 0.7rem !important; }
-
-/* 4. Кнопки действий (архив/вернуть) */
-.attendance-row-action button {
-    height: 1.1rem !important;
-    width: 1.1rem !important;
-}
-.attendance-row-action button i,
-.attendance-row-action button svg {
-    height: 0.65rem !important;
-    width: 0.65rem !important;
-}
-
-/* 5. Ячейки с датами (заголовки) — УЖЕ */
-.attendance-date-cell {
-    padding: 0.25rem 0.15rem !important;
-    min-width: 42px !important;   /* было 50px */
-    max-width: 48px !important;
-}
-.attendance-date-cell b {
-    font-size: 0.65rem !important;
-}
-.attendance-date-cell .text-xs {
-    font-size: 0.55rem !important;
-}
-.attendance-date-cell .text-[10px],
-.attendance-date-cell .text-[9px] {
-    font-size: 0.5rem !important;
-}
-
-/* 6. Ячейки с отметками — УЖЕ */
-.attendance-mark-cell {
-    padding: 0.15rem !important;
-    min-width: 32px !important;   /* было 40px */
-    max-width: 36px !important;
-}
-.attendance-cell {
-    width: 20px !important;       /* было 24px */
-    height: 20px !important;
-    font-size: 0.7rem !important;
-    border-radius: 3px !important;
-}
-
-/* 7. Верхняя панель управления */
-.card.mb-3.p-3 {
-    padding: 0.5rem 0.6rem !important;
-}
-.card.mb-3.p-3 select,
-.card.mb-3.p-3 input[type="date"],
-.card.mb-3.p-3 .btn {
-    font-size: 0.65rem !important;
-    padding-top: 0.15rem !important;
-    padding-bottom: 0.15rem !important;
-    height: auto !important;
-}
-.card.mb-3.p-3 .h-9 { height: 1.5rem !important; width: 1.5rem !important; }
-
-/* 8. Легенда */
-[data-attendance-legend] .badge {
-    font-size: 0.6rem !important;
-    padding: 0.1rem 0.3rem !important;
-}
-
-/* 9. Селект группы — уже */
-#group-select {
-    min-width: 12rem !important;   /* было 18rem */
-    max-width: 60 !important;
-    font-size: 0.75rem !important;
-}
-
-/* 10. Бейджи ПРОБ/АРХИВ */
-.attendance-person-cell .absolute {
-    font-size: 7px !important;
-    padding: 1px 3px !important;
-}
-
-/* 11. Счётчики "Гр / Все" в заголовках */
-.attendance-date-cell [data-attendance-counter-date] span {
-    font-size: 0.45rem !important;
-    padding: 0 2px !important;
-}
-</style>
+  
 {% endblock %}
 {% block main_class %}w-full max-w-none px-3 py-5 lg:px-5{% endblock %}
 {% block actions %}
@@ -178,7 +69,7 @@
 </div>
 {% endblock %}
 {% block content %}
-<section class="card mb-3 p-3">
+<section class="card mb-2 p-2">
     <div class="flex flex-wrap items-center gap-2">
         {% if selected_group %}
             {% regroup groups|dictsort:"trainer.full_name" by trainer as trainer_groups %}
@@ -324,7 +215,7 @@
                 {% for item in children_data %}
                     <tr class="{% if item.is_archived %}bg-slate-100 opacity-70{% elif item.is_trial %}bg-purple-50/30{% endif %}">
                         <td class="attendance-person-cell sticky left-0 z-[2] {% if item.is_archived %}bg-slate-100{% else %}bg-white{% endif %}">
-                            <a href="{% url 'child_card' item.child.id %}" class="block hover:bg-slate-50 px-2.5 py-2 rounded transition relative">
+                            <a href="{% url 'child_card' item.child.id %}" class="block hover:bg-slate-50 px-2 py-1 rounded transition relative">
                                 {% if item.is_trial %}
                                 <span class="absolute -top-1 -right-1 px-1.5 py-0.5 text-[9px] font-bold bg-purple-100 text-purple-700 rounded-full">ПРОБ</span>
                                 {% endif %}
@@ -362,10 +253,10 @@
                                         <div class="flex items-center gap-1"
                                              data-athlete-indicators>
                                             {% if item.debt > 0 %}
-                                            <span class="grid h-7 w-7 place-items-center rounded-lg bg-red-50 text-red-600"
+                                            <span class="grid h-6 w-6 place-items-center rounded-lg bg-red-50 text-red-600"
                                                   title="Долг {{ item.debt|floatformat:0 }} ₽"
                                                   data-athlete-indicator="debt">
-                                                <i data-lucide="coins" class="h-5 w-5"></i>
+                                                 <i data-lucide="coins" class="h-4 w-4"></i>
                                             </span>
                                             {% endif %}
                                             {% if item.document_alert_count %}
