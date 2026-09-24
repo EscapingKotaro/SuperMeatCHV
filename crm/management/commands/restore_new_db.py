@@ -1,23 +1,16 @@
 import os
 import subprocess
 import gzip
-from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 class Command(BaseCommand):
-    help = 'Восстанавливает БД из SQL дампа'
+    help = 'Полное восстановление БД из SQL дампа (все данные будут заменены!)'
 
     def add_arguments(self, parser):
         parser.add_argument('file_path', type=str, help='Путь к файлу .sql или .sql.gz')
-        parser.add_argument(
-            '--soft',
-            action='store_true',
-            help='Мягкое восстановление: добавлять только недостающие данные, не удалять существующие'
-        )
 
     def handle(self, *args, **options):
         file_path = options['file_path']
-        soft_mode = options['soft']
         
         if not os.path.exists(file_path):
             raise CommandError(f"Файл не найден: {file_path}")
@@ -27,14 +20,11 @@ class Command(BaseCommand):
         db_password = os.environ.get('DB_PASSWORD', '')
         db_host = os.environ.get('DB_HOST', 'db')
 
-        self.stdout.write("⚠️  Начинается восстановление БД...")
-        if soft_mode:
-            self.stdout.write(self.style.WARNING("🔄 Режим: МЯГКОЕ ВОССТАНОВЛЕНИЕ (без удаления существующих данных)"))
-        else:
-            self.stdout.write(self.style.ERROR("🔥 Режим: ПОЛНОЕ ВОССТАНОВЛЕНИЕ (все данные будут удалены!)"))
+        self.stdout.write(self.style.WARNING("⚠️  Начинается ПОЛНОЕ восстановление БД..."))
+        self.stdout.write(self.style.ERROR("🔥 Все текущие данные будут УДАЛЕНЫ и заменены!"))
         
         try:
-            # Базовая команда psql БЕЗ shell=True
+            # Команда psql БЕЗ shell=True (безопасно для спецсимволов в пароле)
             cmd = [
                 'psql',
                 '-h', db_host,
@@ -43,22 +33,12 @@ class Command(BaseCommand):
                 '--no-password'
             ]
             
-            # Если мягкий режим, добавляем флаги для игнорирования конфликтов
-            if soft_mode:
-                # ON_ERROR_STOP=0 позволит продолжить даже при ошибках дубликатов
-                pass  # psql сам обработает через переменную окружения
-            
-            # Передаём пароль через окружение (безопасно!)
+            # Передаём пароль через окружение
             env = os.environ.copy()
             env['PGPASSWORD'] = db_password
+            env['ON_ERROR_STOP'] = '1'  # Остановиться при первой ошибке
             
-            # В мягком режиме игнорируем ошибки дубликатов
-            if soft_mode:
-                env['ON_ERROR_STOP'] = '0'  # Продолжать даже при ошибках
-            else:
-                env['ON_ERROR_STOP'] = '1'  # Остановиться при первой ошибке
-            
-            # Открываем файл (с поддержкой gzip) и направляем в psql
+            # Открываем файл (с поддержкой gzip)
             if file_path.endswith('.gz'):
                 file_obj = gzip.open(file_path, 'rt', encoding='utf-8')
             else:
@@ -74,7 +54,7 @@ class Command(BaseCommand):
                     check=True
                 )
             
-            self.stdout.write(self.style.SUCCESS("✅ База данных успешно восстановлена!"))
+            self.stdout.write(self.style.SUCCESS("✅ База данных полностью восстановлена!"))
             
         except subprocess.CalledProcessError as e:
             error_msg = e.stderr.decode('utf-8', errors='ignore').strip() if e.stderr else str(e)
