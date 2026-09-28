@@ -1736,27 +1736,27 @@ class CompetitionEntry(models.Model):
         Child,
         on_delete=models.CASCADE,
         blank=True,
-   #     null=True,  # ← Сделать nullable
+        null=True,  # ← Сделать nullable
         related_name="competition_entries",
         verbose_name="ребёнок",
     )
     # Новые поля для гостей
-   # guest_name = models.CharField(
-    #    "ФИО гостя",
-    #    max_length=220,
-   #     blank=True,
-   #     help_text="Заполните, если участник не из нашей базы",
-  #  )
-   # guest_birth_year = models.PositiveSmallIntegerField(
-   #     "Год рождения гостя",
-    ##    blank=True,
-   #     null=True,
-  #  )
-  #  guest_organization = models.CharField(
-  #      "Клуб/организация гостя",
-  #      max_length=200,
- #       blank=True,
-  #  )
+    guest_name = models.CharField(
+        "ФИО гостя",
+        max_length=220,
+        blank=True,
+        help_text="Заполните, если участник не из нашей базы",
+    )
+    guest_birth_year = models.PositiveSmallIntegerField(
+        "Год рождения гостя",
+        blank=True,
+        null=True,
+    )
+    guest_organization = models.CharField(
+        "Клуб/организация гостя",
+        max_length=200,
+        blank=True,
+    )
     competition = models.ForeignKey(
         Competition,
         on_delete=models.CASCADE,
@@ -1799,7 +1799,7 @@ class CompetitionEntry(models.Model):
             ),
             models.UniqueConstraint(
                 fields=["guest_name", "competition", "category"],
-              #  name="unique_guest_competition_category",
+                name="unique_guest_competition_category",
                 condition=models.Q(guest_name__gt=""),  # ← Только для гостей
             ),
         ]
