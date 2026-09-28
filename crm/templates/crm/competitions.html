@@ -640,6 +640,13 @@
         </div>
 
         <div class="modal-body grid gap-4">
+            {# ДОБАВЛЕНО: Вывод общих ошибок формы #}
+            {% if entry_form.non_field_errors %}
+            <div class="sm:col-span-2 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
+                {{ entry_form.non_field_errors }}
+            </div>
+            {% endif %}
+
             {% for field in entry_form %}
                 {% if field.name == "participant_type" %}
                     <div class="sm:col-span-2">
@@ -710,11 +717,11 @@ document.addEventListener('DOMContentLoaded', function() {
     function toggleFields() {
         const selected = document.querySelector('input[name="participant_type"]:checked');
         if (selected && selected.value === 'guest') {
-            childField.classList.add('hidden');
-            guestFields.classList.remove('hidden');
+            if (childField) childField.classList.add('hidden');
+            if (guestFields) guestFields.classList.remove('hidden');
         } else {
-            childField.classList.remove('hidden');
-            guestFields.classList.add('hidden');
+            if (childField) childField.classList.remove('hidden');
+            if (guestFields) guestFields.classList.add('hidden');
         }
     }
 
@@ -726,6 +733,8 @@ document.addEventListener('DOMContentLoaded', function() {
     toggleFields();
 });
 </script>
+
+
 
 {% endif %}
 
