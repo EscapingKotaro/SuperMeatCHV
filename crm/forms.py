@@ -182,24 +182,13 @@ class CompetitionForm(StyledFormMixin, forms.ModelForm):
 
 
 class CompetitionEntryForm(StyledFormMixin, forms.ModelForm):
-    participant_type = forms.ChoiceField(
-        label="Тип участника",
-        choices=[
-            ("child", "Наш спортсмен"),
-            ("guest", "Гость (не из базы)"),
-        ],
-        initial="child",
-        widget=forms.RadioSelect(attrs={"class": "mr-2"}),
-    )
-
     class Meta:
         model = CompetitionEntry
         fields = ("child", "guest_name", "guest_birth_year", "category", "rank", "place")
         widgets = {
-            # ЖЕСТКО задаем обычные текстовые поля для гостя, чтобы никакой умный поиск не лез
             "guest_name": forms.TextInput(attrs={
                 "class": "field", 
-                "placeholder": "Иванов Иван Иванович"
+                "placeholder": "Иванов Иван (если гость)"
             }),
             "guest_birth_year": forms.NumberInput(attrs={
                 "class": "field", 
@@ -214,48 +203,45 @@ class CompetitionEntryForm(StyledFormMixin, forms.ModelForm):
         if competition is None and getattr(self.instance, "competition_id", None):
             competition = self.instance.competition
 
-        # Определяем тип участника для отображения в модалке
-        if self.instance.pk:
-            self.fields["participant_type"].initial = "guest" if not self.instance.child_id else "child"
-        
         # Во внутриклубном соревновании место считается автоматически
         if competition and competition.is_internal:
             self.fields.pop("place", None)
 
-        # Снимаем обязательность на уровне поля, будем проверять вручную в clean()
+        # Снимаем жесткую обязательность, будем проверять вручную
         self.fields["child"].required = False
         self.fields["guest_name"].required = False
         self.fields["guest_birth_year"].required = False
+        
+        # Понятные подсказки прямо в форме
+        self.fields["child"].help_text = "Выберите из списка. Оставьте пустым, если добавляете гостя."
+        self.fields["guest_name"].help_text = "Заполните только если спортсмена нет в нашей базе."
 
         self.apply_styles()
 
     def clean(self):
         cleaned_data = super().clean()
-        participant_type = cleaned_data.get("participant_type")
-        
-        if participant_type == "child":
-            child = cleaned_data.get("child")
-            if not child:
-                self.add_error("child", "Выберите спортсмена из списка")
-            # Очищаем поля гостя, чтобы в БД не попал мусор
+        child = cleaned_data.get("child")
+        guest_name = (cleaned_data.get("guest_name") or "").strip()
+
+        # ГЛАВНАЯ ПРОВЕРКА: должен быть кто-то один
+        if not child and not guest_name:
+            raise forms.ValidationError("Укажите либо спортсмена из базы, либо ФИО гостя.")
+
+        if child:
+            # Если выбран наш спортсмен, гарантированно очищаем поля гостя
             cleaned_data["guest_name"] = ""
             cleaned_data["guest_birth_year"] = None
-            
-        elif participant_type == "guest":
-            guest_name = (cleaned_data.get("guest_name") or "").strip()
-            if not guest_name:
-                self.add_error("guest_name", "Обязательно укажите ФИО гостя")
-            
-            # КРИТИЧЕСКИ ВАЖНО: явно обнуляем child, чтобы БД приняла запись как гостя
+        else:
+            # Если гость, обнуляем child и требуем имя
             cleaned_data["child"] = None
-            
+            if not guest_name:
+                self.add_error("guest_name", "Обязательно укажите ФИО гостя, если не выбран спортсмен из базы")
+
         return cleaned_data
 
     def save(self, commit=True):
         instance = super().save(commit=False)
-        participant_type = self.cleaned_data.get("participant_type")
-        
-        if participant_type == "child":
+        if self.cleaned_data.get("child"):
             instance.guest_name = ""
             instance.guest_birth_year = None
         else:

@@ -640,58 +640,25 @@
         </div>
 
         <div class="modal-body grid gap-4">
-            {# ДОБАВЛЕНО: Вывод общих ошибок формы #}
+            {# Вывод общих ошибок (например, "Укажите либо спортсмена, либо гостя") #}
             {% if entry_form.non_field_errors %}
             <div class="sm:col-span-2 bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded text-sm">
                 {{ entry_form.non_field_errors }}
             </div>
             {% endif %}
 
+            {# Простой и надежный рендер всех полей #}
             {% for field in entry_form %}
-                {% if field.name == "participant_type" %}
-                    <div class="sm:col-span-2">
-                        <span class="label">{{ field.label }}</span>
-                        <div class="flex gap-4 mt-2">
-                            {% for radio in field %}
-                                <label class="flex items-center gap-2 cursor-pointer">
-                                    {{ radio.tag }}
-                                    <span>{{ radio.choice_label }}</span>
-                                </label>
-                            {% endfor %}
-                        </div>
-                        {% if field.errors %}
-                            <small class="text-red-600">{{ field.errors|join:", " }}</small>
-                        {% endif %}
-                    </div>
-                {% elif field.name == "child" %}
-                    <div id="child-field" class="{% if entry_form.participant_type.value == 'guest' %}hidden{% endif %}">
-                        <label>
-                            <span class="label">{{ field.label }}</span>
-                            {{ field }}
-                            {% if field.errors %}
-                                <small class="text-red-600">{{ field.errors|join:", " }}</small>
-                            {% endif %}
-                        </label>
-                    </div>
-                {% elif field.name == "guest_name" or field.name == "guest_birth_year" %}
-                    <div id="guest-fields" class="{% if entry_form.participant_type.value != 'guest' %}hidden{% endif %}">
-                        <label>
-                            <span class="label">{{ field.label }}</span>
-                            {{ field }}
-                            {% if field.errors %}
-                                <small class="text-red-600">{{ field.errors|join:", " }}</small>
-                            {% endif %}
-                        </label>
-                    </div>
-                {% else %}
-                    <label>
-                        <span class="label">{{ field.label }}</span>
-                        {{ field }}
-                        {% if field.errors %}
-                            <small class="text-red-600">{{ field.errors|join:", " }}</small>
-                        {% endif %}
-                    </label>
-                {% endif %}
+                <label class="{% if field.name == 'child' or field.name == 'guest_name' %}sm:col-span-2{% endif %}">
+                    <span class="label">{{ field.label }}</span>
+                    {{ field }}
+                    {% if field.help_text %}
+                        <small class="text-xs text-slate-500 mt-1 block">{{ field.help_text }}</small>
+                    {% endif %}
+                    {% if field.errors %}
+                        <small class="text-red-600 mt-1 block">{{ field.errors|join:", " }}</small>
+                    {% endif %}
+                </label>
             {% endfor %}
         </div>
 
@@ -707,32 +674,6 @@
         </div>
     </form>
 </section>
-
-<script>
-document.addEventListener('DOMContentLoaded', function() {
-    const radios = document.querySelectorAll('input[name="participant_type"]');
-    const childField = document.getElementById('child-field');
-    const guestFields = document.getElementById('guest-fields');
-
-    function toggleFields() {
-        const selected = document.querySelector('input[name="participant_type"]:checked');
-        if (selected && selected.value === 'guest') {
-            if (childField) childField.classList.add('hidden');
-            if (guestFields) guestFields.classList.remove('hidden');
-        } else {
-            if (childField) childField.classList.remove('hidden');
-            if (guestFields) guestFields.classList.add('hidden');
-        }
-    }
-
-    radios.forEach(radio => {
-        radio.addEventListener('change', toggleFields);
-    });
-
-    // Инициализация при загрузке
-    toggleFields();
-});
-</script>
 
 
 
