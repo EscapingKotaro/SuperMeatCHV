@@ -796,10 +796,11 @@ class GroupForm(StyledFormMixin, forms.ModelForm):
             "capacity",
             "subscription_tariffs",
             "single_session_price",
+            "salary_rate",
             "is_active",
         )
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         current_tariff_ids = (
             self.instance.subscription_tariffs.values_list("pk", flat=True)
@@ -824,6 +825,14 @@ class GroupForm(StyledFormMixin, forms.ModelForm):
             "Отдельная стоимость только для разового посещения или занятия в долг. "
             "Оставьте пустым, если такие занятия не используются."
         )
+        if user and not has_min_role(user, 1):
+            del self.fields["salary_rate"]
+        else:
+            self.fields["salary_rate"].help_text = (
+                "Ставка тренера за одно посещение группы. "
+                "Используется для расчета зарплаты."
+            )
+
         self.apply_styles()
 
     def clean_single_session_price(self):

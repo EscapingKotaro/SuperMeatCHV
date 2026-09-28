@@ -409,7 +409,7 @@ def group_create_view(request):
         return redirect(list_url(request, "group_list", create=1))
 
     if request.method == 'POST':
-        group_form = GroupForm(request.POST)
+        group_form = GroupForm(request.POST, user=request.user)  # ← Передать user
         slot_formset = ScheduleSlotFormSet(request.POST)
 
         if group_form.is_valid() and slot_formset.is_valid():
@@ -419,7 +419,7 @@ def group_create_view(request):
             messages.success(request, f'Группа "{group.name}" создана')
             return redirect(list_url(request, "group_list"))
     else:
-        group_form = GroupForm()
+        group_form = GroupForm(user=request.user)  # ← Передать user
         slot_formset = ScheduleSlotFormSet()
 
     context = {
@@ -443,12 +443,10 @@ def group_edit_view(request, pk):
     if request.method == 'POST':
         old_trainer = group.trainer
         old_salary_rate = group.salary_rate
-        group_form = GroupForm(request.POST, instance=group)
+        group_form = GroupForm(request.POST, instance=group, user=request.user)  # ← Передать user
         slot_formset = ScheduleSlotFormSet(request.POST, instance=group)
 
         if group_form.is_valid() and slot_formset.is_valid():
-            # ModelForm уже перенёс cleaned_data в instance. Для истории
-            # используем реквизиты, которые были сохранены до валидации.
             group.freeze_current_history(
                 trainer=old_trainer,
                 salary_rate=old_salary_rate,
@@ -458,7 +456,7 @@ def group_edit_view(request, pk):
             messages.success(request, f'Группа "{group.name}" обновлена')
             return redirect(list_url(request, "group_list"))
     else:
-        group_form = GroupForm(instance=group)
+        group_form = GroupForm(instance=group, user=request.user)  # ← Передать user
         slot_formset = ScheduleSlotFormSet(instance=group)
 
     context = {
