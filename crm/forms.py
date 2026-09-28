@@ -30,6 +30,7 @@ from .models import (
     ScheduleSlot,
     role_rank,
     user_rank,
+    has_min_role,
 )
 
 
