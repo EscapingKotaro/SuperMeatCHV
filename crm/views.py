@@ -6169,135 +6169,144 @@ def build_salary_data(month_start, month_end):
     }
 
 
+from django.db.models import Count, Sum, Q # Убедись, что это есть в импортах
+
 @login_required
 def statistics_view(request):
     month_start, month_end, today = _month_range(request)
 
     children = Child.objects.all()
-    current_statuses = (
-        Child.Status.ACTIVE,
-        Child.Status.TRIAL,
-    )
-    total_children = children.filter(
-        status__in=current_statuses,
-    ).count()
+    current_statuses = (Child.Status.ACTIVE, Child.Status.TRIAL)
+    
+    total_children = children.filter(status__in=current_statuses).count()
     active_children = children.filter(status=Child.Status.ACTIVE).count()
+    
     assigned_child_ids = set(
-        children
-        .filter(
-            status__in=current_statuses,
-            group__is_active=True,
-        )
-        .values_list("pk", flat=True)
+        children.filter(status__in=current_statuses, group__is_active=True).values_list("pk", flat=True)
     )
     assigned_child_ids.update(
-        ChildGroupMembership.objects
-        .filter(
-            child__status__in=current_statuses,
-            group__is_active=True,
-            archived_at__isnull=True,
-        )
-        .values_list("child_id", flat=True)
+        ChildGroupMembership.objects.filter(
+            child__status__in=current_statuses, group__is_active=True, archived_at__isnull=True
+        ).values_list("child_id", flat=True)
     )
-    unassigned_children = (
-        children
-        .filter(status__in=current_statuses)
-        .exclude(pk__in=assigned_child_ids)
-        .count()
-    )
+    unassigned_children = children.filter(status__in=current_statuses).exclude(pk__in=assigned_child_ids).count()
 
     new_qs = children.filter(created_at__date__gte=month_start, created_at__date__lte=month_end)
     new_count = new_qs.count()
-    # «Остались из новых» — уже стали полноценными спортсменами.
-    # Пробники ещё находятся в процессе конверсии и сюда не входят.
     new_kept = new_qs.filter(status=Child.Status.ACTIVE).count()
     left_count = children.filter(
         status__in=[Child.Status.LOST, Child.Status.ARCHIVED],
-        archived_at__gte=month_start, archived_at__lte=month_end).count()
+        archived_at__gte=month_start, archived_at__lte=month_end
+    ).count()
 
     if month_start > today:
         revenue_to_date = Decimal("0")
     else:
         revenue_cutoff = min(month_end, today)
-        revenue_to_date = (
-            Payment.objects
-            .filter(
-                date__gte=month_start,
-                date__lte=revenue_cutoff,
-            )
-            .aggregate(s=Sum("amount"))["s"]
-            or Decimal("0")
-        )
+        revenue_to_date = Payment.objects.filter(date__gte=month_start, date__lte=revenue_cutoff).aggregate(s=Sum("amount"))["s"] or Decimal("0")
 
-    revenue_month = Payment.objects.filter(
-        date__gte=month_start, date__lte=month_end).aggregate(s=Sum('amount'))['s'] or 0
+    revenue_month = Payment.objects.filter(date__gte=month_start, date__lte=month_end).aggregate(s=Sum('amount'))['s'] or Decimal("0")
 
-    forecast_rows = build_renewal_rows(
-        month_start,
-        month_end,
-        today,
-    )
-    expected = sum(
-        (row["amount"] for row in forecast_rows),
-        Decimal("0"),
-    )
+    forecast_rows = build_renewal_rows(month_start, month_end, today)
+    expected = sum((row["amount"] for row in forecast_rows), Decimal("0"))
     potential = Decimal(revenue_month) + expected
 
     target = RevenueTarget.objects.filter(month=month_start).first()
-    target_percent = (
-        min(100, round(Decimal(revenue_month) * 100 / target.amount))
-        if target and target.amount
-        else 0
-    )
-    expenses_month = (
-        Expense.objects
-        .filter(date__gte=month_start, date__lte=month_end)
-        .aggregate(s=Sum("amount"))["s"]
-        or Decimal("0")
+    target_percent = min(100, round(Decimal(revenue_month) * 100 / target.amount)) if target and target.amount else 0
+    
+    expenses_month = Expense.objects.filter(date__gte=month_start, date__lte=month_end).aggregate(s=Sum("amount"))["s"] or Decimal("0")
+
+    # ==========================================================
+    # НОВАЯ ЛОГИКА: Конверсия пробных (копия из boss_page)
+    # ==========================================================
+    trial_qs = Newcomer.objects.filter(
+        trial_at__date__gte=month_start,
+        trial_at__date__lte=month_end,
+        attended=True,
+        lesson_cancelled=False,
     )
 
-    groups_stats = build_group_stats(
-        month_start,
-        month_end,
-        today,
-    )
+    # 1. По тренерам
+    trial_by_trainer = {
+        row["trainer_id"]: row["total"]
+        for row in trial_qs.exclude(trainer__isnull=True).values("trainer_id").annotate(total=Count("id"))
+    }
+    retained_by_trainer = {
+        row["trainer_id"]: row["total"]
+        for row in trial_qs
+        .filter(child_id__in=Payment.objects.values("child_id").annotate(net=Sum("amount")).filter(net__gt=0).values("child_id"))
+        .exclude(trainer__isnull=True)
+        .values("trainer_id")
+        .annotate(total=Count("id", distinct=True))
+    }
+
+    # 2. По группам
+    trial_by_group = {
+        row["group_id"]: row["total"]
+        for row in trial_qs.exclude(group__isnull=True).values("group_id").annotate(total=Count("id"))
+    }
+    retained_by_group = {
+        row["group_id"]: row["total"]
+        for row in trial_qs
+        .filter(child_id__in=Payment.objects.values("child_id").annotate(net=Sum("amount")).filter(net__gt=0).values("child_id"))
+        .exclude(group__isnull=True)
+        .values("group_id")
+        .annotate(total=Count("id", distinct=True))
+    }
+    # ==========================================================
+
+    groups_stats = build_group_stats(month_start, month_end, today)
+    
+    # Внедряем конверсию в статистику групп
+    for gs in groups_stats:
+        gid = gs['group'].id
+        trial = trial_by_group.get(gid, 0)
+        retained = retained_by_group.get(gid, 0)
+        gs['trial'] = trial
+        gs['retained'] = retained
+        gs['retention_pct'] = round(retained * 100 / trial) if trial else 0
 
     trainers_stats = []
     for t in _report_trainers(month_start, month_end):
         t_left = children.filter(
-            Q(departure_trainer=t)
-            | Q(departure_trainer__isnull=True, group__trainer=t),
+            Q(departure_trainer=t) | Q(departure_trainer__isnull=True, group__trainer=t),
             status__in=[Child.Status.LOST, Child.Status.ARCHIVED],
             archived_at__gte=month_start,
             archived_at__lte=month_end,
         ).distinct().count()
+        
         t_groups = [gs for gs in groups_stats if gs['group'].trainer_id == t.id]
         t_present = sum(gs['present'] for gs in t_groups)
         t_capacity = sum(gs['capacity'] for gs in t_groups)
+        
+        trial = trial_by_trainer.get(t.id, 0)
+        retained = retained_by_trainer.get(t.id, 0)
+        retention_pct = round(retained * 100 / trial) if trial else 0
+
         trainers_stats.append({
             'trainer': t,
             'left': t_left,
             'present': t_present,
             'attendance_pct': round(t_present * 100 / t_capacity) if t_capacity else 0,
+            'trial': trial,
+            'retained': retained,
+            'retention_pct': retention_pct,
         })
 
     context = {
         'month_start': month_start, 'month_end': month_end, 'today': today,
         'total_children': total_children, 'active_children': active_children,
         'unassigned_children': unassigned_children,
-        'new_count': new_count, 'new_kept': new_kept,
-        'left_count': left_count,
-        'revenue_to_date': revenue_to_date,
-        # Совместимость со старым именем контекста.
-        'revenue_today': revenue_to_date,
-        'revenue_month': revenue_month,
-        'potential': potential, 'expected': expected,
+        'new_count': new_count, 'new_kept': new_kept, 'left_count': left_count,
+        'revenue_to_date': revenue_to_date, 'revenue_today': revenue_to_date,
+        'revenue_month': revenue_month, 'potential': potential, 'expected': expected,
         'target': target, 'target_percent': target_percent,
         'previous_month': (month_start - timedelta(days=1)).strftime('%Y-%m'),
         'next_month': (month_end + timedelta(days=1)).strftime('%Y-%m'),
-        'bar_scale': max(Decimal(revenue_month), potential, target.amount if target else 0, Decimal(1)),
+        'bar_scale': max(Decimal(revenue_month), potential, target.amount if target else Decimal(1)),
         'expenses_month': expenses_month,
-        'groups_stats': groups_stats, 'trainers_stats': trainers_stats,
+        'groups_stats': groups_stats, 
+        'trainers_stats': trainers_stats,
         'title': 'Статистика', 'page': 'statistics',
     }
     return render(request, 'crm/statistics.html', context)

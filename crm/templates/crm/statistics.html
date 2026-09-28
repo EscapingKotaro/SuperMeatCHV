@@ -148,113 +148,64 @@
         <div class="table-wrap">
 
             <table class="data-table w-full">
+    <thead>
+        <tr>
+            <th>Группа</th>
+            <th>Спортсменов</th>
+            <th>Пришли</th>
+            <th>Пропуски</th>
+            <th>Отметок</th>
+            <th>Посещаемость</th>
+            <th>Пробные</th>
+            <th>Остались</th>
+            <th>Конверсия</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for gs in groups_stats %}
+        <tr>
+            <td>
+                <b>{{ gs.group.name }}</b>
+                {% if gs.group.trainer %}
+                    <small class="block text-slate-400">{{ gs.group.trainer.full_name }}</small>
+                {% endif %}
+            </td>
+            <td><b>{{ gs.kids }}</b></td>
+            <td class="text-emerald-700">{{ gs.present }}</td>
+            <td class="text-red-600">{{ gs.absent }}</td>
+            <td>{{ gs.present|add:gs.absent }}</td>
+            <td>
+                <span class="badge {% if gs.attendance_pct >= 70 %}bg-emerald-100 text-emerald-700{% elif gs.attendance_pct >= 40 %}bg-amber-100 text-amber-700{% else %}bg-red-100 text-red-700{% endif %}">
+                    {{ gs.attendance_pct }}%
+                </span>
+            </td>
+            <td>{{ gs.trial }}</td>
+            <td>{{ gs.retained }}</td>
+            <td>
+                {% if gs.trial > 0 %}
+                    <span class="badge bg-violet-50 text-violet-700">{{ gs.retention_pct }}%</span>
+                {% else %}
+                    <span class="text-slate-400">—</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+            {% if not unassigned_children %}
+            <tr>
+                <td colspan="9" class="py-8 text-center text-slate-500">Нет данных по группам</td>
+            </tr>
+            {% endif %}
+        {% endfor %}
 
-                <thead>
-                    <tr>
-                        <th>Группа</th>
-                        <th>Спортсменов</th>
-                        <th>Пришли</th>
-                        <th>Пропуски</th>
-                        <th>Отметок</th>
-                        <th>Посещаемость</th>
-                    </tr>
-                </thead>
-
-
-                <tbody>
-
-                    {% for gs in groups_stats %}
-
-                        <tr>
-
-                            <td>
-                                <b>
-                                    {{ gs.group.name }}
-                                </b>
-
-                                {% if gs.group.trainer %}
-                                    <small class="block text-slate-400">
-                                        {{ gs.group.trainer.full_name }}
-                                    </small>
-                                {% endif %}
-                            </td>
-
-
-                            <td>
-                                <b>{{ gs.kids }}</b>
-                            </td>
-
-
-                            <td class="text-emerald-700">
-                                {{ gs.present }}
-                            </td>
-
-
-                            <td class="text-red-600">
-                                {{ gs.absent }}
-                            </td>
-
-
-                            <td>
-                                {{ gs.present|add:gs.absent }}
-                            </td>
-
-
-                            <td>
-
-                                <span
-                                    class="badge
-                                    {% if gs.attendance_pct >= 70 %}
-                                        bg-emerald-100 text-emerald-700
-                                    {% elif gs.attendance_pct >= 40 %}
-                                        bg-amber-100 text-amber-700
-                                    {% else %}
-                                        bg-red-100 text-red-700
-                                    {% endif %}"
-                                >
-                                    {{ gs.attendance_pct }}%
-                                </span>
-
-                            </td>
-
-                        </tr>
-
-                    {% empty %}
-
-                        {% if not unassigned_children %}
-                        <tr>
-                            <td
-                                colspan="6"
-                                class="py-8 text-center text-slate-500"
-                            >
-                                Нет данных по группам
-                            </td>
-                        </tr>
-                        {% endif %}
-
-                    {% endfor %}
-
-                    {% if unassigned_children %}
-                    <tr class="bg-amber-50/50">
-                        <td>
-                            <b>Без активной группы</b>
-                            <small class="block text-slate-400">
-                                Нужно распределить
-                            </small>
-                        </td>
-                        <td>
-                            <b>{{ unassigned_children }}</b>
-                        </td>
-                        <td>—</td>
-                        <td>—</td>
-                        <td>—</td>
-                        <td>—</td>
-                    </tr>
-                    {% endif %}
-
-                </tbody>
-
-            </table>
+        {% if unassigned_children %}
+        <tr class="bg-amber-50/50">
+            <td><b>Без активной группы</b><small class="block text-slate-400">Нужно распределить</small></td>
+            <td><b>{{ unassigned_children }}</b></td>
+            <td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>
+        </tr>
+        {% endif %}
+    </tbody>
+</table>
 
         </div>
 
@@ -280,81 +231,45 @@
         <div class="table-wrap">
 
             <table class="data-table w-full">
-
-                <thead>
-                    <tr>
-                        <th>Тренер</th>
-                        <th>Посещений</th>
-                        <th>Посещаемость</th>
-                        <th>Ушедших</th>
-                    </tr>
-                </thead>
-
-
-                <tbody>
-
-                    {% for ts in trainers_stats %}
-
-                        <tr>
-
-                            <td>
-                                <b>
-                                    {{ ts.trainer.full_name }}
-                                </b>
-                            </td>
-
-
-                            <td>
-                                {{ ts.present }}
-                            </td>
-
-
-                            <td>
-
-                                <span
-                                    class="badge
-                                    {% if ts.attendance_pct >= 70 %}
-                                        bg-emerald-100 text-emerald-700
-                                    {% elif ts.attendance_pct >= 40 %}
-                                        bg-amber-100 text-amber-700
-                                    {% else %}
-                                        bg-red-100 text-red-700
-                                    {% endif %}"
-                                >
-                                    {{ ts.attendance_pct }}%
-                                </span>
-
-                            </td>
-
-
-                            <td
-                                class="
-                                {% if ts.left %}
-                                    font-bold text-red-600
-                                {% endif %}
-                                "
-                            >
-                                {{ ts.left }}
-                            </td>
-
-                        </tr>
-
-                    {% empty %}
-
-                        <tr>
-                            <td
-                                colspan="4"
-                                class="py-8 text-center text-slate-500"
-                            >
-                                Нет данных по тренерам
-                            </td>
-                        </tr>
-
-                    {% endfor %}
-
-                </tbody>
-
-            </table>
+    <thead>
+        <tr>
+            <th>Тренер</th>
+            <th>Посещений</th>
+            <th>Посещаемость</th>
+            <th>Ушедших</th>
+            <th>Пробные</th>
+            <th>Остались</th>
+            <th>Конверсия</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for ts in trainers_stats %}
+        <tr>
+            <td><b>{{ ts.trainer.full_name }}</b></td>
+            <td>{{ ts.present }}</td>
+            <td>
+                <span class="badge {% if ts.attendance_pct >= 70 %}bg-emerald-100 text-emerald-700{% elif ts.attendance_pct >= 40 %}bg-amber-100 text-amber-700{% else %}bg-red-100 text-red-700{% endif %}">
+                    {{ ts.attendance_pct }}%
+                </span>
+            </td>
+            <td class="{% if ts.left %}font-bold text-red-600{% endif %}">{{ ts.left }}</td>
+            <td>{{ ts.trial }}</td>
+            <td>{{ ts.retained }}</td>
+            <td>
+                {% if ts.trial > 0 %}
+                    <span class="badge bg-violet-50 text-violet-700">{{ ts.retention_pct }}%</span>
+                {% else %}
+                    <span class="text-slate-400">—</span>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="7" class="py-8 text-center text-slate-500">Нет данных по тренерам</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
 
         </div>
 
