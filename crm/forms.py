@@ -181,21 +181,78 @@ class CompetitionForm(StyledFormMixin, forms.ModelForm):
 
 
 class CompetitionEntryForm(StyledFormMixin, forms.ModelForm):
+    participant_type = forms.ChoiceField(
+        label="Тип участника",
+        choices=[
+            ("child", "Наш спортсмен"),
+            ("guest", "Гость"),
+        ],
+        initial="child",
+        widget=forms.RadioSelect,
+    )
+
     class Meta:
         model = CompetitionEntry
-        fields = ("child", "category", "rank", "place")
+        fields = ("child", "guest_name", "guest_birth_year", "category", "rank", "place")
+        widgets = {
+            "guest_name": forms.TextInput(attrs={"placeholder": "Иванов Иван"}),
+            "guest_birth_year": forms.NumberInput(attrs={"placeholder": "2010"}),
+        }
 
     def __init__(self, *args, competition=None, **kwargs):
         super().__init__(*args, **kwargs)
         if competition is None and getattr(self.instance, "competition_id", None):
             competition = self.instance.competition
 
+        # Определяем тип участника
+        if self.instance.pk:
+            self.fields["participant_type"].initial = "guest" if self.instance.is_guest else "child"
+
         # Во внутриклубном соревновании место считается автоматически.
-        # Для выездного его можно внести вручную или импортировать из Excel.
         if competition and competition.is_internal:
             self.fields.pop("place", None)
 
+        # Для гостей child не обязателен
+        self.fields["child"].required = False
+        self.fields["guest_name"].required = False
+        self.fields["guest_birth_year"].required = False
+
         self.apply_styles()
+
+    def clean(self):
+        cleaned = super().clean()
+        participant_type = cleaned.get("participant_type")
+        child = cleaned.get("child")
+        guest_name = cleaned.get("guest_name")
+        guest_birth_year = cleaned.get("guest_birth_year")
+
+        if participant_type == "child":
+            if not child:
+                self.add_error("child", "Выберите спортсмена")
+            # Очищаем поля гостя
+            cleaned["guest_name"] = ""
+            cleaned["guest_birth_year"] = None
+        elif participant_type == "guest":
+            if not guest_name:
+                self.add_error("guest_name", "Укажите ФИО гостя")
+            # Очищаем поле ребёнка
+            cleaned["child"] = None
+
+        return cleaned
+
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        participant_type = self.cleaned_data.get("participant_type")
+
+        if participant_type == "child":
+            instance.guest_name = ""
+            instance.guest_birth_year = None
+        elif participant_type == "guest":
+            instance.child = None
+
+        if commit:
+            instance.save()
+        return instance
 
 
 class StaffCreateForm(StyledFormMixin, UserCreationForm):

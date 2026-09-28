@@ -248,7 +248,6 @@
     method="post" data-guard-draft
 >
     {% csrf_token %}
-
     <input
         type="hidden"
         name="action"
@@ -256,13 +255,16 @@
     >
 </form>
 
-
-<section class="card overflow-hidden">
+{% for group in table_groups %}
+<section class="card overflow-hidden mb-6">
+    <div class="px-4 py-3 bg-slate-100 border-b border-slate-200">
+        <h3 class="font-bold text-slate-900">
+            {{ group.category }} · {{ group.rank }}
+        </h3>
+    </div>
 
     <div class="table-wrap">
-
         <table class="data-table min-w-[1050px]">
-
             <thead>
                 <tr>
                     <th>Спортсмен</th>
@@ -271,9 +273,7 @@
                     <th>Категория</th>
 
                     {% for item in apparatus %}
-                    <th>
-                        {{ item.name }}
-                    </th>
+                    <th>{{ item.name }}</th>
                     {% endfor %}
 
                     <th>Итого</th>
@@ -282,41 +282,33 @@
                 </tr>
             </thead>
 
-
             <tbody>
-
-                {% for row in entry_rows %}
-
+                {% for row in group.rows %}
                 <tr>
-
                     <td>
-                        <a
-                            href="{% url 'child_card' row.entry.child.pk %}"
-                            class="font-bold text-slate-900 hover:text-blue-600"
-                        >
-                            {{ row.entry.child }}
-                        </a>
+                        {% if row.entry.is_guest %}
+                            <span class="font-bold text-slate-900">
+                                {{ row.entry.display_name }}
+                            </span>
+                            <span class="badge bg-blue-50 text-blue-700 ml-2">Гость</span>
+                        {% else %}
+                            <a
+                                href="{% url 'child_card' row.entry.child.pk %}"
+                                class="font-bold text-slate-900 hover:text-blue-600"
+                            >
+                                {{ row.entry.display_name }}
+                            </a>
+                        {% endif %}
                     </td>
 
+                    <td>{{ row.entry.display_birth_year|default:"—" }}</td>
 
-                    <td>
-                        {{ row.entry.child.birth_year }}
-                    </td>
+                    <td>{{ row.entry.rank|default:"—" }}</td>
 
-
-                    <td>
-                        {{ row.entry.rank|default:"—" }}
-                    </td>
-
-
-                    <td>
-                        {{ row.entry.category|default:"Общая" }}
-                    </td>
-
+                    <td>{{ row.entry.category|default:"Общая" }}</td>
 
                     {% for score in row.scores %}
                     <td>
-
                         <input
                             form="scores-form"
                             class="field w-24"
@@ -325,62 +317,37 @@
                             inputmode="decimal"
                             placeholder="—"
                         >
-
                     </td>
                     {% endfor %}
 
-
                     <td>
-
                         {% if row.complete %}
-
-                        <b>
-                            {{ row.total|stringformat:".3f" }}
-                        </b>
-
+                            <b>{{ row.total|stringformat:".3f" }}</b>
                         {% else %}
-
-                        <span
-                            class="text-slate-400"
-                            title="Заполните все дисциплины"
-                        >
-                            —
-                        </span>
-
+                            <span class="text-slate-400" title="Заполните все дисциплины">—</span>
                         {% endif %}
-
                     </td>
 
-
                     <td>
-
                         {% if row.entry.place %}
-
-                        <span class="
-                            grid h-8 w-8 place-items-center rounded-full
-                            {% if row.entry.place == 1 %}
-                                bg-amber-100 text-amber-700
-                            {% else %}
-                                bg-slate-100 text-slate-700
-                            {% endif %}
-                            font-extrabold
-                        ">
-                            {{ row.entry.place }}
-                        </span>
-
+                            <span class="
+                                grid h-8 w-8 place-items-center rounded-full
+                                {% if row.entry.place == 1 %}
+                                    bg-amber-100 text-amber-700
+                                {% else %}
+                                    bg-slate-100 text-slate-700
+                                {% endif %}
+                                font-extrabold
+                            ">
+                                {{ row.entry.place }}
+                            </span>
                         {% else %}
-
-                        —
-
+                            —
                         {% endif %}
-
                     </td>
 
-
                     <td>
-
                         <div class="flex gap-2">
-
                             <a
                                 class="btn btn-soft"
                                 href="?competition={{ selected.pk }}&edit_entry={{ row.entry.pk }}"
@@ -388,82 +355,50 @@
                                 Изменить
                             </a>
 
-
                             <form
                                 method="post" data-guard-draft
-                                onsubmit="return confirm(
-                                    'Удалить участника из соревнования?'
-                                )"
+                                onsubmit="return confirm('Удалить участника из соревнования?')"
                             >
                                 {% csrf_token %}
-
-                                <input
-                                    type="hidden"
-                                    name="action"
-                                    value="delete_entry"
-                                >
-
-                                <input
-                                    type="hidden"
-                                    name="entry_id"
-                                    value="{{ row.entry.pk }}"
-                                >
-
-                                <button class="btn btn-soft text-red-600">
-                                    Удалить
-                                </button>
-
+                                <input type="hidden" name="action" value="delete_entry">
+                                <input type="hidden" name="entry_id" value="{{ row.entry.pk }}">
+                                <button class="btn btn-soft text-red-600">Удалить</button>
                             </form>
-
                         </div>
-
                     </td>
-
                 </tr>
-
-
                 {% empty %}
-
                 <tr>
-                    <td
-                        colspan="{{ table_colspan }}"
-                        class="py-12 text-center text-slate-500"
-                    >
-                        Добавьте участников
+                    <td colspan="{{ table_colspan }}" class="py-12 text-center text-slate-500">
+                        Нет участников
                     </td>
                 </tr>
-
                 {% endfor %}
-
             </tbody>
-
         </table>
-
     </div>
-
-
-    <div class="flex items-center justify-between border-t border-slate-100 p-4">
-
-        <p class="text-xs text-slate-500">
-            Пустое поле означает, что результат ещё не введён.
-            Реальный нулевой результат вводите как 0.
-        </p>
-
-
-        {% if apparatus and entry_rows %}
-
-        <button
-            form="scores-form"
-            class="btn btn-primary"
-        >
-            Сохранить и пересчитать места
-        </button>
-
-        {% endif %}
-
-    </div>
-
 </section>
+{% empty %}
+<section class="card p-6">
+    <p class="text-center text-slate-500">Добавьте участников</p>
+</section>
+{% endfor %}
+
+<div class="flex items-center justify-between border-t border-slate-100 p-4">
+    <p class="text-xs text-slate-500">
+        Пустое поле означает, что результат ещё не введён.
+        Реальный нулевой результат вводите как 0.
+    </p>
+
+    {% if apparatus and table_groups %}
+    <button
+        form="scores-form"
+        class="btn btn-primary"
+    >
+        Сохранить и пересчитать места
+    </button>
+    {% endif %}
+</div>
 
 {% endif %}
 
@@ -675,7 +610,6 @@
 </section>
 
 
-
 <section
     id="athlete-modal"
     class="modal
@@ -684,28 +618,15 @@
         {% endif %}
     "
 >
-
     <form method="post" data-guard-draft>
-
         {% csrf_token %}
-
-        <input
-            type="hidden"
-            name="action"
-            value="save_entry"
-        >
+        <input type="hidden" name="action" value="save_entry">
 
         {% if editing_entry %}
-        <input
-            type="hidden"
-            name="entry_id"
-            value="{{ editing_entry.pk }}"
-        >
+        <input type="hidden" name="entry_id" value="{{ editing_entry.pk }}">
         {% endif %}
 
-
         <div class="modal-head">
-
             <b>
                 {% if editing_entry %}
                     Изменить участника
@@ -713,51 +634,62 @@
                     Добавить участника
                 {% endif %}
             </b>
-
-            <a
-                href="?competition={{ selected.pk }}"
-                data-close
-            >
+            <a href="?competition={{ selected.pk }}" data-close>
                 <i data-lucide="x"></i>
             </a>
-
         </div>
-
 
         <div class="modal-body grid gap-4">
-
             {% for field in entry_form %}
-
-            <label>
-
-                <span class="label">
-                    {{ field.label }}
-                </span>
-
-                {{ field }}
-
-                {% if field.errors %}
-                <small class="text-red-600">
-                    {{ field.errors|join:", " }}
-                </small>
+                {% if field.name == "participant_type" %}
+                    <div class="sm:col-span-2">
+                        <span class="label">{{ field.label }}</span>
+                        <div class="flex gap-4 mt-2">
+                            {% for radio in field %}
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    {{ radio.tag }}
+                                    <span>{{ radio.choice_label }}</span>
+                                </label>
+                            {% endfor %}
+                        </div>
+                        {% if field.errors %}
+                            <small class="text-red-600">{{ field.errors|join:", " }}</small>
+                        {% endif %}
+                    </div>
+                {% elif field.name == "child" %}
+                    <div id="child-field" class="{% if entry_form.participant_type.value == 'guest' %}hidden{% endif %}">
+                        <label>
+                            <span class="label">{{ field.label }}</span>
+                            {{ field }}
+                            {% if field.errors %}
+                                <small class="text-red-600">{{ field.errors|join:", " }}</small>
+                            {% endif %}
+                        </label>
+                    </div>
+                {% elif field.name == "guest_name" or field.name == "guest_birth_year" %}
+                    <div id="guest-fields" class="{% if entry_form.participant_type.value != 'guest' %}hidden{% endif %}">
+                        <label>
+                            <span class="label">{{ field.label }}</span>
+                            {{ field }}
+                            {% if field.errors %}
+                                <small class="text-red-600">{{ field.errors|join:", " }}</small>
+                            {% endif %}
+                        </label>
+                    </div>
+                {% else %}
+                    <label>
+                        <span class="label">{{ field.label }}</span>
+                        {{ field }}
+                        {% if field.errors %}
+                            <small class="text-red-600">{{ field.errors|join:", " }}</small>
+                        {% endif %}
+                    </label>
                 {% endif %}
-
-            </label>
-
             {% endfor %}
-
         </div>
 
-
         <div class="modal-foot">
-
-            <a
-                href="?competition={{ selected.pk }}"
-                class="btn btn-soft"
-            >
-                Отмена
-            </a>
-
+            <a href="?competition={{ selected.pk }}" class="btn btn-soft">Отмена</a>
             <button class="btn btn-primary">
                 {% if editing_entry %}
                     Сохранить
@@ -765,12 +697,35 @@
                     Добавить
                 {% endif %}
             </button>
-
         </div>
-
     </form>
-
 </section>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const radios = document.querySelectorAll('input[name="participant_type"]');
+    const childField = document.getElementById('child-field');
+    const guestFields = document.getElementById('guest-fields');
+
+    function toggleFields() {
+        const selected = document.querySelector('input[name="participant_type"]:checked');
+        if (selected && selected.value === 'guest') {
+            childField.classList.add('hidden');
+            guestFields.classList.remove('hidden');
+        } else {
+            childField.classList.remove('hidden');
+            guestFields.classList.add('hidden');
+        }
+    }
+
+    radios.forEach(radio => {
+        radio.addEventListener('change', toggleFields);
+    });
+
+    // Инициализация при загрузке
+    toggleFields();
+});
+</script>
 
 {% endif %}
 

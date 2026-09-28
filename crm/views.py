@@ -3014,6 +3014,76 @@ def competitions_page(request):
                 "complete": total is not None,
             })
 
+    # В конце view, перед return render(...)
+    if selected:
+        entries = (
+            selected.entries
+            .select_related("child", "competition")
+            .prefetch_related("scores")
+        )
+
+        # Группируем по (category, rank)
+        groups = {}
+        for entry in entries:
+            category = entry.category or "Без категории"
+            rank = entry.rank or "Без разряда"
+            key = (category, rank)
+
+            if key not in groups:
+                groups[key] = []
+
+            # ... существующая логика формирования entry_row ...
+            score_map = {
+                score.apparatus_id: score
+                for score in entry.scores.all()
+            }
+
+            score_cells = []
+            for apparatus_item in apparatus:
+                key_score = f"score_{entry.pk}_{apparatus_item.pk}"
+
+                if key_score in score_draft:
+                    value = score_draft[key_score]
+                else:
+                    score = score_map.get(apparatus_item.pk)
+                    if score is None or score.points is None:
+                        value = ""
+                    else:
+                        value = f"{score.points:.3f}"
+
+                score_cells.append({
+                    "apparatus_id": apparatus_item.pk,
+                    "value": value,
+                })
+
+            total = entry.total_points()
+
+            entry_row = {
+                "entry": entry,
+                "scores": score_cells,
+                "total": total,
+                "complete": total is not None,
+            }
+
+            groups[key].append(entry_row)
+
+        # Сортируем: сначала по категории, потом по разряду
+        sorted_groups = sorted(
+            groups.items(),
+            key=lambda item: (item[0][0], item[0][1])
+        )
+
+        # Формируем структуру для шаблона
+        table_groups = []
+        for (category, rank), rows in sorted_groups:
+            table_groups.append({
+                "category": category,
+                "rank": rank,
+                "rows": rows,
+            })
+    else:
+        table_groups = []
+
     return render(
         request,
         "crm/competitions.html",
@@ -3025,7 +3095,8 @@ def competitions_page(request):
             document_form=document_form,
             documents=selected.documents.select_related("child") if selected else [],
             apparatus=apparatus,
-            entry_rows=entry_rows,
+            entry_rows=entry_rows,  # Оставляем для обратной совместимости
+            table_groups=table_groups,  # Новая структура
             competition_form=competition_form,
             entry_form=entry_form,
             apparatus_form=apparatus_form,

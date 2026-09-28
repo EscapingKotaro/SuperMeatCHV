@@ -1735,8 +1735,27 @@ class CompetitionEntry(models.Model):
     child = models.ForeignKey(
         Child,
         on_delete=models.CASCADE,
+        blank=True,
+        null=True,  # ← Сделать nullable
         related_name="competition_entries",
         verbose_name="ребёнок",
+    )
+    # Новые поля для гостей
+    guest_name = models.CharField(
+        "ФИО гостя",
+        max_length=220,
+        blank=True,
+        help_text="Заполните, если участник не из нашей базы",
+    )
+    guest_birth_year = models.PositiveSmallIntegerField(
+        "Год рождения гостя",
+        blank=True,
+        null=True,
+    )
+    guest_organization = models.CharField(
+        "Клуб/организация гостя",
+        max_length=200,
+        blank=True,
     )
     competition = models.ForeignKey(
         Competition,
@@ -1776,6 +1795,12 @@ class CompetitionEntry(models.Model):
             models.UniqueConstraint(
                 fields=["child", "competition", "category"],
                 name="unique_child_competition_category",
+                condition=models.Q(child__isnull=False),  # ← Только для наших
+            ),
+            models.UniqueConstraint(
+                fields=["guest_name", "competition", "category"],
+                name="unique_guest_competition_category",
+                condition=models.Q(guest_name__gt=""),  # ← Только для гостей
             ),
         ]
 
@@ -1784,8 +1809,8 @@ class CompetitionEntry(models.Model):
         # Последующий перевод ребёнка не должен менять историю соревнования.
         if (
             self._state.adding
-            and self.group_snapshot_id is None
             and self.child_id
+            and self.group_snapshot_id is None
         ):
             self.group_snapshot_id = (
                 Child.objects
@@ -1793,8 +1818,26 @@ class CompetitionEntry(models.Model):
                 .values_list("group_id", flat=True)
                 .first()
             )
-
         super().save(*args, **kwargs)
+
+    @property
+    def is_guest(self):
+        """Является ли участник гостем."""
+        return self.child_id is None
+
+    @property
+    def display_name(self):
+        """Отображаемое имя (для нашего или гостя)."""
+        if self.child:
+            return str(self.child)
+        return self.guest_name or "—"
+
+    @property
+    def display_birth_year(self):
+        """Отображаемый год рождения."""
+        if self.child:
+            return self.child.birth_year
+        return self.guest_birth_year
 
     def total_points(self):
         apparatus_ids = list(
