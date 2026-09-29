@@ -504,7 +504,7 @@
     <div class="absolute inset-0 bg-slate-950/50 backdrop-blur-sm"
          onclick="document.getElementById('lesson-trainer-modal').classList.add('hidden')"></div>
 
-    <div class="relative w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl">
+    <div class="relative w-full max-w-3xl rounded-2xl bg-white p-6 shadow-2xl flex flex-col max-h-[90vh]">
         <button type="button"
                 onclick="document.getElementById('lesson-trainer-modal').classList.add('hidden')"
                 class="absolute right-4 top-4 text-slate-400 hover:text-slate-600"
@@ -512,89 +512,99 @@
             <i data-lucide="x" class="h-5 w-5"></i>
         </button>
 
-        <h3 class="text-lg font-extrabold">Тренеры на конкретную дату</h3>
+        <h3 class="text-lg font-extrabold">Распределение тренеров на дату</h3>
         <p class="mt-1 text-xs text-slate-500">
-            Выберите занятие, тренера и спортсменов. Для разделения группы сохраните половину детей одному тренеру, затем вторую половину другому.
+            Назначьте тренера для каждого ребенка. По умолчанию выбран основной тренер.
         </p>
 
-        <form method="post"
-              action="{% url 'assign_lesson_trainer' %}"
-              class="mt-5 space-y-4">
+        <form method="post" action="{% url 'assign_lesson_trainer' %}" class="mt-4 flex flex-col flex-1 min-h-0">
             {% csrf_token %}
             <input type="hidden" name="group_id" value="{{ selected_group.id }}">
 
-            <div class="grid gap-3 sm:grid-cols-2">
-                <div>
-                    <label class="label" for="lesson-trainer-date">Дата занятия</label>
-                    <select id="lesson-trainer-date"
-                            name="lesson_date"
-                            required
-                            class="field">
-                        {% for entry in week_data %}
-                        <option value="{{ entry.date|date:'Y-m-d' }}">
+            <!-- Дата (по умолчанию сегодня) -->
+            <div class="mb-4">
+                <label class="label" for="lesson-trainer-date">Дата занятия</label>
+                <select id="lesson-trainer-date" name="lesson_date" required class="field w-full sm:w-1/3">
+                    {% for entry in week_data %}
+                        <!-- Делаем today выбранной по умолчанию -->
+                        <option value="{{ entry.date|date:'Y-m-d' }}" 
+                                {% if entry.date == today %}selected{% endif %}>
                             {{ entry.date|date:"d.m.Y" }}
                             {% if entry.start_time %} · {{ entry.start_time|date:"H:i" }}{% endif %}
                         </option>
-                        {% endfor %}
-                    </select>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Панель массовых действий -->
+            <div class="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-lg bg-slate-50 p-3 border border-slate-200">
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="select-all-children" class="h-4 w-4 rounded border-slate-300">
+                    <label for="select-all-children" class="text-sm font-medium text-slate-700 cursor-pointer">Выбрать всех</label>
                 </div>
-                <div>
-                    <label class="label" for="lesson-trainer-select">Тренер</label>
-                    <select id="lesson-trainer-select"
-                            name="trainer_id"
-                            class="field">
-                        <option value="">Основной · {{ selected_group.trainer.full_name }}</option>
+                <div class="flex items-center gap-2 flex-1 justify-end">
+                    <span class="text-xs text-slate-500 hidden sm:inline">Назначить выбранных на:</span>
+                    <select id="bulk-trainer-select" class="field text-xs py-1.5 h-8 w-40">
+                        <option value="">-- Выберите тренера --</option>
+                        <option value="main">🔄 Основной ({{ selected_group.trainer.full_name }})</option>
                         {% for lesson_trainer in lesson_trainers %}
                             {% if lesson_trainer.id != selected_group.trainer_id %}
-                            <option value="{{ lesson_trainer.id }}">
-                                {{ lesson_trainer.full_name }}
-                            </option>
+                            <option value="{{ lesson_trainer.id }}">{{ lesson_trainer.full_name }}</option>
                             {% endif %}
                         {% endfor %}
                     </select>
-                </div>
+                    <button type="button" id="apply-bulk-assign" class="btn btn-primary text-xs py-1.5 h-8">
+                        Применить
+                    </button>
+                </div
             </div>
 
-            <div>
-                <div class="mb-2 flex items-center justify-between gap-2">
-                    <span class="label mb-0">Каких спортсменов забирает тренер</span>
-                    <div class="flex gap-2 text-xs">
-                        <button type="button"
-                                data-trainer-select-all
-                                class="font-bold text-slate-600 hover:text-slate-900">
-                            Все
-                        </button>
-                        <button type="button"
-                                data-trainer-clear-all
-                                class="font-bold text-slate-400 hover:text-slate-700">
-                            Снять
-                        </button>
-                    </div>
-                </div>
-                <div class="grid max-h-72 gap-2 overflow-y-auto rounded-xl border border-slate-200 p-3 sm:grid-cols-2">
-                    {% for lesson_child in lesson_trainer_children %}
-                    <label class="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-50">
-                        <input type="checkbox"
-                               name="child_ids"
-                               value="{{ lesson_child.id }}"
-                               class="h-4 w-4"
-                               data-trainer-child>
-                        <span class="min-w-0 truncate text-sm">
-                            {{ lesson_child.last_name }} {{ lesson_child.first_name }}
-                        </span>
-                    </label>
-                    {% empty %}
-                    <span class="text-sm text-slate-500">В группе нет активных спортсменов.</span>
-                    {% endfor %}
-                </div>
+            <!-- Список детей с индивидуальными селектами -->
+            <div class="flex-1 overflow-y-auto rounded-xl border border-slate-200 mb-4">
+                <table class="w-full text-sm text-left">
+                    <thead class="bg-slate-50 text-xs uppercase text-slate-500 sticky top-0 z-10">
+                        <tr>
+                            <th class="px-4 py-3 w-10"></th>
+                            <th class="px-4 py-3">Спортсмен</th>
+                            <th class="px-4 py-3">Тренер на эту дату</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        {% for child in lesson_trainer_children %}
+                        <tr class="hover:bg-slate-50 transition-colors">
+                            <td class="px-4 py-2">
+                                <input type="checkbox" class="child-checkbox h-4 w-4 rounded border-slate-300" 
+                                       value="{{ child.id }}" data-child-name="{{ child.last_name }} {{ child.first_name }}">
+                            </td>
+                            <td class="px-4 py-2 font-medium text-slate-800">
+                                {{ child.last_name }} {{ child.first_name }}
+                            </td>
+                            <td class="px-4 py-2">
+                                <select name="child_trainer_{{ child.id }}" class="trainer-select field text-xs py-1.5 h-8 w-full max-w-xs">
+                                    <option value="">Основной ({{ selected_group.trainer.full_name }})</option>
+                                    {% for lesson_trainer in lesson_trainers %}
+                                        {% if lesson_trainer.id != selected_group.trainer_id %}
+                                        <option value="{{ lesson_trainer.id }}">{{ lesson_trainer.full_name }}</option>
+                                        {% endif %}
+                                    {% endfor %}
+                                </select>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="3" class="px-4 py-8 text-center text-sm text-slate-500">
+                                В группе нет активных спортсменов.
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
             </div>
 
-            <div class="rounded-xl bg-slate-50 p-3 text-xs text-slate-500">
-                Выбор «Основной» снимает замену у отмеченных детей. Уже сохранённая история Attendance при переназначении этой даты обновит фактического тренера.
-            </div>
-
-            <div class="flex gap-2 pt-1">
-                <button type="submit" class="btn btn-primary flex-1">Назначить</button>
+            <div class="flex gap-2 pt-2 border-t border-slate-200">
+                <button type="submit" class="btn btn-primary flex-1">
+                    <i data-lucide="save" class="h-4 w-4 mr-2"></i> Сохранить распределение
+                </button>
                 <button type="button"
                         onclick="document.getElementById('lesson-trainer-modal').classList.add('hidden')"
                         class="btn btn-soft flex-1">
@@ -604,6 +614,62 @@
         </form>
     </div>
 </div>
+
+<!-- Скрипт для массовых действий -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // Инициализация иконок Lucide, если они есть
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+
+    const selectAllCheckbox = document.getElementById('select-all-children');
+    const childCheckboxes = document.querySelectorAll('.child-checkbox');
+    const bulkTrainerSelect = document.getElementById('bulk-trainer-select');
+    const applyBulkBtn = document.getElementById('apply-bulk-assign');
+
+    // Логика "Выбрать всех"
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', (e) => {
+            childCheckboxes.forEach(cb => cb.checked = e.target.checked);
+        });
+    }
+
+    // Логика массового назначения
+    if (applyBulkBtn) {
+        applyBulkBtn.addEventListener('click', () => {
+            const targetTrainerId = bulkTrainerSelect.value;
+            if (!targetTrainerId) {
+                alert('Сначала выберите тренера для массового назначения!');
+                return;
+            }
+
+            let count = 0;
+            childCheckboxes.forEach(cb => {
+                if (cb.checked) {
+                    const childId = cb.value;
+                    const selectElement = document.querySelector(`select[name="child_trainer_${childId}"]`);
+                    if (selectElement) {
+                        selectElement.value = targetTrainerId === 'main' ? '' : targetTrainerId;
+                        count++;
+                    }
+                }
+            });
+
+            if (count > 0) {
+                // Визуальный фидбек
+                applyBulkBtn.textContent = `Применено к ${count}!`;
+                applyBulkBtn.classList.add('bg-green-600', 'hover:bg-green-700');
+                setTimeout(() => {
+                    applyBulkBtn.textContent = 'Применить';
+                    applyBulkBtn.classList.remove('bg-green-600', 'hover:bg-green-700');
+                    bulkTrainerSelect.value = '';
+                    childCheckboxes.forEach(cb => cb.checked = false);
+                    if (selectAllCheckbox) selectAllCheckbox.checked = false;
+                }, 1500);
+            }
+        });
+    }
+});
+</script>
 {% endif %}
 
 {% if selected_group and week_data %}
