@@ -373,7 +373,7 @@ def _attendance_requires_subscription(child, group):
         )
     return membership.requires_subscription if membership else True
 
-import datetime
+
 def attendance_view(request):
     inline_child_form = getattr(request, "_child_create_form", None)
     inline_child_group_id = getattr(request, "_child_create_group_id", None)
@@ -386,7 +386,7 @@ def attendance_view(request):
     period = request.GET.get("period", "window")
     if period not in {"window", "day", "month", "quarter", "year", "custom"}:
         period = "window"
-
+    today = timezone.localdate()
     # 1. Группа
     if group_id:
         group = get_object_or_404(Group, id=group_id)
@@ -401,12 +401,12 @@ def attendance_view(request):
                     "attendance",
                     groups=Group.objects.none(),
                     selected_group=None,
-                    today = datetime.date.today()
+                    today = today
                 ),
             )
 
     trainer = group.trainer if group else None
-    today = timezone.localdate()
+    
 
     create_child_post = (
         request.method == "POST"
@@ -835,8 +835,7 @@ def attendance_view(request):
         lesson_trainers=Trainer.objects.filter(
             is_active=True,
         ).order_by("full_name"),
-        lesson_trainer_children=group.current_children(),
-        today=datetime.date.today(),
+        lesson_trainer_children=group.current_children()
     )
 
     return render(request, "crm/attendance.html", context)
