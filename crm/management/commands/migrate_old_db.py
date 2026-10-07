@@ -17,7 +17,7 @@ class Command(BaseCommand):
         parser.add_argument('db_path', type=str, help='Путь к файлу старой базы данных')
 
     def handle(self, *args, **options):
-        db_path = options['file_path']
+        db_path = options['db_path']
         self.stdout.write(f"🔍 Подключение к старой базе: {db_path}")
         
         try:
