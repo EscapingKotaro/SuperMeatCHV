@@ -135,17 +135,9 @@
                 <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 mb-1">
                         <h3 class="text-base font-bold text-[#17202A]">Импорт и обновление данных из бэкапа</h3>
-                        <span class="px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 text-xs font-bold">ВНИМАНИЕ</span>
                     </div>
                     
-                    <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 my-3">
-                        <div class="flex items-start gap-2">
-                            <i data-lucide="info" class="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0"></i>
-                            <p class="text-sm text-amber-800">
-                                <strong>Как это работает:</strong> Система <u>не удаляет</u> базу целиком. Записи с совпадающими ID будут <strong>обновлены</strong>, новые записи будут <strong>добавлены</strong>. Это безопасный способ синхронизации или восстановления из бэкапа.
-                            </p>
-                        </div>
-                    </div>
+
 
                     <form method="post" enctype="multipart/form-data" action="{% url 'upload_new_db' %}" onsubmit="handleFormSubmit(this)">
                         {% csrf_token %}
