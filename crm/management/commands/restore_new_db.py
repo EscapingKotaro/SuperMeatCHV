@@ -1,83 +1,136 @@
-import os
-import subprocess
+import json
 import gzip
 from django.core.management.base import BaseCommand, CommandError
-from django.db import connection
+from django.apps import apps
+from django.db import transaction, connection
+from django.core import serializers
 
 class Command(BaseCommand):
-    help = 'Восстанавливает БД из SQL дампа и синхронизирует счетчики ID'
+    help = 'Загружает данные из JSON-дампа, обновляя существующие записи'
 
     def add_arguments(self, parser):
-        parser.add_argument('file_path', type=str, help='Путь к файлу .sql или .sql.gz')
+        parser.add_argument('file_path', type=str, help='Путь к .json или .json.gz')
 
     def handle(self, *args, **options):
         file_path = options['file_path']
-        
-        if not os.path.exists(file_path):
-            raise CommandError(f"Файл не найден: {file_path}")
+        self.stdout.write(f"📂 Читаю файл: {file_path}")
 
-        db_name = os.environ.get('DB_NAME', 'mydb')
-        db_user = os.environ.get('DB_USER', 'myuser')
-        db_password = os.environ.get('DB_PASSWORD', '')
-        db_host = os.environ.get('DB_HOST', 'db')
-
-        self.stdout.write(self.style.WARNING("⚠️  Начинается ПОЛНОЕ восстановление БД..."))
-        
         try:
-            cmd = [
-                'psql', '-h', db_host, '-U', db_user, '-d', db_name, '--no-password'
-            ]
-            
-            env = os.environ.copy()
-            env['PGPASSWORD'] = db_password
-            env['ON_ERROR_STOP'] = '1'
-            
             if file_path.endswith('.gz'):
-                file_obj = gzip.open(file_path, 'rt', encoding='utf-8')
+                with gzip.open(file_path, 'rt', encoding='utf-8') as f:
+                    data = json.load(f)
             else:
-                file_obj = open(file_path, 'r', encoding='utf-8')
-            
-            with file_obj as f:
-                subprocess.run(
-                    cmd, env=env, stdin=f,
-                    stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True
-                )
-            
-            self.stdout.write(self.style.SUCCESS("✅ База данных восстановлена!"))
-            
-            # 🔥 НОВОЕ: Синхронизируем счетчики ID после восстановления
-            self.stdout.write(self.style.WARNING("🔄 Синхронизируем счетчики ID (Sequences)..."))
-            self._reset_sequences()
-            self.stdout.write(self.style.SUCCESS("✅ Счетчики ID успешно синхронизированы!"))
-            
-        except subprocess.CalledProcessError as e:
-            error_msg = e.stderr.decode('utf-8', errors='ignore').strip() if e.stderr else str(e)
-            raise CommandError(f"Ошибка восстановления: {error_msg}")
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
         except Exception as e:
-            raise CommandError(f"Неожиданная ошибка: {str(e)}")
+            raise CommandError(f"Не удалось прочитать файл: {e}")
+
+        if not isinstance(data, list):
+            raise CommandError("Ожидался список объектов в JSON")
+
+        self.stdout.write(f"📦 Найдено объектов: {len(data)}")
+
+        created_count = 0
+        updated_count = 0
+        skipped_count = 0
+        errors = []
+
+        # 🔥 Отключаем сигналы на время импорта, чтобы не было мусора
+        from django.db.models.signals import post_save, post_delete
+        from crm.models import (
+            reconcile_confirmed_trial,
+            refresh_newcomer_payment_after_delete,
+            Attendance, Newcomer, Payment,
+        )
+        post_save.disconnect(reconcile_confirmed_trial, sender=Attendance)
+        post_save.disconnect(reconcile_confirmed_trial, sender=Newcomer)
+        post_save.disconnect(refresh_newcomer_payment_after_delete, sender=Payment)
+
+        try:
+            with transaction.atomic():
+                for idx, item in enumerate(data, 1):
+                    try:
+                        model_path = item['model']
+                        pk = item['pk']
+                        fields = item.get('fields', {})
+
+                        app_label, model_name = model_path.split('.')
+                        Model = apps.get_model(app_label, model_name)
+
+                        # Разделяем обычные поля и M2M
+                        m2m_fields = {}
+                        regular_fields = {}
+                        for field_name, value in fields.items():
+                            try:
+                                field = Model._meta.get_field(field_name)
+                                if field.many_to_many or field.one_to_many:
+                                    m2m_fields[field_name] = value
+                                else:
+                                    regular_fields[field_name] = value
+                            except Exception:
+                                continue
+
+                        obj, created = Model.objects.update_or_create(
+                            pk=pk,
+                            defaults=regular_fields,
+                        )
+
+                        # M2M устанавливаем после создания
+                        for field_name, value in m2m_fields.items():
+                            try:
+                                getattr(obj, field_name).set(value or [])
+                            except Exception as e:
+                                errors.append(f"M2M {model_path}#{pk}.{field_name}: {e}")
+
+                        if created:
+                            created_count += 1
+                        else:
+                            updated_count += 1
+
+                        if idx % 500 == 0:
+                            self.stdout.write(f"   ... обработано {idx}/{len(data)}")
+
+                    except Exception as e:
+                        errors.append(f"{item.get('model')}#{item.get('pk')}: {e}")
+                        skipped_count += 1
+
+            # 🔥 Синхронизируем sequence (счётчики ID)
+            self.stdout.write("🔄 Синхронизирую счётчики ID...")
+            self._reset_sequences()
+
         finally:
-            if os.path.exists(file_path):
-                os.remove(file_path)
+            # Возвращаем сигналы обратно
+            post_save.connect(reconcile_confirmed_trial, sender=Attendance)
+            post_save.connect(reconcile_confirmed_trial, sender=Newcomer)
+            post_save.connect(refresh_newcomer_payment_after_delete, sender=Payment)
+
+        self.stdout.write(self.style.SUCCESS(
+            f"\n✅ Готово!\n"
+            f"   Создано: {created_count}\n"
+            f"   Обновлено: {updated_count}\n"
+            f"   Пропущено с ошибками: {skipped_count}"
+        ))
+
+        if errors:
+            self.stdout.write(self.style.WARNING(f"\n⚠️  Ошибок: {len(errors)}. Первые 15:"))
+            for err in errors[:15]:
+                self.stdout.write(f"   • {err}")
 
     def _reset_sequences(self):
-        """Сбрасывает все sequence в public схеме на максимальный id в соответствующих таблицах"""
+        """Сбрасывает sequence на max(id) в каждой таблице"""
         with connection.cursor() as cursor:
-            # Находим все последовательности, связанные с таблицами в схеме public
             cursor.execute("""
-                SELECT sequencename, tablename 
+                SELECT sequencename, 
+                       replace(sequencename, '_id_seq', '') as table_name
                 FROM pg_sequences 
-                WHERE schemaname = 'public' AND sequencename LIKE '%_id_seq';
+                WHERE schemaname = 'public' 
+                  AND sequencename LIKE '%_id_seq';
             """)
-            sequences = cursor.fetchall()
-            
-            for seq_name, table_name in sequences:
+            for seq_name, table_name in cursor.fetchall():
                 try:
-                    # Устанавливаем значение sequence равным max(id) в таблице
-                    # coalesce(max(id), 1) защитит от ошибок на пустых таблицах
                     cursor.execute(f"""
-                        SELECT setval('{seq_name}', coalesce(max(id), 1), max(id) IS NOT null) 
-                        FROM {table_name};
-                    """)
+                        SELECT setval(%s, coalesce((SELECT max(id) FROM {table_name}), 1), 
+                                       (SELECT max(id) FROM {table_name}) IS NOT NULL)
+                    """, [seq_name])
                 except Exception:
-                    # Если в таблице нет колонки 'id' или она называется иначе, просто пропускаем
                     pass

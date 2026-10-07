@@ -8,6 +8,9 @@ from crm.models import (
     Tariff, Subscription, Attendance, Payment
 )
 
+import re
+from datetime import time as dt_time
+
 class Command(BaseCommand):
     help = 'Миграция данных из старой SQLite базы в новую'
 
@@ -75,6 +78,49 @@ class Command(BaseCommand):
                 )
                 group_map[row['ClGrTypeId']] = group.id
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено групп: {len(group_map)}"))
+
+
+            self.stdout.write("🔄 Этап 2.5: Перенос графиков (ScheduleSlot)")
+            from crm.models import ScheduleSlot
+
+            old_cursor.execute("SELECT ClGrTypeId, ClGrTypeSchedule, ClGrTypeName FROM ClientGroupType")
+            slot_count = 0
+            for row in old_cursor.fetchall():
+                new_group_id = group_map.get(row['ClGrTypeId'])
+                if not new_group_id:
+                    continue
+
+                schedule_str = (row['ClGrTypeSchedule'] or '').strip()
+                if not schedule_str:
+                    continue
+
+                # Парсим время из названия группы (например "ОНЛАЙН с 10.00")
+                start_time = dt_time(0, 0)  # заглушка
+                name = row['ClGrTypeName'] or ''
+                time_match = re.search(r'(\d{1,2})[.:](\d{2})', name)
+                if time_match:
+                    h, m = int(time_match.group(1)), int(time_match.group(2))
+                    if 0 <= h <= 23 and 0 <= m <= 59:
+                        start_time = dt_time(h, m)
+
+                # Каждая цифра = день недели (1=Пн ... 7=Вс)
+                for ch in schedule_str:
+                    if ch.isdigit():
+                        old_day = int(ch)
+                        if 1 <= old_day <= 7:
+                            django_weekday = old_day - 1  # 0=Пн ... 6=Вс
+                            ScheduleSlot.objects.get_or_create(
+                                group_id=new_group_id,
+                                weekday=django_weekday,
+                                start_time=start_time,
+                                defaults={
+                                    'duration_minutes': 60,
+                                }
+                            )
+                            slot_count += 1
+
+            self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено слотов расписания: {slot_count}"))
+
 
             self.stdout.write("🔄 Этап 3: Перенос Детей (Child)")
             old_cursor.execute("SELECT * FROM Client")
@@ -234,6 +280,10 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено абонементов: {len(subscription_map)}"))
 
             self.stdout.write("🔄 Этап 7: Перенос Посещений (Attendance)")
+            from django.db.models.signals import post_save
+            from crm.models import reconcile_confirmed_trial, Attendance, Newcomer
+            post_save.disconnect(reconcile_confirmed_trial, sender=Attendance)
+            post_save.disconnect(reconcile_confirmed_trial, sender=Newcomer)
             # В ClientVisit нет ClientID напрямую, берем его через ClientSubscription
             old_cursor.execute("""
                 SELECT v.ClVisitId, v.ClVisitDate, v.ClVisitClientSubscriptionId, s.ClSubscrClientID
@@ -259,6 +309,8 @@ class Command(BaseCommand):
                 )
                 attendance_count += 1
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено посещений: {attendance_count}"))
+            post_save.connect(reconcile_confirmed_trial, sender=Attendance)
+            post_save.connect(reconcile_confirmed_trial, sender=Newcomer)
 
             self.stdout.write("🔄 Этап 8: Перенос Оплат (Payment)")
             old_cursor.execute("SELECT CashFlowID, CashFlowIncome, CashFlowDate, CashFlowClientID, CashFlowComment FROM CashFlow WHERE CashFlowIncome > 0 AND CashFlowClientID > 0")

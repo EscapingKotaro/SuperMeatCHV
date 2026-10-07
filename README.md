@@ -1,72 +1,20 @@
-# ВЫСОТА CRM — UI-прототип
-
-Кликабельные Django-шаблоны CRM спортивного клуба на Tailwind CSS.
-
-```bash
-python manage.py runserver
-```
-
-После запуска: `http://127.0.0.1:8000/login/`.
-
-Тестовые аккаунты
-Логины: boss, senior, admin, admin2
-Пароль: Demo12345!
-
-логин: admin
-Пароль: FvthbrfCjcfnm
-
-## Запуск тестов
+# 1. Клонировать/скопировать проект
 cd /opt/crm
 
-sudo -H -u juli \
-/home/juli/juli_dev_app/venv/bin/python \
-manage.py test crm --keepdb
+# 2. Создать .env из шаблона
+cp .env.example .env
+nano .env   # прописать SECRET_KEY, DB_PASSWORD, ALLOWED_HOSTS
 
-## Основные страницы
+# 3. Собрать и запустить
+docker compose up -d --build
 
-| Экран | Адрес |
-| --- | --- |
-| Вход | `http://127.0.0.1:8000/login/` |
-| Табель | `http://127.0.0.1:8000/attendance/` |
-| Статистика | `http://127.0.0.1:8000/statistics/` |
-| Продления и оплаты | `http://127.0.0.1:8000/payments/` |
-| Расходы | `http://127.0.0.1:8000/expenses/` |
-| Соревнования | `http://127.0.0.1:8000/competitions/` |
-| Уведомления | `http://127.0.0.1:8000/notifications/` |
-| Страница руководителя | `http://127.0.0.1:8000/boss/` |
-| Управление пользователями | `http://127.0.0.1:8000/users/` |
-| Профиль пользователя | `http://127.0.0.1:8000/profile/` |
-| Стандартная Django-админка | `http://127.0.0.1:8000/admin/` |
+# 4. Создать админа
+docker exec -it crm-web python manage.py createsuperuser
 
+# 5. Проверить логи
+docker compose logs -f web
 
-команда для запуска таймера
-sudo tee /etc/systemd/system/expire-trials.service >/dev/null <<'EOF'
-[Unit]
-Description=Spartak CRM trial expiration
-After=network.target
-
-[Service]
-Type=oneshot
-User=juli
-WorkingDirectory=/opt/crm
-ExecStart=/home/juli/juli_dev_app/venv/bin/python manage.py expire_trials
-EOF
-
-sudo tee /etc/systemd/system/expire-trials.timer >/dev/null <<'EOF'
-[Unit]
-Description=Check unpaid Spartak CRM trials every hour
-
-[Timer]
-OnCalendar=hourly
-Persistent=true
-Unit=expire-trials.service
-
-[Install]
-WantedBy=timers.target
-EOF
-
-sudo systemctl daemon-reload
-sudo systemctl enable --now expire-trials.timer
-sudo systemctl start expire-trials.service
-sudo systemctl status expire-trials.timer --no-pager
-sudo journalctl -u expire-trials.service -n 20 --no-pager
+# 6. Настроить автобэкапы
+sudo crontab -e
+# Добавить строку:
+# 0 3 * * *  /opt/crm/backup.sh >> /var/log/crm_backup.log 2>&1
