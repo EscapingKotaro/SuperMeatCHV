@@ -14,6 +14,14 @@ class Command(BaseCommand):
         file_path = options['file_path']
         self.stdout.write(f"📂 Читаю файл: {file_path}")
 
+        # 🔥 Проверяем размер файла
+        import os
+        file_size = os.path.getsize(file_path)
+        self.stdout.write(f"📏 Размер файла: {file_size} байт")
+
+        if file_size == 0:
+            raise CommandError("Файл пустой!")
+
         try:
             if file_path.endswith('.gz'):
                 with gzip.open(file_path, 'rt', encoding='utf-8') as f:
@@ -25,9 +33,13 @@ class Command(BaseCommand):
             raise CommandError(f"Не удалось прочитать файл: {e}")
 
         if not isinstance(data, list):
-            raise CommandError("Ожидался список объектов в JSON")
+            raise CommandError(f"Ожидался список объектов, но получили: {type(data)}")
 
-        self.stdout.write(f"📦 Найдено объектов: {len(data)}")
+        self.stdout.write(f"📦 Найдено объектов в дампе: {len(data)}")
+
+        if len(data) == 0:
+            self.stdout.write(self.style.WARNING("⚠️  Дамп пустой! Нечего загружать."))
+            return
 
         created_count = 0
         updated_count = 0
@@ -72,7 +84,7 @@ class Command(BaseCommand):
                     else:
                         updated_count += 1
 
-                    if idx % 500 == 0:
+                    if idx % 100 == 0:
                         self.stdout.write(f"   ... обработано {idx}/{len(data)}")
 
                 except Exception as e:
