@@ -1188,23 +1188,25 @@ def move_class_view(request):
     )
 
 
+from django.db.models import Q
+from django.utils import dateformat
+
 @login_required
 @require_POST
 @transaction.atomic
 def assign_lesson_trainer_view(request):
-    """Массовое назначение тренеров детям на конкретную дату в одной форме."""
+    """Массовое назначение тренеров детям на конкретную дату через две глобальные замены."""
     group = get_object_or_404(
         Group.objects.select_related("trainer"),
         pk=request.POST.get("group_id"),
         is_active=True,
     )
     
-    # Дата по умолчанию сегодня, если не передана или некорректна
     lesson_date_raw = request.POST.get("lesson_date", "").strip()
     try:
         lesson_date = date.fromisoformat(lesson_date_raw)
     except ValueError:
-        lesson_date = date.today() # Фолбэк на сегодня
+        lesson_date = date.today()
 
     if lesson_date not in effective_class_dates(group, lesson_date, lesson_date):
         messages.error(request, "На выбранную дату у группы нет занятия")
@@ -1215,35 +1217,57 @@ def assign_lesson_trainer_view(request):
         messages.error(request, "В группе нет активных спортсменов")
         return redirect(f"{reverse('attendance')}?group_id={group.pk}&ref_date={lesson_date.isoformat()}")
 
-    assignments_made = 0
+    # Получаем глобально выбранных тренеров
+    trainer_1_id = request.POST.get("trainer_1_id", "").strip()
+    trainer_2_id = request.POST.get("trainer_2_id", "").strip()
+
+    t1_obj = Trainer.objects.get(id=trainer_1_id) if trainer_1_id else None
+    t2_obj = Trainer.objects.get(id=trainer_2_id) if trainer_2_id else None
     main_trainer = group.trainer
 
-    # Проходим по всем детям группы и смотрим, что выбрал юзер для каждого
+    assignments_made = 0
+    errors = []
+
     for child in children:
-        # Ищем в POST данные вида: child_trainer_<id_ребенка>
-        trainer_id = request.POST.get(f"child_trainer_{child.id}", "").strip()
+        # Проверяем, какие галочки были отмечены для этого ребенка
+        is_t1 = f"child_t1_{child.id}" in request.POST
+        is_t2 = f"child_t2_{child.id}" in request.POST
+
+        target_trainer = main_trainer # По умолчанию - основной
+
+        if is_t1:
+            if t1_obj:
+                target_trainer = t1_obj
+            else:
+                errors.append(f"{child}: выбран Тренер 1, но он не назначен вверху")
+                continue
         
-        # Если тренер не выбран или выбран основной -> удаляем запись замены (будет основной)
-        if not trainer_id or trainer_id == str(main_trainer.id):
-            deleted, _ = LessonTrainerAssignment.objects.filter(
+        elif is_t2:
+            if t2_obj:
+                target_trainer = t2_obj
+            else:
+                errors.append(f"{child}: выбран Тренер 2, но он не назначен вверху")
+                continue
+
+        # Применяем целевого тренера
+        if target_trainer == main_trainer:
+            # Если основной - удаляем запись замены
+            LessonTrainerAssignment.objects.filter(
                 group=group,
                 date=lesson_date,
                 child=child,
             ).delete()
-            actual_trainer = main_trainer
         else:
             # Иначе создаем/обновляем запись замены
-            trainer = get_object_or_404(Trainer, pk=trainer_id, is_active=True)
             LessonTrainerAssignment.objects.update_or_create(
                 group=group,
                 date=lesson_date,
                 child=child,
-                defaults={"trainer": trainer, "created_by": request.user},
+                defaults={"trainer": target_trainer, "created_by": request.user},
             )
-            actual_trainer = trainer
             assignments_made += 1
 
-        # Обновляем снепшот Attendance
+        # Обновляем снепшот Attendance для корректного расчета ЗП и истории
         Attendance.objects.filter(
             child=child,
             date=lesson_date,
@@ -1251,25 +1275,26 @@ def assign_lesson_trainer_view(request):
             Q(group_snapshot=group) | Q(group_snapshot__isnull=True, child__group=group)
         ).update(
             group_snapshot=group,
-            trainer_snapshot=actual_trainer,
+            trainer_snapshot=target_trainer,
             salary_rate_snapshot=group.salary_rate,
         )
 
+    if errors:
+        messages.warning(request, "Частично сохранено с ошибками: " + "; ".join(errors))
+    
     if assignments_made > 0:
-        action_text = f"Распределено замен: {assignments_made}"
+        messages.success(request, f"Расписание на {lesson_date:%d.%m.%Y} обновлено! Назначено замен: {assignments_made}")
     else:
-        action_text = "Все дети возвращены к основному тренеру"
+        messages.success(request, f"Расписание на {lesson_date:%d.%m.%Y} обновлено! Все дети возвращены к основному тренеру.")
 
     log_action(
         request,
         "attendance.trainer_assign_batch",
         group,
-        f"{lesson_date:%d.%m.%Y}: {action_text}",
+        f"{lesson_date:%d.%m.%Y}: Назначено замен: {assignments_made}",
     )
     
-    messages.success(request, f"Расписание на {lesson_date:%d.%m.%Y} успешно обновлено!")
     return redirect(f"{reverse('attendance')}?group_id={group.pk}&ref_date={lesson_date.isoformat()}")
-
 
 @login_required
 @require_POST
