@@ -1,3 +1,4 @@
+import sqlite3
 import os
 import re
 from datetime import datetime, date as dt_date, time as dt_time
