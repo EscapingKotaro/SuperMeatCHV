@@ -5,7 +5,7 @@ import traceback
 from datetime import datetime, date as dt_date, time as dt_time
 from decimal import Decimal
 from django.core.management.base import BaseCommand, CommandError
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.db.models.signals import post_save, post_delete
 from crm.models import (
     Trainer, Group, Child, ChildGroupMembership, 
@@ -154,7 +154,7 @@ class Command(BaseCommand):
                             'birth_date': birth_date,
                             'address': (str(row['ClientAddress']) or "")[:255],
                             'parent_phone': (str(row['ClientPhone']) or "")[:20],
-                            'group_id': temp_group.id, # Пока сюда
+                            'group_id': temp_group.id,
                             'status': 'active',
                             'discount_percent': 10 if row['ClientIsHaveDiscount'] else 0,
                             'note': (str(row['ClientComment']) or "")[:500],
@@ -208,15 +208,12 @@ class Command(BaseCommand):
                             )
                             count += 1
                         
-                        # Обновляем основную группу у ребёнка
                         Child.objects.filter(id=child_id).update(group_id=primary_group_id)
                     except Exception as e:
                         self.stdout.write(self.style.ERROR(f"   ❌ Ошибка на child_id={child_id}: {e}"))
                         raise
 
-                # ==========================================
-                # 🔥 ИСПРАВЛЕНИЕ: Безопасная обработка временной группы
-                # ==========================================
+                # Безопасная обработка временной группы
                 orphaned_count = Child.objects.filter(group_id=temp_group.id).count()
                 if orphaned_count > 0:
                     self.stdout.write(self.style.WARNING(
@@ -295,14 +292,19 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.SUCCESS("   ✅ Абонементы перенесены"))
 
                 # ==========================================
-                # ЭТАП 7: Посещения
+                # ЭТАП 7: Посещения (С ИСПРАВЛЕНИЕМ ДУБЛЕЙ)
                 # ==========================================
                 self.stdout.write("🔄 Этап 7: Перенос Посещений")
+                # 🔥 ДОБАВИЛИ ClVisitClientGroupTypeId, чтобы брать реальную группу занятия
                 old_cursor.execute("""
-                    SELECT v.ClVisitId, v.ClVisitDate, v.ClVisitClientSubscriptionId, s.ClSubscrClientID
+                    SELECT v.ClVisitId, v.ClVisitDate, v.ClVisitClientGroupTypeId, v.ClVisitClientSubscriptionId, s.ClSubscrClientID
                     FROM ClientVisit v
                     LEFT JOIN ClientSubscription s ON v.ClVisitClientSubscriptionId = s.ClSubscrId
                 """)
+                
+                attendance_created = 0
+                attendance_skipped = 0
+                
                 for row in old_cursor.fetchall():
                     if not row['ClSubscrClientID'] or not row['ClVisitDate']:
                         continue
@@ -310,6 +312,7 @@ class Command(BaseCommand):
                     try:
                         visit_id = int(row['ClVisitId'])
                         c_id = int(row['ClSubscrClientID'])
+                        visit_group_id_old = int(row['ClVisitClientGroupTypeId']) if row['ClVisitClientGroupTypeId'] else None
                     except (ValueError, TypeError):
                         continue
 
@@ -321,17 +324,27 @@ class Command(BaseCommand):
                     if not child_obj:
                         continue
                     
-                    Attendance.objects.update_or_create(
-                        id=visit_id,
-                        defaults={
-                            'child_id': child_id,
-                            'date': row['ClVisitDate'],
-                            'group_snapshot_id': child_obj.group_id,
-                            'status': 'present',
-                            'charge_amount': Decimal(0),
-                        }
-                    )
-                self.stdout.write(self.style.SUCCESS("   ✅ Посещения перенесены"))
+                    # Берем группу из самого посещения, если нет - берем текущую группу ребенка
+                    group_snapshot_id = group_map.get(visit_group_id_old) or child_obj.group_id
+
+                    try:
+                        Attendance.objects.update_or_create(
+                            id=visit_id,
+                            defaults={
+                                'child_id': child_id,
+                                'date': row['ClVisitDate'],
+                                'group_snapshot_id': group_snapshot_id,
+                                'status': 'present',
+                                'charge_amount': Decimal(0),
+                            }
+                        )
+                        attendance_created += 1
+                    except IntegrityError:
+                        # 🔥 ЛОВИМ ДУБЛИ: если в старой базе два посещения в один день в одной группе, просто пропускаем второе
+                        attendance_skipped += 1
+                        continue
+                
+                self.stdout.write(self.style.SUCCESS(f"   ✅ Посещения перенесены (создано: {attendance_created}, пропущено дублей: {attendance_skipped})"))
 
                 # ==========================================
                 # ЭТАП 8: Оплаты
