@@ -31,14 +31,13 @@ class Command(BaseCommand):
         group_map = {}
         child_map = {}
         tariff_map = {}
-        subscription_map = {}
 
         with transaction.atomic():
             # ==========================================
             # ЭТАП 1: Тренеры
             # ==========================================
-            self.stdout.write("🔄 Этап 1: Перенос Тренеров (Trainer)")
-            old_cursor.execute("SELECT teacherId, teacherName, teacherSalary FROM Teacher")
+            self.stdout.write("🔄 Этап 1: Перенос Тренеров")
+            old_cursor.execute("SELECT teacherId, teacherName FROM Teacher")
             for row in old_cursor.fetchall():
                 name = row['teacherName'] or f"Тренер_{row['teacherId']}"
                 if 'Pass:' in name:
@@ -46,11 +45,7 @@ class Command(BaseCommand):
                 
                 trainer, _ = Trainer.objects.update_or_create(
                     id=row['teacherId'],
-                    defaults={
-                        'full_name': name[:200],
-                        'phone': '',
-                        'is_active': True,
-                    }
+                    defaults={'full_name': name[:200], 'phone': '', 'is_active': True}
                 )
                 trainer_map[row['teacherId']] = trainer.id
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено тренеров: {len(trainer_map)}"))
@@ -58,7 +53,7 @@ class Command(BaseCommand):
             # ==========================================
             # ЭТАП 2: Группы + Графики
             # ==========================================
-            self.stdout.write("🔄 Этап 2: Перенос Групп (Group) и Графиков")
+            self.stdout.write("🔄 Этап 2: Перенос Групп и Графиков")
             old_cursor.execute("""
                 SELECT g.ClGrTypeId, g.ClGrTypeName, g.ClGrTypeTeacherId, g.ClGrTypeSchedule, d.DisciplineSingleVisitPrice 
                 FROM ClientGroupType g
@@ -81,7 +76,6 @@ class Command(BaseCommand):
                 )
                 group_map[row['ClGrTypeId']] = group.id
 
-                # Парсинг расписания
                 schedule_str = (row['ClGrTypeSchedule'] or '').strip()
                 if schedule_str:
                     start_time = dt_time(0, 0)
@@ -95,39 +89,38 @@ class Command(BaseCommand):
                         if ch.isdigit():
                             old_day = int(ch)
                             if 1 <= old_day <= 7:
-                                django_weekday = old_day - 1
                                 ScheduleSlot.objects.get_or_create(
                                     group_id=group.id,
-                                    weekday=django_weekday,
+                                    weekday=old_day - 1,
                                     start_time=start_time,
                                     defaults={'duration_minutes': 60}
                                 )
-
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено групп: {len(group_map)}"))
 
-            # 🔥 Создаём временную группу для импорта
+            # Временная группа
             temp_group, _ = Group.objects.get_or_create(
                 name="⚠️ Импорт (временная)",
-                defaults={
-                    'trainer_id': Trainer.objects.first().id if Trainer.objects.exists() else Trainer.objects.create(full_name="Временный").id,
-                    'is_active': False,
-                    'single_session_price': Decimal(0),
-                    'salary_rate': Decimal(0),
-                }
+                defaults={'trainer_id': trainer_id, 'is_active': False, 'single_session_price': 0, 'salary_rate': 0}
             )
 
             # ==========================================
-            # ЭТАП 3: Дети (с временной группой)
+            # ЭТАП 3: Дети
             # ==========================================
-            self.stdout.write("🔄 Этап 3: Перенос Детей (Child)")
+            self.stdout.write("🔄 Этап 3: Перенос Детей")
             old_cursor.execute("SELECT * FROM Client")
 
             for row in old_cursor.fetchall():
-                full_name = row['ClientName'] or "Без имени"
-                parts = full_name.split()
-                first_name = parts[0] if parts else "Без имени"
-                last_name = parts[1] if len(parts) > 1 else ""
-                patronymic = " ".join(parts[2:]) if len(parts) > 2 else ""
+                # Умный парсинг имени из твоего db_report.json
+                last_name = (row['ClientSurname'] or "").strip()
+                first_name = (row['ClientName'] or "").strip()
+                patronymic = (row['ClientFatherName'] or "").strip()
+
+                # Если фамилия пустая, а в имени два слова (например "Стрельбицкий Герман")
+                if not last_name and first_name:
+                    parts = first_name.split()
+                    if len(parts) >= 2:
+                        last_name = parts[0]
+                        first_name = parts[1]
 
                 birth_date = None
                 birth_year = 2010
@@ -138,53 +131,40 @@ class Command(BaseCommand):
                     except ValueError:
                         pass
 
-                phone = (str(row['ClientPhone']) or "")[:20]
-                address = (str(row['ClientAddress']) or "")[:255]
-                comment = (str(row['ClientComment']) or "")[:500]
-                patronymic = (patronymic or str(row['ClientFatherName']) or "")[:100]
-                first_name = first_name[:100]
-                last_name = last_name[:100]
-
                 child, _ = Child.objects.update_or_create(
-                    id=row['ClientID'],
+                    id=int(row['ClientID']),
                     defaults={
-                        'first_name': first_name,
-                        'last_name': last_name,
-                        'patronymic': patronymic,
+                        'first_name': (first_name or "Без имени")[:100],
+                        'last_name': (last_name or "Без фамилии")[:100],
+                        'patronymic': patronymic[:100],
                         'birth_year': birth_year,
                         'birth_date': birth_date,
-                        'address': address,
-                        'parent_phone': phone,
-                        'group_id': temp_group.id,  # 🔥 Временная группа
+                        'address': (str(row['ClientAddress']) or "")[:255],
+                        'parent_phone': (str(row['ClientPhone']) or "")[:20],
+                        'group_id': temp_group.id,
                         'status': 'active',
                         'discount_percent': 10 if row['ClientIsHaveDiscount'] else 0,
-                        'note': comment,
+                        'note': (str(row['ClientComment']) or "")[:500],
                     }
                 )
-                child_map[row['ClientID']] = child.id
+                child_map[int(row['ClientID'])] = child.id
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено детей: {len(child_map)}"))
             
             # ==========================================
-            # ЭТАП 4: Членства + обновление групп
+            # ЭТАП 4: Членства
             # ==========================================
-            self.stdout.write("🔄 Этап 4: Перенос Членства в группах (ChildGroupMembership)")
-            
-            # 🔥 Удаляем мусорные членства, созданные при сохранении детей
+            self.stdout.write("🔄 Этап 4: Перенос Членства в группах")
             ChildGroupMembership.objects.all().delete()
-            self.stdout.write("   🗑️ Очищены временные членства")
 
             old_cursor.execute("SELECT ClGrId, ClGrClientId, ClGrClGrTypeId FROM ClientGroup")
             child_groups = {}
             for row in old_cursor.fetchall():
-                child_id = child_map.get(row['ClGrClientId'])
-                group_id = group_map.get(row['ClGrClGrTypeId'])
+                child_id = child_map.get(int(row['ClGrClientId']))
+                group_id = group_map.get(int(row['ClGrClGrTypeId']))
                 if child_id and group_id:
                     if child_id not in child_groups:
                         child_groups[child_id] = []
-                    child_groups[child_id].append({
-                        'group_id': group_id,
-                        'clgr_id': row['ClGrId']
-                    })
+                    child_groups[child_id].append({'group_id': group_id, 'clgr_id': int(row['ClGrId'])})
 
             count = 0
             for child_id, groups in child_groups.items():
@@ -192,35 +172,29 @@ class Command(BaseCommand):
                 primary_group_id = groups[0]['group_id']
                 
                 for idx, group_data in enumerate(groups):
-                    is_primary = (idx == 0)
                     ChildGroupMembership.objects.create(
                         child_id=child_id,
                         group_id=group_data['group_id'],
-                        is_primary=is_primary,
+                        is_primary=(idx == 0),
                         joined_at=dt_date.today(),
-                        archived_at=None if is_primary else dt_date.today(),
+                        archived_at=None if (idx == 0) else dt_date.today(),
                         requires_subscription=True,
                     )
                     count += 1
                 
-                # 🔥 Обновляем основную группу у ребёнка
                 Child.objects.filter(id=child_id).update(group_id=primary_group_id)
 
-            self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено связей ребенок-группа: {count}"))
-
-            # Удаляем временную группу
             temp_group.delete()
-            self.stdout.write("   🗑️ Удалена временная группа")
-
+            self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено связей: {count}"))
 
             # ==========================================
             # ЭТАП 5: Тарифы
             # ==========================================
-            self.stdout.write("🔄 Этап 5: Перенос Тарифов (Tariff)")
+            self.stdout.write("🔄 Этап 5: Перенос Тарифов")
             old_cursor.execute("SELECT * FROM ClientSubscriptionType")
             for row in old_cursor.fetchall():
-                tariff, _ = Tariff.objects.update_or_create(
-                    id=row['ClSubscrTypeId'],
+                Tariff.objects.update_or_create(
+                    id=int(row['ClSubscrTypeId']),
                     defaults={
                         'name': (row['ClSubscrTypeName'] or f"Тариф_{row['ClSubscrTypeId']}")[:120],
                         'price': Decimal(row['ClSubscrTypePrice'] or 0),
@@ -229,32 +203,33 @@ class Command(BaseCommand):
                         'is_active': bool(row['ClSubscrTypeIsActive']),
                     }
                 )
-                tariff_map[row['ClSubscrTypeId']] = tariff.id
+                tariff_map[int(row['ClSubscrTypeId'])] = int(row['ClSubscrTypeId'])
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено тарифов: {len(tariff_map)}"))
 
             # ==========================================
             # ЭТАП 6: Абонементы
             # ==========================================
-            self.stdout.write("🔄 Этап 6: Перенос Абонементов (Subscription)")
+            self.stdout.write("🔄 Этап 6: Перенос Абонементов")
             old_cursor.execute("SELECT ClSubscrId, ClSubscrClientID, ClSubscrClSubscrTypeId, ClSubscrDateStart, ClSubscrDateFinish, ClSubscrAvailLessons FROM ClientSubscription")
             for row in old_cursor.fetchall():
-                child_id = child_map.get(row['ClSubscrClientID'])
+                child_id = child_map.get(int(row['ClSubscrClientID']))
                 if not child_id:
                     continue
                 
-                tariff_id = tariff_map.get(row['ClSubscrClSubscrTypeId'])
-                child_obj = Child.objects.get(id=child_id)
-                
-                start_date = row['ClSubscrDateStart']
-                end_date = row['ClSubscrDateFinish']
-                if not start_date: start_date = dt_date.today()
-                if not end_date: end_date = dt_date.today()
+                # 🔥 БЕЗОПАСНЫЙ ПОИСК вместо .get()
+                child_obj = Child.objects.filter(id=child_id).first()
+                if not child_obj:
+                    continue
+
+                tariff_id = tariff_map.get(int(row['ClSubscrClSubscrTypeId']))
+                start_date = row['ClSubscrDateStart'] or dt_date.today()
+                end_date = row['ClSubscrDateFinish'] or dt_date.today()
 
                 Subscription.objects.update_or_create(
-                    id=row['ClSubscrId'],
+                    id=int(row['ClSubscrId']),
                     defaults={
                         'child_id': child_id,
-                        'group_id': child_obj.group_id, # Берем актуальную группу ребёнка
+                        'group_id': child_obj.group_id,
                         'tariff_id': tariff_id,
                         'start_date': start_date,
                         'end_date': end_date,
@@ -263,28 +238,31 @@ class Command(BaseCommand):
                         'is_active': True,
                     }
                 )
-                subscription_map[row['ClSubscrId']] = child_id
-            self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено абонементов: {len(subscription_map)}"))
+            self.stdout.write(self.style.SUCCESS("   ✅ Абонементы перенесены"))
 
             # ==========================================
             # ЭТАП 7: Посещения
             # ==========================================
-            self.stdout.write("🔄 Этап 7: Перенос Посещений (Attendance)")
+            self.stdout.write("🔄 Этап 7: Перенос Посещений")
             old_cursor.execute("""
                 SELECT v.ClVisitId, v.ClVisitDate, v.ClVisitClientSubscriptionId, s.ClSubscrClientID
                 FROM ClientVisit v
                 LEFT JOIN ClientSubscription s ON v.ClVisitClientSubscriptionId = s.ClSubscrId
             """)
-            attendance_count = 0
             for row in old_cursor.fetchall():
-                child_id = child_map.get(row['ClSubscrClientID'])
-                if not child_id or not row['ClVisitDate']:
+                if not row['ClSubscrClientID'] or not row['ClVisitDate']:
+                    continue
+                    
+                child_id = child_map.get(int(row['ClSubscrClientID']))
+                if not child_id:
+                    continue
+
+                child_obj = Child.objects.filter(id=child_id).first()
+                if not child_obj:
                     continue
                 
-                child_obj = Child.objects.get(id=child_id)
-                
                 Attendance.objects.update_or_create(
-                    id=row['ClVisitId'],
+                    id=int(row['ClVisitId']),
                     defaults={
                         'child_id': child_id,
                         'date': row['ClVisitDate'],
@@ -293,32 +271,29 @@ class Command(BaseCommand):
                         'charge_amount': Decimal(0),
                     }
                 )
-                attendance_count += 1
-            self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено посещений: {attendance_count}"))
+            self.stdout.write(self.style.SUCCESS("   ✅ Посещения перенесены"))
 
             # ==========================================
             # ЭТАП 8: Оплаты
             # ==========================================
-            self.stdout.write("🔄 Этап 8: Перенос Оплат (Payment)")
+            self.stdout.write("🔄 Этап 8: Перенос Оплат")
             old_cursor.execute("SELECT CashFlowID, CashFlowIncome, CashFlowDate, CashFlowClientID, CashFlowComment FROM CashFlow WHERE CashFlowIncome > 0 AND CashFlowClientID > 0")
-            payment_count = 0
             for row in old_cursor.fetchall():
-                child_id = child_map.get(row['CashFlowClientID'])
+                child_id = child_map.get(int(row['CashFlowClientID']))
                 if not child_id:
                     continue
                 
                 Payment.objects.update_or_create(
-                    id=row['CashFlowID'],
+                    id=int(row['CashFlowID']),
                     defaults={
                         'child_id': child_id,
                         'amount': Decimal(row['CashFlowIncome']),
                         'date': row['CashFlowDate'] or dt_date.today(),
                         'operation_kind': 'payment',
-                        'reason': (row['CashFlowComment'] or "Импорт из старой базы")[:500],
+                        'reason': (str(row['CashFlowComment']) or "Импорт")[:500],
                     }
                 )
-                payment_count += 1
-            self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено оплат: {payment_count}"))
+            self.stdout.write(self.style.SUCCESS("   ✅ Оплаты перенесены"))
 
         old_conn.close()
         self.stdout.write(self.style.SUCCESS("🎉 Миграция успешно завершена!"))
