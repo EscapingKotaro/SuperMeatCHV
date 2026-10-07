@@ -30,7 +30,7 @@ class Command(BaseCommand):
         except Exception as e:
             raise CommandError(f"Не удалось открыть базу: {e}")
 
-        # 🔥 ОТКЛЮЧАЕМ СИГНАЛЫ на время импорта, чтобы избежать побочных эффектов
+        # 🔥 ОТКЛЮЧАЕМ СИГНАЛЫ на время импорта
         post_save.disconnect(reconcile_confirmed_trial, sender=Attendance)
         post_save.disconnect(reconcile_confirmed_trial, sender=Newcomer)
         post_delete.disconnect(refresh_newcomer_payment_after_delete, sender=Payment)
@@ -106,7 +106,7 @@ class Command(BaseCommand):
                                     )
                 self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено групп: {len(group_map)}"))
 
-                # Временная группа
+                # Временная группа для детей без привязки
                 temp_trainer = Trainer.objects.first() or Trainer.objects.create(full_name="Временный")
                 temp_group, _ = Group.objects.get_or_create(
                     name="⚠️ Импорт (временная)",
@@ -154,7 +154,7 @@ class Command(BaseCommand):
                             'birth_date': birth_date,
                             'address': (str(row['ClientAddress']) or "")[:255],
                             'parent_phone': (str(row['ClientPhone']) or "")[:20],
-                            'group_id': temp_group.id,
+                            'group_id': temp_group.id, # Пока сюда
                             'status': 'active',
                             'discount_percent': 10 if row['ClientIsHaveDiscount'] else 0,
                             'note': (str(row['ClientComment']) or "")[:500],
@@ -191,9 +191,7 @@ class Command(BaseCommand):
                 count = 0
                 for child_id, groups in child_groups.items():
                     try:
-                        # 🔥 Явная проверка перед любыми действиями
                         if not Child.objects.filter(id=child_id).exists():
-                            self.stdout.write(self.style.WARNING(f"   ⚠️ Ребёнок id={child_id} не найден в БД, пропускаем"))
                             continue
 
                         groups.sort(key=lambda x: x['clgr_id'], reverse=True)
@@ -210,13 +208,29 @@ class Command(BaseCommand):
                             )
                             count += 1
                         
+                        # Обновляем основную группу у ребёнка
                         Child.objects.filter(id=child_id).update(group_id=primary_group_id)
                     except Exception as e:
                         self.stdout.write(self.style.ERROR(f"   ❌ Ошибка на child_id={child_id}: {e}"))
                         raise
 
-                temp_group.delete()
-                self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено связей: {count}"))
+                # ==========================================
+                # 🔥 ИСПРАВЛЕНИЕ: Безопасная обработка временной группы
+                # ==========================================
+                orphaned_count = Child.objects.filter(group_id=temp_group.id).count()
+                if orphaned_count > 0:
+                    self.stdout.write(self.style.WARNING(
+                        f"   ⚠️ {orphaned_count} детей не имели группы в старой базе. "
+                        f"Они оставлены в группе '⚠️ Проверить (импорт)' для ручной настройки."
+                    ))
+                    temp_group.name = "⚠️ Проверить (импорт)"
+                    temp_group.is_active = False
+                    temp_group.save()
+                else:
+                    temp_group.delete()
+                    self.stdout.write("   🗑️ Удалена временная группа")
+                
+                self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено связей ребенок-группа: {count}"))
 
                 # ==========================================
                 # ЭТАП 5: Тарифы
@@ -350,12 +364,11 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS("🎉 Миграция успешно завершена!"))
         
         except Exception as e:
-            # 🔥 ПЕЧАТАЕМ ПОЛНЫЙ СТЕК ВЫЗОВА, ЧТОБЫ НАЙТИ ВИРУСА
             self.stdout.write(self.style.ERROR("❌ КРИТИЧЕСКАЯ ОШИБКА МИГРАЦИИ:"))
             self.stdout.write(self.style.ERROR(traceback.format_exc()))
             raise CommandError(f"Ошибка миграции: {e}")
         finally:
-            # 🔥 ВОЗВРАЩАЕМ СИГНАЛЫ ОБРАТНО, ЧТОБЫ CRM РАБОТАЛА НОРМАЛЬНО
+            # Возвращаем сигналы
             post_save.connect(reconcile_confirmed_trial, sender=Attendance)
             post_save.connect(reconcile_confirmed_trial, sender=Newcomer)
             post_delete.connect(refresh_newcomer_payment_after_delete, sender=Payment)
