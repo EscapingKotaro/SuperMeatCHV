@@ -14,7 +14,6 @@ class Command(BaseCommand):
         file_path = options['file_path']
         self.stdout.write(f"📂 Читаю файл: {file_path}")
 
-        # 🔥 Проверяем размер файла
         import os
         file_size = os.path.getsize(file_path)
         self.stdout.write(f"📏 Размер файла: {file_size} байт")
@@ -58,14 +57,24 @@ class Command(BaseCommand):
 
                     m2m_fields = {}
                     regular_fields = {}
+                    
                     for field_name, value in fields.items():
                         try:
                             field = Model._meta.get_field(field_name)
-                            if field.many_to_many or field.one_to_many:
+                            
+                            # 🔥 ИСПРАВЛЕНИЕ: Обработка Foreign Key
+                            if field.many_to_many:
                                 m2m_fields[field_name] = value
+                            elif field.is_relation and not field.many_to_many:
+                                # Если это ForeignKey или OneToOne, передаем значение как _id
+                                if value is not None:
+                                    regular_fields[f"{field_name}_id"] = value
+                                else:
+                                    regular_fields[field_name] = None
                             else:
                                 regular_fields[field_name] = value
                         except Exception:
+                            # Поля, которых нет в новой модели, просто игнорируем
                             continue
 
                     obj, created = Model.objects.update_or_create(
@@ -84,7 +93,7 @@ class Command(BaseCommand):
                     else:
                         updated_count += 1
 
-                    if idx % 100 == 0:
+                    if idx % 500 == 0:
                         self.stdout.write(f"   ... обработано {idx}/{len(data)}")
 
                 except Exception as e:
