@@ -11,13 +11,13 @@ from crm.models import (
 )
 
 class Command(BaseCommand):
-    help = 'Миграция данных из старой SQLite базы в новую (без мусора в членствах)'
+    help = 'Миграция данных из старой SQLite базы в новую'
 
     def add_arguments(self, parser):
-        parser.add_argument('db_path', type=str, help='Путь к файлу старой базы данных (database.db)')
+        parser.add_argument('db_path', type=str, help='Путь к файлу старой базы данных')
 
     def handle(self, *args, **options):
-        db_path = options['db_path']
+        db_path = options['file_path']
         self.stdout.write(f"🔍 Подключение к старой базе: {db_path}")
         
         try:
@@ -27,7 +27,6 @@ class Command(BaseCommand):
         except Exception as e:
             raise CommandError(f"Не удалось открыть базу: {e}")
 
-        # Словари для маппинга старых ID в новые ID
         trainer_map = {}
         group_map = {}
         child_map = {}
@@ -46,7 +45,7 @@ class Command(BaseCommand):
                     name = name.split('Pass:')[0].strip() or f"Тренер_{row['teacherId']}"
                 
                 trainer, _ = Trainer.objects.update_or_create(
-                    id=row['teacherId'], # Сохраняем старые ID для целостности связей
+                    id=row['teacherId'],
                     defaults={
                         'full_name': name[:200],
                         'phone': '',
@@ -57,7 +56,7 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено тренеров: {len(trainer_map)}"))
 
             # ==========================================
-            # ЭТАП 2: Группы + ЭТАП 2.5: Графики (ScheduleSlot)
+            # ЭТАП 2: Группы + Графики
             # ==========================================
             self.stdout.write("🔄 Этап 2: Перенос Групп (Group) и Графиков")
             old_cursor.execute("""
@@ -82,10 +81,9 @@ class Command(BaseCommand):
                 )
                 group_map[row['ClGrTypeId']] = group.id
 
-                # 🔥 ЭТАП 2.5: Парсинг расписания из ClGrTypeSchedule (например, "135" = Пн, Ср, Пт)
+                # Парсинг расписания
                 schedule_str = (row['ClGrTypeSchedule'] or '').strip()
                 if schedule_str:
-                    # Пытаемся вытащить время из названия (например, "ОНЛАЙН с 10.00")
                     start_time = dt_time(0, 0)
                     time_match = re.search(r'(\d{1,2})[.:](\d{2})', row['ClGrTypeName'] or '')
                     if time_match:
@@ -97,7 +95,7 @@ class Command(BaseCommand):
                         if ch.isdigit():
                             old_day = int(ch)
                             if 1 <= old_day <= 7:
-                                django_weekday = old_day - 1  # 1=Пн -> 0, 7=Вс -> 6
+                                django_weekday = old_day - 1
                                 ScheduleSlot.objects.get_or_create(
                                     group_id=group.id,
                                     weekday=django_weekday,
@@ -107,8 +105,19 @@ class Command(BaseCommand):
 
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено групп: {len(group_map)}"))
 
+            # 🔥 Создаём временную группу для импорта
+            temp_group, _ = Group.objects.get_or_create(
+                name="⚠️ Импорт (временная)",
+                defaults={
+                    'trainer_id': Trainer.objects.first().id if Trainer.objects.exists() else Trainer.objects.create(full_name="Временный").id,
+                    'is_active': False,
+                    'single_session_price': Decimal(0),
+                    'salary_rate': Decimal(0),
+                }
+            )
+
             # ==========================================
-            # ЭТАП 3: Дети (БЕЗ привязки к группе пока что!)
+            # ЭТАП 3: Дети (с временной группой)
             # ==========================================
             self.stdout.write("🔄 Этап 3: Перенос Детей (Child)")
             old_cursor.execute("SELECT * FROM Client")
@@ -136,7 +145,6 @@ class Command(BaseCommand):
                 first_name = first_name[:100]
                 last_name = last_name[:100]
 
-                # 🔥 ВАЖНО: group_id = None. Мы не создаем мусорные членства на этом этапе.
                 child, _ = Child.objects.update_or_create(
                     id=row['ClientID'],
                     defaults={
@@ -147,7 +155,7 @@ class Command(BaseCommand):
                         'birth_date': birth_date,
                         'address': address,
                         'parent_phone': phone,
-                        'group_id': None, # <--- ПУСТО!
+                        'group_id': temp_group.id,  # 🔥 Временная группа
                         'status': 'active',
                         'discount_percent': 10 if row['ClientIsHaveDiscount'] else 0,
                         'note': comment,
@@ -157,13 +165,13 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено детей: {len(child_map)}"))
             
             # ==========================================
-            # ЭТАП 4: Членства в группах (ChildGroupMembership) + привязка основной группы
+            # ЭТАП 4: Членства + обновление групп
             # ==========================================
             self.stdout.write("🔄 Этап 4: Перенос Членства в группах (ChildGroupMembership)")
             
-            # На всякий случай чистим старые членства, если скрипт запускается повторно
+            # 🔥 Удаляем мусорные членства, созданные при сохранении детей
             ChildGroupMembership.objects.all().delete()
-            self.stdout.write("   🗑️ Очищены старые членства для чистоты эксперимента")
+            self.stdout.write("   🗑️ Очищены временные членства")
 
             old_cursor.execute("SELECT ClGrId, ClGrClientId, ClGrClGrTypeId FROM ClientGroup")
             child_groups = {}
@@ -180,9 +188,7 @@ class Command(BaseCommand):
 
             count = 0
             for child_id, groups in child_groups.items():
-                # Сортируем: последний ClGrId считаем основным (самый свежий)
                 groups.sort(key=lambda x: x['clgr_id'], reverse=True)
-                
                 primary_group_id = groups[0]['group_id']
                 
                 for idx, group_data in enumerate(groups):
@@ -192,17 +198,20 @@ class Command(BaseCommand):
                         group_id=group_data['group_id'],
                         is_primary=is_primary,
                         joined_at=dt_date.today(),
-                        archived_at=None if is_primary else dt_date.today(), # Неосновные сразу в архив
+                        archived_at=None if is_primary else dt_date.today(),
                         requires_subscription=True,
                     )
                     count += 1
                 
-                # 🔥 МАГИЯ ЗДЕСЬ: Обновляем поле group у самого ребёнка.
-                # Это триггерит _sync_primary_group_membership, который корректно 
-                # синхронизирует всё и не создаст дубликатов.
+                # 🔥 Обновляем основную группу у ребёнка
                 Child.objects.filter(id=child_id).update(group_id=primary_group_id)
 
             self.stdout.write(self.style.SUCCESS(f"   ✅ Перенесено связей ребенок-группа: {count}"))
+
+            # Удаляем временную группу
+            temp_group.delete()
+            self.stdout.write("   🗑️ Удалена временная группа")
+
 
             # ==========================================
             # ЭТАП 5: Тарифы
